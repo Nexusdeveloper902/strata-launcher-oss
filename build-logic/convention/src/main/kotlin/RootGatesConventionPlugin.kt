@@ -74,7 +74,7 @@ class RootGatesConventionPlugin : Plugin<Project> {
                             include("**/src/main/**")
                             include("spec/theme.schema.json", "spec/sample-themes/*.json")
                             include("**/assets/themes/**")
-                            exclude("build-logic/**", "**/build/**", "research/**")
+                            exclude("build-logic/**", "**/build/**", "research/**", ".claude/**")
                         }.matching {
                             // Text sources only; binary resources cannot carry symbols.
                             include(
