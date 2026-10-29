@@ -23,5 +23,5 @@
 | U-019 | Platform | `exported` value for listener/accessibility services across OEMs. | Binding reliability. | Device test. | open |
 | U-020 | OEM | Battery-manager killing of listener/accessibility services. | Badge/lock reliability. | Field test. | open |
 | U-021 | Platform | Meaning of `ACCESS_LAUNCHER_DATA` (36.1) for home apps. | Possible future manifest requirement. | Track API docs. | open |
-| U-022 | Product | v1 scope for contacts/calendar/location features. | Permissions. | Decided in PRODUCT_SPEC (T-05). | open |
+| U-022 | Product | v1 scope for contacts/calendar/location features. | Permissions. | Decided in PRODUCT_SPEC (T-05). | resolved — PRODUCT_SPEC §1.5 (deferred calendar/weather/location; contacts opt-in P1) |
 | U-023 | Platform | APK-013 note corrected: LauncherApps results are package-visibility filtered (DOC evidence, ANDROID_PLATFORM). | — | — | resolved |

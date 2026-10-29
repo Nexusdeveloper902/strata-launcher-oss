@@ -490,7 +490,8 @@ Notes: no `INTERNET`, no `QUERY_ALL_PACKAGES`, no `BIND_APPWIDGET`, no `EXPAND_S
 | `BIND_DEVICE_ADMIN` (lockNow) | **Rejected** | — | Uninstall friction; accessibility path chosen | Proposed |
 | `POST_NOTIFICATIONS` | **Rejected (v1)** | runtime | Launcher posts no notifications | Proposed |
 | `INTERNET`, AD_ID, billing, FCM | **Rejected** | — | D-004, D-007 | — |
-| `READ_CONTACTS`, `READ_CALENDAR`, `ACCESS_COARSE_LOCATION` | **Deferred** (not v1) | runtime | Contact search, agenda, weather are out of v1 scope (T-05 to confirm) | Proposed |
+| `READ_CONTACTS` | **Optional** (P1, runtime) | runtime, requested only when the user enables contact search | Contact results in search (PRODUCT_SPEC FR-SEARCH, U-022) | Proposed |
+| `READ_CALENDAR`, `ACCESS_COARSE_LOCATION` | **Deferred** (not v1) | runtime | Agenda and weather are out of v1 scope (U-022 resolved) | Proposed |
 | `VIBRATE` | Not needed | normal | `View.performHapticFeedback` needs no permission | Inferred |
 
 ## 24. Android version compatibility matrix
