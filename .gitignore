@@ -15,3 +15,7 @@ captures/
 .idea/
 *.iml
 .DS_Store
+
+# Claude Code local state (keep the rest of .claude/ trackable)
+.claude/worktrees/
+.claude/settings.local.json
