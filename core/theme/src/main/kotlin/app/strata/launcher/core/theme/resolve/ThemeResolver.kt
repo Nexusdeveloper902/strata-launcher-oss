@@ -11,12 +11,12 @@ import app.strata.launcher.core.theme.contrast.ContrastStatus
 import app.strata.launcher.core.theme.model.ColorMode
 import app.strata.launcher.core.theme.model.ColorRole
 import app.strata.launcher.core.theme.model.FontRef
+import app.strata.launcher.core.theme.model.HapticsMode
 import app.strata.launcher.core.theme.model.ListEntrance
 import app.strata.launcher.core.theme.model.Palette
 import app.strata.launcher.core.theme.model.SourceKind
 import app.strata.launcher.core.theme.model.ThemeDocument
 import app.strata.launcher.core.theme.model.Variant
-import app.strata.launcher.core.theme.model.HapticsMode
 import app.strata.launcher.core.theme.parse.Issue
 import app.strata.launcher.core.theme.parse.IssueCode
 
@@ -98,15 +98,32 @@ object ThemeResolver {
         val status =
             when {
                 Contrast.passes(palette, wallpaper) -> ContrastStatus.AA_ANY_WALLPAPER
-                wallpaperColors != null && Contrast.passes(palette, wallpaper, wallpaperColors) -> ContrastStatus.AA_CURRENT_WALLPAPER
+
+                wallpaperColors != null &&
+                    Contrast.passes(
+                        palette,
+                        wallpaper,
+                        wallpaperColors,
+                    )
+                -> ContrastStatus.AA_CURRENT_WALLPAPER
+
                 else -> ContrastStatus.LOW_CONTRAST
             }
-        if (status == ContrastStatus.LOW_CONTRAST) issues += Issue("/colors", IssueCode.LOW_CONTRAST, "Low-contrast colours")
+        if (status ==
+            ContrastStatus.LOW_CONTRAST
+        ) {
+            issues += Issue("/colors", IssueCode.LOW_CONTRAST, "Low-contrast colours")
+        }
 
         // §4.3 image reference.
         val image = doc.wallpaper.image
         val imageSha = image?.sha256?.takeIf { it in platform.images }
-        if (image != null && imageSha == null) issues += Issue("/wallpaper/image/sha256", IssueCode.IMAGE_MISSING, "Wallpaper image not on this device")
+        if (image != null &&
+            imageSha == null
+        ) {
+            issues +=
+                Issue("/wallpaper/image/sha256", IssueCode.IMAGE_MISSING, "Wallpaper image not on this device")
+        }
 
         // §4.4 fonts.
         val t = doc.typography
@@ -117,7 +134,12 @@ object ThemeResolver {
         val i = doc.icons
         val pack = i.pack
         val packInstalled = pack != null && pack.packageName in platform.installedIconPacks
-        if (pack != null && !packInstalled) issues += Issue("/icons/pack/package", IssueCode.ICON_PACK_MISSING, "Icon pack not installed")
+        if (pack != null &&
+            !packInstalled
+        ) {
+            issues +=
+                Issue("/icons/pack/package", IssueCode.ICON_PACK_MISSING, "Icon pack not installed")
+        }
 
         // §4.11 animation.
         val systemOff = !platform.animatorsEnabled || platform.animatorDurationScale <= 0.0
@@ -134,12 +156,25 @@ object ThemeResolver {
                 wallpaper = ResolvedWallpaper(wallpaper.show, wallpaper.dim, wallpaper.backgroundOpacity, imageSha),
                 typography =
                     ResolvedTypography(
-                        family, clockFamily, t.scale, t.labelWeight, t.headingWeight, t.clockWeight, t.letterSpacingEm, t.labelCase,
+                        family,
+                        clockFamily,
+                        t.scale,
+                        t.labelWeight,
+                        t.headingWeight,
+                        t.clockWeight,
+                        t.letterSpacingEm,
+                        t.labelCase,
                         t.smallTextUsesSystemFont,
                     ),
                 list =
                     doc.list.let {
-                        ResolvedList(it.rowHeightDp ?: it.density.rowHeightDp, it.horizontalPaddingDp, it.itemSpacingDp, it.sectionHeaders, it.showDividers)
+                        ResolvedList(
+                            it.rowHeightDp ?: it.density.rowHeightDp,
+                            it.horizontalPaddingDp,
+                            it.itemSpacingDp,
+                            it.sectionHeaders,
+                            it.showDividers,
+                        )
                     },
                 icons =
                     ResolvedIcons(
@@ -157,15 +192,47 @@ object ThemeResolver {
                     ),
                 clock =
                     ResolvedClock(
-                        c.visible, c.style, c.hourFormat, c.showSeconds, c.sizeSp, c.alignment, c.date.visible, c.date.skeleton,
+                        c.visible,
+                        c.style,
+                        c.hourFormat,
+                        c.showSeconds,
+                        c.sizeSp,
+                        c.alignment,
+                        c.date.visible,
+                        c.date.skeleton,
                         c.date.sizeSp,
                     ),
                 favorites =
-                    ResolvedFavorites(f.textScale, f.alignment, f.verticalPosition, f.showIcons, f.showLabels || !f.showIcons, f.spacingDp),
+                    ResolvedFavorites(
+                        f.textScale,
+                        f.alignment,
+                        f.verticalPosition,
+                        f.showIcons,
+                        f.showLabels || !f.showIcons,
+                        f.spacingDp,
+                    ),
                 search = doc.search.let { ResolvedSearch(it.position, it.style, it.cornerRadiusDp, it.showHint) },
                 alphabetIndex =
-                    doc.alphabetIndex.let { ResolvedAlphabetIndex(it.visibility, it.side, it.glyphs, it.textSizeSp, it.showBubble) },
-                animation = ResolvedAnimation(animScale, if (animScale == 0.0) ListEntrance.NONE else doc.animation.listEntrance),
+                    doc.alphabetIndex.let {
+                        ResolvedAlphabetIndex(
+                            it.visibility,
+                            it.side,
+                            it.glyphs,
+                            it.textSizeSp,
+                            it.showBubble,
+                        )
+                    },
+                animation =
+                    ResolvedAnimation(
+                        animScale,
+                        if (animScale ==
+                            0.0
+                        ) {
+                            ListEntrance.NONE
+                        } else {
+                            doc.animation.listEntrance
+                        },
+                    ),
                 haptics = ResolvedHaptics(globals.hapticsEnabled && doc.haptics.mode == HapticsMode.FOLLOW_SYSTEM),
                 contrast = ResolvedContrast(status, enforced),
             )
@@ -180,23 +247,50 @@ object ThemeResolver {
     ): Variant {
         fun system() = if (platform.systemDark) Variant.DARK else Variant.LIGHT
         return when (globals.appearanceOverride) {
-            AppearanceOverride.SYSTEM -> system()
-            AppearanceOverride.LIGHT -> Variant.LIGHT
-            AppearanceOverride.DARK -> Variant.DARK
-            AppearanceOverride.FOLLOW_THEME ->
+            AppearanceOverride.SYSTEM -> {
+                system()
+            }
+
+            AppearanceOverride.LIGHT -> {
+                Variant.LIGHT
+            }
+
+            AppearanceOverride.DARK -> {
+                Variant.DARK
+            }
+
+            AppearanceOverride.FOLLOW_THEME -> {
                 when (doc.colors.mode) {
-                    ColorMode.LIGHT -> Variant.LIGHT
-                    ColorMode.DARK -> Variant.DARK
-                    ColorMode.SYSTEM -> system()
+                    ColorMode.LIGHT -> {
+                        Variant.LIGHT
+                    }
+
+                    ColorMode.DARK -> {
+                        Variant.DARK
+                    }
+
+                    ColorMode.SYSTEM -> {
+                        system()
+                    }
+
                     ColorMode.WALLPAPER -> {
                         val wc = platform.wallpaperColors
                         when {
-                            wc == null || platform.apiLevel < API_WALLPAPER_COLORS -> system()
-                            platform.apiLevel >= API_DYNAMIC_COLOR -> if (wc.supportsDarkText) Variant.LIGHT else Variant.DARK
-                            else -> if (Wcag.luminance(wc.primary) > 0.5) Variant.LIGHT else Variant.DARK
+                            wc == null || platform.apiLevel < API_WALLPAPER_COLORS -> {
+                                system()
+                            }
+
+                            platform.apiLevel >= API_DYNAMIC_COLOR -> {
+                                if (wc.supportsDarkText) Variant.LIGHT else Variant.DARK
+                            }
+
+                            else -> {
+                                if (Wcag.luminance(wc.primary) > 0.5) Variant.LIGHT else Variant.DARK
+                            }
                         }
                     }
                 }
+            }
         }
     }
 
@@ -207,15 +301,25 @@ object ThemeResolver {
     ): SourceKind {
         val hasWallpaper = platform.wallpaperColors != null && platform.apiLevel >= API_WALLPAPER_COLORS
         return when (doc.colors.sourceKind) {
-            SourceKind.FIXED -> SourceKind.FIXED
-            SourceKind.SEED -> if (doc.colors.seedColor != null) SourceKind.SEED else SourceKind.FIXED
-            SourceKind.WALLPAPER -> if (hasWallpaper) SourceKind.WALLPAPER else SourceKind.FIXED
-            SourceKind.DYNAMIC ->
+            SourceKind.FIXED -> {
+                SourceKind.FIXED
+            }
+
+            SourceKind.SEED -> {
+                if (doc.colors.seedColor != null) SourceKind.SEED else SourceKind.FIXED
+            }
+
+            SourceKind.WALLPAPER -> {
+                if (hasWallpaper) SourceKind.WALLPAPER else SourceKind.FIXED
+            }
+
+            SourceKind.DYNAMIC -> {
                 when {
                     platform.dynamicScheme != null && platform.apiLevel >= API_DYNAMIC_COLOR -> SourceKind.DYNAMIC
                     hasWallpaper -> SourceKind.WALLPAPER
                     else -> SourceKind.FIXED
                 }
+            }
         }
     }
 
@@ -249,20 +353,26 @@ object ThemeResolver {
         issues: MutableList<Issue>,
     ): ResolvedFont =
         when (ref) {
-            FontRef.System -> ResolvedFont.System
-            is FontRef.Bundled ->
+            FontRef.System -> {
+                ResolvedFont.System
+            }
+
+            is FontRef.Bundled -> {
                 if (ref.id in platform.bundledFonts) {
                     ResolvedFont.Bundled(ref.id)
                 } else {
                     issues += Issue("$path/id", IssueCode.BUNDLED_FONT_UNKNOWN, "Unknown bundled font")
                     ResolvedFont.System
                 }
-            is FontRef.User ->
+            }
+
+            is FontRef.User -> {
                 if (ref.sha256 in platform.userFonts) {
                     ResolvedFont.User(ref.sha256)
                 } else {
                     issues += Issue("$path/sha256", IssueCode.FONT_MISSING, "Font not on this device")
                     ResolvedFont.System
                 }
+            }
         }
 }

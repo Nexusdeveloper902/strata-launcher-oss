@@ -1,7 +1,7 @@
 package app.strata.launcher.core.theme.parse
 
-import app.strata.launcher.core.theme.model.ThemeDocument
 import app.strata.launcher.core.json.JsonObject
+import app.strata.launcher.core.theme.model.ThemeDocument
 
 /** THEME_SYSTEM §8.1 severities. */
 enum class Severity {
@@ -35,6 +35,7 @@ enum class IssueCode(val severity: Severity, val policy: Policy) {
     MIGRATION_FAILED(Severity.ERROR, Policy.REJECT),
 
     // Field policies (stage 5)
+
     /** C: number outside the allowed range. */
     CLAMPED(Severity.FIXED, Policy.CLAMP),
 
@@ -72,6 +73,7 @@ enum class IssueCode(val severity: Severity, val policy: Policy) {
     LOW_CONTRAST(Severity.WARNING, Policy.NONE),
 
     // Info
+
     /** `schemaMinor` above the app's: unknown keys/values are kept ("newer settings kept", §10.5). */
     NEWER_MINOR(Severity.INFO, Policy.NONE),
     MIGRATED(Severity.INFO, Policy.NONE),

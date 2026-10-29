@@ -38,7 +38,12 @@ class ColorMathTest {
             val c = Rgb.of(rnd.nextInt(256), rnd.nextInt(256), rnd.nextInt(256))
             val h = Hct.fromArgb(c)
             val back = h.toArgb()
-            val d = maxOf(abs(Rgb.red(c) - Rgb.red(back)), abs(Rgb.green(c) - Rgb.green(back)), abs(Rgb.blue(c) - Rgb.blue(back)))
+            val d =
+                maxOf(
+                    abs(Rgb.red(c) - Rgb.red(back)),
+                    abs(Rgb.green(c) - Rgb.green(back)),
+                    abs(Rgb.blue(c) - Rgb.blue(back)),
+                )
             assertWithMessage("${Rgb.toHex(c)} -> ${Rgb.toHex(back)}").that(d).isAtMost(4)
         }
     }
@@ -63,11 +68,22 @@ class ColorMathTest {
 
     @Test
     fun tonalSpotSchemesHaveMaterialContrast() {
-        for (seed in listOf(0xFF6750A4.toInt(), 0xFF1E88E5.toInt(), 0xFFFDD835.toInt(), 0xFF2E7D32.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt())) {
+        for (seed in listOf(
+            0xFF6750A4.toInt(),
+            0xFF1E88E5.toInt(),
+            0xFFFDD835.toInt(),
+            0xFF2E7D32.toInt(),
+            0xFF000000.toInt(),
+            0xFFFFFFFF.toInt(),
+        )) {
             for (dark in listOf(false, true)) {
                 val s = TonalSpot.scheme(seed, dark)
-                assertWithMessage("${Rgb.toHex(seed)} dark=$dark").that(Wcag.contrast(s.onSurface, s.surface)).isAtLeast(7.0)
-                assertWithMessage("${Rgb.toHex(seed)} dark=$dark").that(Wcag.contrast(s.onPrimary, s.primary)).isAtLeast(4.5)
+                assertWithMessage(
+                    "${Rgb.toHex(seed)} dark=$dark",
+                ).that(Wcag.contrast(s.onSurface, s.surface)).isAtLeast(7.0)
+                assertWithMessage(
+                    "${Rgb.toHex(seed)} dark=$dark",
+                ).that(Wcag.contrast(s.onPrimary, s.primary)).isAtLeast(4.5)
             }
         }
     }

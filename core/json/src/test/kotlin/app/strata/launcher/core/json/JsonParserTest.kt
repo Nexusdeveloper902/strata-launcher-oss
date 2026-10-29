@@ -41,9 +41,26 @@ class JsonParserTest {
     fun rejectsSyntaxThatStrictRfc8259Forbids() {
         val bad =
             listOf(
-                "{\"a\":1,}", "[1,]", "// c\n{}", "/* c */{}", "{\"a\":NaN}", "{\"a\":Infinity}",
-                "{'a':1}", "{\"a\":01}", "{\"a\":+1}", "{\"a\":1.}", "{\"a\":.5}", "{\"a\":\"\t\"}",
-                "{\"a\":\"\\x\"}", "{\"a\":\"\\ud800\"}", "{} {}", "", "   ", "{\"a\" 1}", "tru", "[1 2]",
+                "{\"a\":1,}",
+                "[1,]",
+                "// c\n{}",
+                "/* c */{}",
+                "{\"a\":NaN}",
+                "{\"a\":Infinity}",
+                "{'a':1}",
+                "{\"a\":01}",
+                "{\"a\":+1}",
+                "{\"a\":1.}",
+                "{\"a\":.5}",
+                "{\"a\":\"\t\"}",
+                "{\"a\":\"\\x\"}",
+                "{\"a\":\"\\ud800\"}",
+                "{} {}",
+                "",
+                "   ",
+                "{\"a\" 1}",
+                "tru",
+                "[1 2]",
             )
         for (b in bad) {
             val e = err(b)
@@ -76,7 +93,9 @@ class JsonParserTest {
         val bytes = "{\"a\":\"".toByteArray() + byteArrayOf(0xC3.toByte(), 0x28) + "\"}".toByteArray()
         assertThat(err(bytes)).isEqualTo(JsonError.InvalidEncoding(6))
         // overlong encoding of '/'
-        assertThat(err(byteArrayOf(0x22, 0xC0.toByte(), 0xAF.toByte(), 0x22))).isInstanceOf(JsonError.InvalidEncoding::class.java)
+        assertThat(
+            err(byteArrayOf(0x22, 0xC0.toByte(), 0xAF.toByte(), 0x22)),
+        ).isInstanceOf(JsonError.InvalidEncoding::class.java)
     }
 
     @Test
@@ -88,16 +107,23 @@ class JsonParserTest {
         val exact = ByteArray(l.maxBytes) { ' '.code.toByte() }.also { it[0] = '0'.code.toByte() }
         assertThat(JsonParser.parse(exact)).isInstanceOf(Outcome.Ok::class.java)
         // depth
-        assertThat(JsonParser.parse(("[".repeat(16) + "]".repeat(16)).toByteArray())).isInstanceOf(Outcome.Ok::class.java)
-        assertThat((err("[".repeat(17) + "]".repeat(17)) as JsonError.LimitExceeded).limit).isEqualTo(JsonError.Limit.DEPTH)
+        assertThat(
+            JsonParser.parse(("[".repeat(16) + "]".repeat(16)).toByteArray()),
+        ).isInstanceOf(Outcome.Ok::class.java)
+        assertThat(
+            (err("[".repeat(17) + "]".repeat(17)) as JsonError.LimitExceeded).limit,
+        ).isEqualTo(JsonError.Limit.DEPTH)
+
         // keys
         fun obj(n: Int) = (0 until n).joinToString(",", "{", "}") { "\"k$it\":0" }
         assertThat(JsonParser.parse(obj(128).toByteArray())).isInstanceOf(Outcome.Ok::class.java)
         assertThat((err(obj(129)) as JsonError.LimitExceeded).limit).isEqualTo(JsonError.Limit.KEYS_PER_OBJECT)
+
         // array items
         fun arr(n: Int) = (0 until n).joinToString(",", "[", "]") { "0" }
         assertThat(JsonParser.parse(arr(256).toByteArray())).isInstanceOf(Outcome.Ok::class.java)
         assertThat((err(arr(257)) as JsonError.LimitExceeded).limit).isEqualTo(JsonError.Limit.ARRAY_ITEMS)
+
         // total values: 1 root object + 8 arrays + 8 * 254 numbers = 2041; add keys to reach the limit
         fun values(n: Int): String {
             // root object with arrays of up to 255 numbers; count = 1 + arrays + numbers
@@ -116,9 +142,15 @@ class JsonParserTest {
         assertThat(JsonParser.parse(values(2048).toByteArray())).isInstanceOf(Outcome.Ok::class.java)
         assertThat((err(values(2049)) as JsonError.LimitExceeded).limit).isEqualTo(JsonError.Limit.VALUES)
         // string length (UTF-16 units, after unescaping)
-        assertThat(JsonParser.parse(("\"" + "a".repeat(4096) + "\"").toByteArray())).isInstanceOf(Outcome.Ok::class.java)
-        assertThat((err("\"" + "a".repeat(4097) + "\"") as JsonError.LimitExceeded).limit).isEqualTo(JsonError.Limit.STRING_LENGTH)
-        assertThat((err("{\"" + "k".repeat(4097) + "\":1}") as JsonError.LimitExceeded).limit).isEqualTo(JsonError.Limit.STRING_LENGTH)
+        assertThat(
+            JsonParser.parse(("\"" + "a".repeat(4096) + "\"").toByteArray()),
+        ).isInstanceOf(Outcome.Ok::class.java)
+        assertThat(
+            (err("\"" + "a".repeat(4097) + "\"") as JsonError.LimitExceeded).limit,
+        ).isEqualTo(JsonError.Limit.STRING_LENGTH)
+        assertThat(
+            (err("{\"" + "k".repeat(4097) + "\":1}") as JsonError.LimitExceeded).limit,
+        ).isEqualTo(JsonError.Limit.STRING_LENGTH)
         // number literal length
         assertThat(JsonParser.parse("1".repeat(32).toByteArray())).isInstanceOf(Outcome.Ok::class.java)
         assertThat((err("1".repeat(33)) as JsonError.LimitExceeded).limit).isEqualTo(JsonError.Limit.NUMBER_LENGTH)

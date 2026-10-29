@@ -12,6 +12,7 @@ import app.strata.launcher.core.json.JsonParser
 import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.json.JsonValue
 import app.strata.launcher.core.json.position
+import app.strata.launcher.core.theme.color.Rgb
 import app.strata.launcher.core.theme.model.AlphabetIndexSpec
 import app.strata.launcher.core.theme.model.AnimationSpec
 import app.strata.launcher.core.theme.model.BuiltInPalettes
@@ -37,7 +38,6 @@ import app.strata.launcher.core.theme.model.WallpaperImage
 import app.strata.launcher.core.theme.model.WallpaperSpec
 import app.strata.launcher.core.theme.model.WireEnum
 import app.strata.launcher.core.theme.model.wireValueOf
-import app.strata.launcher.core.theme.color.Rgb
 import java.io.InputStream
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -71,12 +71,19 @@ class ThemeParser(
     fun validate(root: JsonValue): Outcome<ParsedTheme, ThemeError> {
         if (root !is JsonObject) return notATheme("The top level is not an object")
         val version = root["schemaVersion"]
-        if (version !is JsonNumber || !version.isIntegral) return notATheme("schemaVersion is missing or not an integer")
+        if (version !is JsonNumber ||
+            !version.isIntegral
+        ) {
+            return notATheme("schemaVersion is missing or not an integer")
+        }
         val v = version.toBigDecimal()
         if (v > BigDecimal.valueOf(migrations.targetVersion.toLong())) {
             val shown = if (v > BigDecimal.valueOf(Long.MAX_VALUE)) Long.MAX_VALUE else v.toLong()
             return Outcome.Err(
-                ThemeError.NewerVersion(Issue("/schemaVersion", IssueCode.NEWER_VERSION, "Made with a newer version"), shown),
+                ThemeError.NewerVersion(
+                    Issue("/schemaVersion", IssueCode.NEWER_VERSION, "Made with a newer version"),
+                    shown,
+                ),
             )
         }
         if (v < BigDecimal.valueOf(migrations.oldestSupported.toLong())) return notATheme("schemaVersion is too old")
@@ -94,27 +101,57 @@ class ThemeParser(
         }
         return try {
             val (doc, fixedTree) = Validation(tree, issues).run()
-            Outcome.Ok(ParsedTheme(doc, fixedTree, issues.toList(), if (from < migrations.targetVersion) from else null))
+            Outcome.Ok(
+                ParsedTheme(
+                    doc,
+                    fixedTree,
+                    issues.toList(),
+                    if (from <
+                        migrations.targetVersion
+                    ) {
+                        from
+                    } else {
+                        null
+                    },
+                ),
+            )
         } catch (e: RuntimeException) {
             // Defensive: validation is total, but a bug must never escape the boundary (NFR-THEME-01).
             notATheme("Unreadable theme")
         }
     }
 
-    private fun notATheme(msg: String): Outcome.Err<ThemeError> = Outcome.Err(ThemeError.NotATheme(Issue("", IssueCode.NOT_A_THEME, msg)))
+    private fun notATheme(msg: String): Outcome.Err<ThemeError> =
+        Outcome.Err(
+            ThemeError.NotATheme(Issue("", IssueCode.NOT_A_THEME, msg)),
+        )
 
     private fun jsonError(e: JsonError): ThemeError {
         val pos = e.position
         return when (e) {
-            is JsonError.TooLarge -> ThemeError.TooLarge(Issue("", IssueCode.TOO_LARGE, "Larger than ${e.limitBytes} bytes"))
-            is JsonError.InvalidEncoding ->
+            is JsonError.TooLarge -> {
+                ThemeError.TooLarge(Issue("", IssueCode.TOO_LARGE, "Larger than ${e.limitBytes} bytes"))
+            }
+
+            is JsonError.InvalidEncoding -> {
                 ThemeError.Damaged(Issue("", IssueCode.INVALID_ENCODING, "Invalid UTF-8 at byte ${e.byteOffset}"))
-            is JsonError.Syntax ->
-                ThemeError.Damaged(Issue("", IssueCode.MALFORMED_JSON, "Syntax error: ${e.kind}", pos?.first, pos?.second))
-            is JsonError.DuplicateKey ->
+            }
+
+            is JsonError.Syntax -> {
+                ThemeError.Damaged(
+                    Issue("", IssueCode.MALFORMED_JSON, "Syntax error: ${e.kind}", pos?.first, pos?.second),
+                )
+            }
+
+            is JsonError.DuplicateKey -> {
                 ThemeError.Damaged(Issue("", IssueCode.DUPLICATE_KEY, "Duplicate key", pos?.first, pos?.second))
-            is JsonError.LimitExceeded ->
-                ThemeError.Damaged(Issue("", IssueCode.LIMIT_EXCEEDED, "Limit exceeded: ${e.limit}", pos?.first, pos?.second))
+            }
+
+            is JsonError.LimitExceeded -> {
+                ThemeError.Damaged(
+                    Issue("", IssueCode.LIMIT_EXCEEDED, "Limit exceeded: ${e.limit}", pos?.first, pos?.second),
+                )
+            }
         }
     }
 
@@ -131,7 +168,13 @@ class ThemeParser(
             val createdAt = top.pattern("createdAt", TIMESTAMP, 40)
             val modifiedAt = top.pattern("modifiedAt", TIMESTAMP, 40)
             val basedOn = top.pattern("basedOn", UUID_RE, 36)
-            top.raw("\$schema")?.let { if (it !is JsonString || it.value.length > 512) top.issue("\$schema", IssueCode.INVALID_VALUE) }
+            top.raw("\$schema")?.let {
+                if (it !is JsonString ||
+                    it.value.length > 512
+                ) {
+                    top.issue("\$schema", IssueCode.INVALID_VALUE)
+                }
+            }
             val doc =
                 ThemeDocument(
                     id = id,
@@ -153,7 +196,12 @@ class ThemeParser(
                     search = search(top.group("search")),
                     alphabetIndex = alphabetIndex(top.group("alphabetIndex")),
                     animation = animation(top.group("animation")),
-                    haptics = HapticsSpec(top.group("haptics").let { g -> g.enum("mode", HapticsSpec().mode).also { g.finish(HAPTICS) } }),
+                    haptics =
+                        HapticsSpec(
+                            top.group("haptics").let { g ->
+                                g.enum("mode", HapticsSpec().mode).also { g.finish(HAPTICS) }
+                            },
+                        ),
                 )
             top.finish(TOP)
             return doc to tree
@@ -230,7 +278,12 @@ class ThemeParser(
             val locked = lockedRoles(source)
             source.finish(SOURCE)
             if (kind == SourceKind.SEED && seed == null) {
-                issues += Issue("${source.path}/seedColor", IssueCode.SEED_MISSING, "Seed kind without a valid seedColor; using fixed palettes")
+                issues +=
+                    Issue(
+                        "${source.path}/seedColor",
+                        IssueCode.SEED_MISSING,
+                        "Seed kind without a valid seedColor; using fixed palettes",
+                    )
             }
             val spec =
                 ColorsSpec(
@@ -248,7 +301,14 @@ class ThemeParser(
 
         private fun lockedRoles(source: Obj): Set<ColorRole> {
             val raw = source.raw("lockedRoles") ?: return emptySet()
-            if (raw !is JsonArray) return emptySet<ColorRole>().also { source.issue("lockedRoles", IssueCode.WRONG_TYPE) }
+            if (raw !is JsonArray) {
+                return emptySet<ColorRole>().also {
+                    source.issue(
+                        "lockedRoles",
+                        IssueCode.WRONG_TYPE,
+                    )
+                }
+            }
             val out = LinkedHashSet<ColorRole>()
             raw.forEachIndexed { i, item ->
                 val role = (item as? JsonString)?.let { wireValueOf<ColorRole>(it.value) }
@@ -320,14 +380,31 @@ class ThemeParser(
             val kindRaw = f.raw("kind")
             val ref: FontRef? =
                 when {
-                    kindRaw == null -> null.also { f.issue("kind", IssueCode.INVALID_VALUE) }
-                    kindRaw !is JsonString -> null.also { f.issue("kind", IssueCode.WRONG_TYPE) }
-                    kindRaw.value == "system" -> FontRef.System
-                    kindRaw.value == "bundled" -> f.pattern("id", BUNDLED_FONT_ID, 40)?.let { FontRef.Bundled(it) } ?: null.also { if ("id" !in f.obj) f.issue("id", IssueCode.INVALID_VALUE) }
-                    kindRaw.value == "user" ->
+                    kindRaw == null -> {
+                        null.also { f.issue("kind", IssueCode.INVALID_VALUE) }
+                    }
+
+                    kindRaw !is JsonString -> {
+                        null.also { f.issue("kind", IssueCode.WRONG_TYPE) }
+                    }
+
+                    kindRaw.value == "system" -> {
+                        FontRef.System
+                    }
+
+                    kindRaw.value == "bundled" -> {
+                        f.pattern("id", BUNDLED_FONT_ID, 40)?.let { FontRef.Bundled(it) }
+                            ?: null.also { if ("id" !in f.obj) f.issue("id", IssueCode.INVALID_VALUE) }
+                    }
+
+                    kindRaw.value == "user" -> {
                         f.pattern("sha256", SHA256, 64)?.let { FontRef.User(it, f.string("displayName", 64)) }
                             ?: null.also { if ("sha256" !in f.obj) f.issue("sha256", IssueCode.INVALID_VALUE) }
-                    else -> null.also { f.issue("kind", IssueCode.UNKNOWN_ENUM) }
+                    }
+
+                    else -> {
+                        null.also { f.issue("kind", IssueCode.UNKNOWN_ENUM) }
+                    }
                 }
             // Validate the remaining optional members even when unused, so their issues are reported.
             if (ref !is FontRef.Bundled) f.pattern("id", BUNDLED_FONT_ID, 40)
@@ -557,7 +634,12 @@ class ThemeParser(
                 val r = raw(key) ?: return default
                 if (r !is JsonNumber) return default.also { issue(key, IssueCode.WRONG_TYPE) }
                 var d = r.toBigDecimal().setScale(0, RoundingMode.HALF_EVEN)
-                val hundreds = d.divide(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_EVEN).multiply(BigDecimal.valueOf(100))
+                val hundreds =
+                    d
+                        .divide(
+                            BigDecimal.valueOf(100),
+                        ).setScale(0, RoundingMode.HALF_EVEN)
+                        .multiply(BigDecimal.valueOf(100))
                 if (!r.isIntegral || hundreds.compareTo(d) != 0) issue(key, IssueCode.ROUNDED)
                 d = hundreds
                 if (d < BigDecimal.valueOf(100) || d > BigDecimal.valueOf(900)) {
@@ -581,10 +663,23 @@ class ThemeParser(
                 maxLen: Int,
             ): String? =
                 when (val r = raw(key)) {
-                    null -> null
-                    is JsonString ->
-                        if (r.value.length <= maxLen && re.matches(r.value)) r.value else null.also { issue(key, IssueCode.INVALID_VALUE) }
-                    else -> null.also { issue(key, IssueCode.WRONG_TYPE) }
+                    null -> {
+                        null
+                    }
+
+                    is JsonString -> {
+                        if (r.value.length <= maxLen &&
+                            re.matches(r.value)
+                        ) {
+                            r.value
+                        } else {
+                            null.also { issue(key, IssueCode.INVALID_VALUE) }
+                        }
+                    }
+
+                    else -> {
+                        null.also { issue(key, IssueCode.WRONG_TYPE) }
+                    }
                 }
 
             /** Free string, T beyond [maxGraphemes]. */
@@ -593,15 +688,22 @@ class ThemeParser(
                 maxGraphemes: Int,
             ): String? =
                 when (val r = raw(key)) {
-                    null -> null
-                    is JsonString ->
+                    null -> {
+                        null
+                    }
+
+                    is JsonString -> {
                         if (Graphemes.count(r.value) > maxGraphemes) {
                             issue(key, IssueCode.TRUNCATED)
                             Graphemes.truncate(r.value, maxGraphemes)
                         } else {
                             r.value
                         }
-                    else -> null.also { issue(key, IssueCode.WRONG_TYPE) }
+                    }
+
+                    else -> {
+                        null.also { issue(key, IssueCode.WRONG_TYPE) }
+                    }
                 }
 
             /** Unknown-key warnings (§8.1 stage 5: `additionalProperties` → warning; members are preserved). */
@@ -609,7 +711,8 @@ class ThemeParser(
                 val o = obj ?: return
                 for (k in o.keys) {
                     if (k !in known && !X_KEY.matches(k)) {
-                        issues += Issue("$path/${escapePointer(k)}", IssueCode.UNKNOWN_KEY, "Unknown key kept: ${k.take(32)}")
+                        issues +=
+                            Issue("$path/${escapePointer(k)}", IssueCode.UNKNOWN_KEY, "Unknown key kept: ${k.take(32)}")
                     }
                 }
             }
@@ -622,7 +725,8 @@ class ThemeParser(
         val X_KEY = Regex("^x-[a-z0-9][a-z0-9._-]{0,62}$")
         val UUID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         val SHA256 = Regex("^[0-9a-f]{64}$")
-        val TIMESTAMP = Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$")
+        val TIMESTAMP =
+            Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$")
         val PACKAGE = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
         val BUNDLED_FONT_ID = Regex("^[a-z0-9][a-z0-9-]{0,39}$")
         val SKELETON = Regex("^[yMLdEc]{1,16}$")
@@ -630,9 +734,27 @@ class ThemeParser(
         // Known keys per object, in schema order (also used by the writer).
         val TOP =
             linkedSetOf(
-                "\$schema", "schemaVersion", "schemaMinor", "id", "name", "author", "description", "createdAt", "modifiedAt",
-                "basedOn", "colors", "wallpaper", "typography", "list", "icons", "clock", "favorites", "search", "alphabetIndex",
-                "animation", "haptics",
+                "\$schema",
+                "schemaVersion",
+                "schemaMinor",
+                "id",
+                "name",
+                "author",
+                "description",
+                "createdAt",
+                "modifiedAt",
+                "basedOn",
+                "colors",
+                "wallpaper",
+                "typography",
+                "list",
+                "icons",
+                "clock",
+                "favorites",
+                "search",
+                "alphabetIndex",
+                "animation",
+                "haptics",
             )
         val COLORS = linkedSetOf("mode", "source", "pureBlack", "light", "dark")
         val SOURCE = linkedSetOf("kind", "seedColor", "lockedRoles")
@@ -642,15 +764,41 @@ class ThemeParser(
         val FONT_REF = linkedSetOf("kind", "id", "sha256", "displayName")
         val TYPOGRAPHY =
             linkedSetOf(
-                "family", "clockFamily", "scale", "labelWeight", "headingWeight", "clockWeight", "letterSpacingEm", "labelCase",
+                "family",
+                "clockFamily",
+                "scale",
+                "labelWeight",
+                "headingWeight",
+                "clockWeight",
+                "letterSpacingEm",
+                "labelCase",
                 "smallTextUsesSystemFont",
             )
-        val LIST = linkedSetOf("density", "rowHeightDp", "horizontalPaddingDp", "itemSpacingDp", "sectionHeaders", "showDividers")
-        val ICONS = linkedSetOf("visible", "sizeDp", "shape", "cornerRadiusPercent", "pack", "tint", "legacyIconPlate", "labelsVisible")
+        val LIST =
+            linkedSetOf(
+                "density",
+                "rowHeightDp",
+                "horizontalPaddingDp",
+                "itemSpacingDp",
+                "sectionHeaders",
+                "showDividers",
+            )
+        val ICONS =
+            linkedSetOf(
+                "visible",
+                "sizeDp",
+                "shape",
+                "cornerRadiusPercent",
+                "pack",
+                "tint",
+                "legacyIconPlate",
+                "labelsVisible",
+            )
         val PACK = linkedSetOf("package", "displayName", "fallback")
         val CLOCK = linkedSetOf("visible", "style", "hourFormat", "showSeconds", "sizeSp", "alignment", "date")
         val DATE = linkedSetOf("visible", "skeleton", "sizeSp")
-        val FAVORITES = linkedSetOf("textScale", "alignment", "verticalPosition", "showIcons", "showLabels", "spacingDp")
+        val FAVORITES =
+            linkedSetOf("textScale", "alignment", "verticalPosition", "showIcons", "showLabels", "spacingDp")
         val SEARCH = linkedSetOf("position", "style", "cornerRadiusDp", "showHint")
         val ALPHABET_INDEX = linkedSetOf("visibility", "side", "glyphs", "textSizeSp", "showBubble")
         val ANIMATION = linkedSetOf("durationScale", "listEntrance")

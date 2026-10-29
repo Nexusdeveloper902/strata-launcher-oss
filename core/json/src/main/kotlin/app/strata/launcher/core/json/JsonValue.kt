@@ -73,7 +73,13 @@ class JsonNumber private constructor(val raw: String) : JsonValue {
             if (value == Math.rint(value) && kotlin.math.abs(value) < 1e15) {
                 return JsonNumber(value.toLong().toString())
             }
-            return JsonNumber(BigDecimal.valueOf(value).stripTrailingZeros().toString().replace("E+", "E"))
+            return JsonNumber(
+                BigDecimal
+                    .valueOf(value)
+                    .stripTrailingZeros()
+                    .toString()
+                    .replace("E+", "E"),
+            )
         }
     }
 }

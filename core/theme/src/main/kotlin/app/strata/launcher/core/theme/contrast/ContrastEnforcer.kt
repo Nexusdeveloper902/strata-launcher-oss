@@ -34,8 +34,14 @@ data class Enforced(val palette: Palette, val wallpaper: WallpaperSpec) {
 object ContrastEnforcer {
     val ORDER =
         listOf(
-            ContrastPair.P1, ContrastPair.P2, ContrastPair.P4, ContrastPair.P5, ContrastPair.P7,
-            ContrastPair.P3, ContrastPair.P6, ContrastPair.P8,
+            ContrastPair.P1,
+            ContrastPair.P2,
+            ContrastPair.P4,
+            ContrastPair.P5,
+            ContrastPair.P7,
+            ContrastPair.P3,
+            ContrastPair.P6,
+            ContrastPair.P8,
         )
     private const val MARGIN = 0.1
     private const val BISECT_STEPS = 18
@@ -70,6 +76,7 @@ object ContrastEnforcer {
         locked: Set<ColorRole>,
     ): Pair<Palette, WallpaperSpec> {
         val goal = pair.minimum + MARGIN
+
         fun ratio(
             p: Palette,
             w: WallpaperSpec,
@@ -79,9 +86,16 @@ object ContrastEnforcer {
             if (ColorRole.ON_ACCENT in locked) return p0 to w0
             val best =
                 listOf(0.0, 100.0)
-                    .mapNotNull { t -> moveTone(p0.onAccent, t) { c -> ratio(p0.with(ColorRole.ON_ACCENT, c), w0) >= goal } }
-                    .minByOrNull { toneDistance(it, p0.onAccent) }
-                    ?: listOf(0.0, 100.0).map { HctSolver.solve(0.0, 0.0, it) }.maxBy { ratio(p0.with(ColorRole.ON_ACCENT, it), w0) }
+                    .mapNotNull { t ->
+                        moveTone(p0.onAccent, t) { c ->
+                            ratio(p0.with(ColorRole.ON_ACCENT, c), w0) >=
+                                goal
+                        }
+                    }.minByOrNull { toneDistance(it, p0.onAccent) }
+                    ?: listOf(
+                        0.0,
+                        100.0,
+                    ).map { HctSolver.solve(0.0, 0.0, it) }.maxBy { ratio(p0.with(ColorRole.ON_ACCENT, it), w0) }
             return p0.with(ColorRole.ON_ACCENT, best) to w0
         }
 
@@ -108,7 +122,10 @@ object ContrastEnforcer {
             if (ratio(p, w) >= goal) {
                 // Re-fit the foreground from its original colour: the smaller change is enough now.
                 if (fgRole !in locked) {
-                    moveTone(p0[fgRole], towardsTone) { c -> ratio(p.with(fgRole, c), w) >= goal }?.let { p = p.with(fgRole, it) }
+                    moveTone(p0[fgRole], towardsTone) { c -> ratio(p.with(fgRole, c), w) >= goal }?.let {
+                        p =
+                            p.with(fgRole, it)
+                    }
                 }
                 return p to w
             }
@@ -117,7 +134,10 @@ object ContrastEnforcer {
         // Step 3: background role, opposite direction.
         if (ratio(p, w) < goal && bgRole !in locked && !(pair.bg == null && w.show && w.backgroundOpacity < 1.0)) {
             val awayTone = 100.0 - towardsTone
-            moveTone(p[bgRole], awayTone) { c -> ratio(p.with(bgRole, c), w) >= goal }?.let { return p.with(bgRole, it) to w }
+            moveTone(p[bgRole], awayTone) { c -> ratio(p.with(bgRole, c), w) >= goal }?.let {
+                return p.with(bgRole, it) to
+                    w
+            }
             val extreme = HctSolver.solve(0.0, 0.0, awayTone)
             if (ratio(p.with(bgRole, extreme), w) > ratio(p, w)) p = p.with(bgRole, extreme)
         }
@@ -134,12 +154,31 @@ object ContrastEnforcer {
         val fl = Wcag.luminance(p[pair.fg])
         val bl =
             when {
-                pair.bg != null -> Wcag.luminance(p[pair.bg])
-                !w.show -> Wcag.luminance(p.background)
-                wc.isNullOrEmpty() -> Contrast.effectiveRange(p, w).let { (it.start + it.endInclusive) / 2 }
-                else ->
-                    wc.map { Wcag.luminance(Contrast.effectiveBackground(p, w, app.strata.launcher.core.theme.color.RgbF.of(it))) }
-                        .let { (it.min() + it.max()) / 2 }
+                pair.bg != null -> {
+                    Wcag.luminance(p[pair.bg])
+                }
+
+                !w.show -> {
+                    Wcag.luminance(p.background)
+                }
+
+                wc.isNullOrEmpty() -> {
+                    Contrast.effectiveRange(p, w).let { (it.start + it.endInclusive) / 2 }
+                }
+
+                else -> {
+                    wc
+                        .map {
+                            Wcag.luminance(
+                                Contrast.effectiveBackground(
+                                    p,
+                                    w,
+                                    app.strata.launcher.core.theme.color.RgbF
+                                        .of(it),
+                                ),
+                            )
+                        }.let { (it.min() + it.max()) / 2 }
+                }
             }
         if (fl != bl) return fl > bl
         // Equal: go where there is more room.

@@ -23,7 +23,11 @@ class PerformanceTest {
         var tree = json(String(ThemeFixtures.sample("graphite.strata-theme.json")))
         var i = 0
         while (JsonWriter.prettyBytes(tree).size < 250 * 1024) {
-            tree = tree.with("x-blob-$i", JsonObject((0 until 8).associate { "s$it" to JsonString("abcdefghij".repeat(400)) }))
+            tree =
+                tree.with(
+                    "x-blob-$i",
+                    JsonObject((0 until 8).associate { "s$it" to JsonString("abcdefghij".repeat(400)) }),
+                )
             i++
         }
         return JsonWriter.prettyBytes(tree).also { assertThat(it.size).isAtMost(256 * 1024) }
@@ -35,11 +39,12 @@ class PerformanceTest {
     ): Double {
         repeat(runs) { block() } // warm-up (JIT)
         val times =
-            (0 until runs).map {
-                val t0 = System.nanoTime()
-                block()
-                (System.nanoTime() - t0) / 1e6
-            }.sorted()
+            (0 until runs)
+                .map {
+                    val t0 = System.nanoTime()
+                    block()
+                    (System.nanoTime() - t0) / 1e6
+                }.sorted()
         return times[times.size / 2]
     }
 
@@ -48,7 +53,13 @@ class PerformanceTest {
         val typical = ThemeFixtures.sample("dusk.strata-theme.json")
         assertThat(typical.size).isLessThan(8 * 1024)
         val big = bigTheme()
-        val platform = PlatformInputs(apiLevel = 34, systemDark = false, wallpaperColors = WallpaperColorsInput(0xFF2E7D32.toInt()))
+        val platform =
+            PlatformInputs(
+                apiLevel = 34,
+                systemDark = false,
+                wallpaperColors = WallpaperColorsInput(0xFF2E7D32.toInt()),
+            )
+
         fun once(bytes: ByteArray) {
             val p = (parser.parse(bytes) as Outcome.Ok).value
             ThemeResolver.resolve(p.document, platform)

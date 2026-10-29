@@ -8,10 +8,11 @@ package app.strata.launcher.core.json
  */
 object JsonWriter {
     fun pretty(value: JsonValue): String =
-        StringBuilder().apply {
-            write(value, this, 0)
-            append('\n')
-        }.toString()
+        StringBuilder()
+            .apply {
+                write(value, this, 0)
+                append('\n')
+            }.toString()
 
     fun prettyBytes(value: JsonValue): ByteArray = pretty(value).toByteArray(Charsets.UTF_8)
 
@@ -44,6 +45,7 @@ object JsonWriter {
                 indent(out, level)
                 out.append('}')
             }
+
             is JsonArray -> {
                 if (v.isEmpty()) {
                     out.append("[]")
@@ -59,7 +61,10 @@ object JsonWriter {
                 indent(out, level)
                 out.append(']')
             }
-            else -> writeCompact(v, out)
+
+            else -> {
+                writeCompact(v, out)
+            }
         }
     }
 
@@ -80,6 +85,7 @@ object JsonWriter {
                 }
                 out.append('}')
             }
+
             is JsonArray -> {
                 out.append('[')
                 v.forEachIndexed { idx, child ->
@@ -88,10 +94,22 @@ object JsonWriter {
                 }
                 out.append(']')
             }
-            is JsonString -> appendQuoted(v.value, out)
-            is JsonNumber -> out.append(v.raw)
-            is JsonBool -> out.append(if (v.value) "true" else "false")
-            JsonNull -> out.append("null")
+
+            is JsonString -> {
+                appendQuoted(v.value, out)
+            }
+
+            is JsonNumber -> {
+                out.append(v.raw)
+            }
+
+            is JsonBool -> {
+                out.append(if (v.value) "true" else "false")
+            }
+
+            JsonNull -> {
+                out.append("null")
+            }
         }
     }
 
@@ -109,19 +127,41 @@ object JsonWriter {
         out.append('"')
         for (c in s) {
             when (c) {
-                '"' -> out.append("\\\"")
-                '\\' -> out.append("\\\\")
-                '\n' -> out.append("\\n")
-                '\r' -> out.append("\\r")
-                '\t' -> out.append("\\t")
-                '\b' -> out.append("\\b")
-                '\u000C' -> out.append("\\f")
-                else ->
+                '"' -> {
+                    out.append("\\\"")
+                }
+
+                '\\' -> {
+                    out.append("\\\\")
+                }
+
+                '\n' -> {
+                    out.append("\\n")
+                }
+
+                '\r' -> {
+                    out.append("\\r")
+                }
+
+                '\t' -> {
+                    out.append("\\t")
+                }
+
+                '\b' -> {
+                    out.append("\\b")
+                }
+
+                '\u000C' -> {
+                    out.append("\\f")
+                }
+
+                else -> {
                     if (c < ' ' || c == ' ' || c == ' ') {
                         out.append("\\u").append(String.format(java.util.Locale.ROOT, "%04x", c.code))
                     } else {
                         out.append(c)
                     }
+                }
             }
         }
         out.append('"')

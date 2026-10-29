@@ -42,11 +42,20 @@ class ResolverTest {
     fun `T-THEME-02 a file with only schemaVersion, id and name resolves exactly like Strata Default`() {
         val parsed = parseOk(minimal())
         assertThat(parsed.issues).isEmpty()
-        assertThat(parsed.document.copy(id = StrataDefault.ID, name = StrataDefault.NAME)).isEqualTo(StrataDefault.document)
-        for (p in listOf(light, dark, PlatformInputs(26), PlatformInputs(31, true, WallpaperColorsInput(0xFF336699.toInt())))) {
+        assertThat(
+            parsed.document.copy(id = StrataDefault.ID, name = StrataDefault.NAME),
+        ).isEqualTo(StrataDefault.document)
+        for (p in listOf(
+            light,
+            dark,
+            PlatformInputs(26),
+            PlatformInputs(31, true, WallpaperColorsInput(0xFF336699.toInt())),
+        )) {
             assertThat(withoutId(resolve(parsed.document, p))).isEqualTo(withoutId(resolve(StrataDefault.document, p)))
         }
-        assertThat(withoutId(StrataDefault.resolved(false))).isEqualTo(withoutId(resolve(parsed.document, PlatformInputs(26))))
+        assertThat(
+            withoutId(StrataDefault.resolved(false)),
+        ).isEqualTo(withoutId(resolve(parsed.document, PlatformInputs(26))))
         assertThat(StrataDefault.resolved(true).colors).isEqualTo(BuiltInPalettes.DARK)
         assertThat(StrataDefault.resolved(false).colors).isEqualTo(BuiltInPalettes.LIGHT)
         assertThat(StrataDefault.resolved(false).contrast.status).isEqualTo(ContrastStatus.AA_ANY_WALLPAPER)
@@ -60,7 +69,10 @@ class ResolverTest {
             for (omitted in ColorRole.entries) {
                 val roles = ColorRole.entries.filter { it != omitted }
                 val pal = roles.joinToString(",") { "\"${it.wire}\":\"#FF00FF\"" }
-                val doc = parseOk(minimal("\"colors\":{\"mode\":\"${variant.wire}\",\"${variant.wire}\":{$pal}}")).document
+                val doc =
+                    parseOk(
+                        minimal("\"colors\":{\"mode\":\"${variant.wire}\",\"${variant.wire}\":{$pal}}"),
+                    ).document
                 // Enforcement off: this probe checks role plumbing, not readability.
                 val t = resolve(doc, light, ThemeGlobals(enforceContrast = false))
                 assertThat(t.variant).isEqualTo(variant)
@@ -78,7 +90,9 @@ class ResolverTest {
         val d = resolve(doc, dark)
         assertThat(d.colors.background).isEqualTo(Rgb.BLACK)
         assertThat(d.colors.scrim).isEqualTo(Rgb.BLACK)
-        assertThat(d.colors.copy(background = BuiltInPalettes.DARK.background, scrim = BuiltInPalettes.DARK.scrim)).isEqualTo(BuiltInPalettes.DARK)
+        assertThat(
+            d.colors.copy(background = BuiltInPalettes.DARK.background, scrim = BuiltInPalettes.DARK.scrim),
+        ).isEqualTo(BuiltInPalettes.DARK)
         val l = resolve(doc, light)
         assertThat(l.colors).isEqualTo(BuiltInPalettes.LIGHT)
         // A derived dark palette is blackened too (applied after derivation).
@@ -87,11 +101,32 @@ class ResolverTest {
     }
 
     private val wallpaperA = WallpaperColorsInput(0xFF2E7D32.toInt(), 0xFF81C784.toInt(), 0xFF1B5E20.toInt())
-    private val wallpaperB = WallpaperColorsInput(0xFFC62828.toInt(), 0xFFFFCDD2.toInt(), 0xFF4A148C.toInt(), supportsDarkText = true)
+    private val wallpaperB =
+        WallpaperColorsInput(0xFFC62828.toInt(), 0xFFFFCDD2.toInt(), 0xFF4A148C.toInt(), supportsDarkText = true)
     private val dynamic =
         DynamicSchemeInput(
-            light = MaterialRoles(0xFFFEF7FF.toInt(), 0xFFECE6F0.toInt(), 0xFFE6E0E9.toInt(), 0xFF1D1B20.toInt(), 0xFF49454F.toInt(), 0xFF65558F.toInt(), 0xFFFFFFFF.toInt(), 0xFFCAC4D0.toInt()),
-            dark = MaterialRoles(0xFF141218.toInt(), 0xFF2B2930.toInt(), 0xFF36343B.toInt(), 0xFFE6E0E9.toInt(), 0xFFCAC4D0.toInt(), 0xFFD0BCFE.toInt(), 0xFF381E72.toInt(), 0xFF49454F.toInt()),
+            light =
+                MaterialRoles(
+                    0xFFFEF7FF.toInt(),
+                    0xFFECE6F0.toInt(),
+                    0xFFE6E0E9.toInt(),
+                    0xFF1D1B20.toInt(),
+                    0xFF49454F.toInt(),
+                    0xFF65558F.toInt(),
+                    0xFFFFFFFF.toInt(),
+                    0xFFCAC4D0.toInt(),
+                ),
+            dark =
+                MaterialRoles(
+                    0xFF141218.toInt(),
+                    0xFF2B2930.toInt(),
+                    0xFF36343B.toInt(),
+                    0xFFE6E0E9.toInt(),
+                    0xFFCAC4D0.toInt(),
+                    0xFFD0BCFE.toInt(),
+                    0xFF381E72.toInt(),
+                    0xFF49454F.toInt(),
+                ),
         )
 
     private fun assertAA(
@@ -134,7 +169,8 @@ class ResolverTest {
         for (seed in listOf(0xFF1E88E5.toInt(), 0xFFFFEB3B.toInt(), 0xFF000000.toInt(), 0xFF7F7F7F.toInt())) {
             val doc = base.copy(colors = ColorsSpec(sourceKind = SourceKind.SEED, seedColor = seed))
             for (p in listOf(light, dark)) {
-                val t = resolve(doc, p, ThemeGlobals(enforceContrast = false)) // derived palettes are enforced regardless
+                // Derived palettes are enforced regardless of the global setting.
+                val t = resolve(doc, p, ThemeGlobals(enforceContrast = false))
                 assertThat(t.colorSource).isEqualTo(SourceKind.SEED)
                 assertAA(t, doc, null, "seed ${Rgb.toHex(seed)}")
             }
@@ -159,7 +195,10 @@ class ResolverTest {
         }
         // Several locked roles on a seed theme.
         val locked = setOf(ColorRole.ACCENT, ColorRole.SURFACE)
-        val doc = parseOk(minimal()).document.let { it.copy(colors = ColorsSpec(sourceKind = SourceKind.WALLPAPER, lockedRoles = locked)) }
+        val doc =
+            parseOk(minimal()).document.let {
+                it.copy(colors = ColorsSpec(sourceKind = SourceKind.WALLPAPER, lockedRoles = locked))
+            }
         for (wc in listOf(wallpaperA, wallpaperB)) {
             val t = resolve(doc, PlatformInputs(30, false, wc))
             assertThat(t.colors.accent).isEqualTo(BuiltInPalettes.LIGHT.accent)
@@ -170,15 +209,37 @@ class ResolverTest {
     @Test
     fun `wallpaper mode picks the variant per API level`() {
         val dusk = sample("dusk").document
-        assertThat(resolve(dusk, PlatformInputs(31, systemDark = true, wallpaperColors = wallpaperB)).variant).isEqualTo(Variant.LIGHT)
-        assertThat(resolve(dusk, PlatformInputs(31, systemDark = false, wallpaperColors = wallpaperA)).variant).isEqualTo(Variant.DARK)
-        assertThat(resolve(dusk, PlatformInputs(29, systemDark = true, wallpaperColors = WallpaperColorsInput(Rgb.WHITE))).variant).isEqualTo(Variant.LIGHT)
-        assertThat(resolve(dusk, PlatformInputs(29, systemDark = false, wallpaperColors = WallpaperColorsInput(Rgb.BLACK))).variant).isEqualTo(Variant.DARK)
-        assertThat(resolve(dusk, PlatformInputs(26, systemDark = true, wallpaperColors = wallpaperB)).variant).isEqualTo(Variant.DARK)
-        assertThat(resolve(dusk, PlatformInputs(33, systemDark = true, wallpaperColors = null)).variant).isEqualTo(Variant.DARK)
+        assertThat(
+            resolve(dusk, PlatformInputs(31, systemDark = true, wallpaperColors = wallpaperB)).variant,
+        ).isEqualTo(Variant.LIGHT)
+        assertThat(
+            resolve(dusk, PlatformInputs(31, systemDark = false, wallpaperColors = wallpaperA)).variant,
+        ).isEqualTo(Variant.DARK)
+        assertThat(
+            resolve(
+                dusk,
+                PlatformInputs(29, systemDark = true, wallpaperColors = WallpaperColorsInput(Rgb.WHITE)),
+            ).variant,
+        ).isEqualTo(Variant.LIGHT)
+        assertThat(
+            resolve(
+                dusk,
+                PlatformInputs(29, systemDark = false, wallpaperColors = WallpaperColorsInput(Rgb.BLACK)),
+            ).variant,
+        ).isEqualTo(Variant.DARK)
+        assertThat(
+            resolve(dusk, PlatformInputs(26, systemDark = true, wallpaperColors = wallpaperB)).variant,
+        ).isEqualTo(Variant.DARK)
+        assertThat(
+            resolve(dusk, PlatformInputs(33, systemDark = true, wallpaperColors = null)).variant,
+        ).isEqualTo(Variant.DARK)
         // Global override wins over the theme.
-        assertThat(resolve(dusk, PlatformInputs(31, false, wallpaperA), ThemeGlobals(AppearanceOverride.LIGHT)).variant).isEqualTo(Variant.LIGHT)
-        assertThat(resolve(sample("paper").document, dark, ThemeGlobals(AppearanceOverride.SYSTEM)).variant).isEqualTo(Variant.DARK)
+        assertThat(
+            resolve(dusk, PlatformInputs(31, false, wallpaperA), ThemeGlobals(AppearanceOverride.LIGHT)).variant,
+        ).isEqualTo(Variant.LIGHT)
+        assertThat(
+            resolve(sample("paper").document, dark, ThemeGlobals(AppearanceOverride.SYSTEM)).variant,
+        ).isEqualTo(Variant.DARK)
     }
 
     private val failing =
@@ -192,10 +253,19 @@ class ResolverTest {
 
     @Test
     fun `T-THEME-25 enforcement makes a failing theme pass P1-P8 (static and runtime) and leaves the file unchanged`() {
-        val shownWallpapers = listOf(WallpaperSpec(), WallpaperSpec(show = true, dim = 0.1, backgroundOpacity = 0.0), WallpaperSpec(show = true, dim = 0.5, backgroundOpacity = 0.3))
+        val shownWallpapers =
+            listOf(
+                WallpaperSpec(),
+                WallpaperSpec(show = true, dim = 0.1, backgroundOpacity = 0.0),
+                WallpaperSpec(show = true, dim = 0.5, backgroundOpacity = 0.3),
+            )
         for (w in shownWallpapers) {
             val doc = parseOk(minimal()).document.copy(colors = ColorsSpec(light = failing), wallpaper = w)
-            val bytes = ThemeWriter.write(app.strata.launcher.core.theme.write.ThemeEncoder.encode(doc))
+            val bytes =
+                ThemeWriter.write(
+                    app.strata.launcher.core.theme.write.ThemeEncoder
+                        .encode(doc),
+                )
             val before = bytes.copyOf()
             val parsed = parseOk(bytes).document
             assertThat(Contrast.passes(failing, w)).isFalse()
@@ -227,7 +297,13 @@ class ResolverTest {
         // for every wallpaper: dimming must rise.
         val p = BuiltInPalettes.DARK.copy(scrim = 0xFF000000.toInt(), background = 0xFF000000.toInt())
         val w = WallpaperSpec(show = true, dim = 0.0, backgroundOpacity = 0.0)
-        val out = app.strata.launcher.core.theme.contrast.ContrastEnforcer.enforce(p, w, null, setOf(ColorRole.BACKGROUND, ColorRole.SCRIM))
+        val out =
+            app.strata.launcher.core.theme.contrast.ContrastEnforcer.enforce(
+                p,
+                w,
+                null,
+                setOf(ColorRole.BACKGROUND, ColorRole.SCRIM),
+            )
         assertThat(out.wallpaper.dim).isGreaterThan(0.0)
         assertThat(out.wallpaper.dim).isAtMost(0.95)
         assertThat(Contrast.passes(out.palette, out.wallpaper)).isTrue()
@@ -235,7 +311,12 @@ class ResolverTest {
 
     @Test
     fun `global settings and forced-on rules`() {
-        val doc = parseOk(minimal("\"icons\":{\"visible\":false,\"labelsVisible\":false},\"favorites\":{\"showIcons\":false,\"showLabels\":false},\"haptics\":{\"mode\":\"followSystem\"},\"animation\":{\"durationScale\":1.5,\"listEntrance\":\"slide\"}")).document
+        val doc =
+            parseOk(
+                minimal(
+                    "\"icons\":{\"visible\":false,\"labelsVisible\":false},\"favorites\":{\"showIcons\":false,\"showLabels\":false},\"haptics\":{\"mode\":\"followSystem\"},\"animation\":{\"durationScale\":1.5,\"listEntrance\":\"slide\"}",
+                ),
+            ).document
         val t = resolve(doc, light.copy(animatorDurationScale = 0.5))
         assertThat(t.icons.labelsVisible).isTrue()
         assertThat(t.favorites.showLabels).isTrue()
@@ -254,8 +335,10 @@ class ResolverTest {
         val doc =
             parseOk(
                 minimal(
-                    "\"typography\":{\"family\":{\"kind\":\"user\",\"sha256\":\"$sha\"},\"clockFamily\":{\"kind\":\"bundled\",\"id\":\"nope\"}}," +
-                        "\"icons\":{\"pack\":{\"package\":\"com.example.pack\",\"displayName\":\"Pack\",\"fallback\":\"monochrome\"}}," +
+                    "\"typography\":{\"family\":{\"kind\":\"user\",\"sha256\":\"$sha\"}," +
+                        "\"clockFamily\":{\"kind\":\"bundled\",\"id\":\"nope\"}}," +
+                        "\"icons\":{\"pack\":{\"package\":\"com.example.pack\",\"displayName\":\"Pack\"," +
+                        "\"fallback\":\"monochrome\"}}," +
                         "\"wallpaper\":{\"image\":{\"sha256\":\"$sha\"}}",
                 ),
             ).document
@@ -269,7 +352,16 @@ class ResolverTest {
         assertThat(r.theme.typography.family).isEqualTo(app.strata.launcher.core.theme.resolve.ResolvedFont.System)
         assertThat(r.theme.icons.packPackage).isNull()
         assertThat(r.theme.icons.missingPackPackage).isEqualTo("com.example.pack")
-        val present = ThemeResolver.resolve(doc, light.copy(userFonts = setOf(sha), installedIconPacks = setOf("com.example.pack"), images = setOf(sha), bundledFonts = setOf("nope")))
+        val present =
+            ThemeResolver.resolve(
+                doc,
+                light.copy(
+                    userFonts = setOf(sha),
+                    installedIconPacks = setOf("com.example.pack"),
+                    images = setOf(sha),
+                    bundledFonts = setOf("nope"),
+                ),
+            )
         assertThat(present.issues).isEmpty()
         assertThat(present.theme.icons.packPackage).isEqualTo("com.example.pack")
         assertThat(present.theme.wallpaper.imageSha256).isEqualTo(sha)
@@ -282,17 +374,34 @@ class ResolverTest {
                 "harbor-api33-dark" to (sample("harbor").document to PlatformInputs(33, true, wallpaperA, dynamic)),
                 "dusk-api30" to (sample("dusk").document to PlatformInputs(30, false, wallpaperB)),
                 "graphite-api34" to (sample("graphite").document to PlatformInputs(34, true, wallpaperA)),
-                "seed-light" to (parseOk(minimal()).document.copy(colors = ColorsSpec(sourceKind = SourceKind.SEED, seedColor = 0xFF8E24AA.toInt())) to light),
+                "seed-light" to
+                    (
+                        parseOk(
+                            minimal(),
+                        ).document.copy(
+                            colors = ColorsSpec(sourceKind = SourceKind.SEED, seedColor = 0xFF8E24AA.toInt()),
+                        ) to
+                            light
+                    ),
             )
         val snapshot = StringBuilder()
         for ((name, pair) in inputs) {
             val (doc, p) = pair
             val first = resolve(doc, p)
             repeat(100) { assertThat(resolve(doc, p)).isEqualTo(first) }
-            snapshot.append(name).append(": ").append(describe(first)).append('\n')
+            snapshot
+                .append(name)
+                .append(": ")
+                .append(describe(first))
+                .append('\n')
         }
         // The snapshot file is the cross-process half of T-THEME-49: every test JVM must produce it again.
-        val expected = javaClass.classLoader.getResourceAsStream("golden/resolve-snapshot.txt")?.bufferedReader()?.readText()
+        val expected =
+            javaClass.classLoader
+                .getResourceAsStream(
+                    "golden/resolve-snapshot.txt",
+                )?.bufferedReader()
+                ?.readText()
         if (expected == null || System.getProperty("strata.updateGolden") == "true") {
             java.io.File("src/test/resources/golden/resolve-snapshot.txt").writeText(snapshot.toString())
             if (expected == null) error("golden/resolve-snapshot.txt was missing; written, re-run the test")
@@ -304,7 +413,8 @@ class ResolverTest {
     private fun describe(t: ResolvedTheme): String {
         val c = t.colors
         val colors = ColorRole.entries.joinToString(" ") { "${it.wire}=${Rgb.toHex(c[it])}" }
-        return "${t.variant} ${t.colorSource} $colors dim=${t.wallpaper.dim} bgOpacity=${t.wallpaper.backgroundOpacity} " +
+        return "${t.variant} ${t.colorSource} $colors dim=${t.wallpaper.dim} " +
+            "bgOpacity=${t.wallpaper.backgroundOpacity} " +
             "contrast=${t.contrast} anim=${t.animation}"
     }
 

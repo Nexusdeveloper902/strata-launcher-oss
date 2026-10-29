@@ -19,7 +19,10 @@ class ContrastTest {
     /** Built-ins of THEME_SYSTEM §14: Strata Default plus the five samples (shipped as assets). */
     private val builtIns: Map<String, ThemeDocument> =
         mapOf("<default>" to StrataDefault.document) +
-            ThemeFixtures.SAMPLE_NAMES.associate { it.removeSuffix(".strata-theme.json") to sample(it.removeSuffix(".strata-theme.json")).document }
+            ThemeFixtures.SAMPLE_NAMES.associate {
+                it.removeSuffix(".strata-theme.json") to
+                    sample(it.removeSuffix(".strata-theme.json")).document
+            }
 
     private fun caseName(
         v: Variant,
@@ -31,14 +34,25 @@ class ContrastTest {
     @Test
     fun `T-THEME-23 reproduces every ratio of the section 14_1 checker to 2 decimals`() {
         val golden =
-            javaClass.classLoader.getResourceAsStream("golden/contrast-14_1.tsv")!!.bufferedReader().readLines()
+            javaClass.classLoader
+                .getResourceAsStream("golden/contrast-14_1.tsv")!!
+                .bufferedReader()
+                .readLines()
                 .filter { it.isNotBlank() && !it.startsWith("#") }
                 .map { it.split('\t') }
         assertThat(golden).hasSize(104)
         val actual =
             builtIns.flatMap { (name, doc) ->
                 Contrast.staticCheck(doc).flatMap { c ->
-                    c.results.map { r -> listOf(name, caseName(c.variant, c.pureBlack), r.pair.fg.wire, bgName(r.pair), "%.2f".format(Locale.ROOT, r.ratio)) }
+                    c.results.map { r ->
+                        listOf(
+                            name,
+                            caseName(c.variant, c.pureBlack),
+                            r.pair.fg.wire,
+                            bgName(r.pair),
+                            "%.2f".format(Locale.ROOT, r.ratio),
+                        )
+                    }
                 }
             }
         assertThat(actual).containsExactlyElementsIn(golden)
@@ -52,8 +66,11 @@ class ContrastTest {
         ): String =
             "%.2f".format(
                 Locale.ROOT,
-                Contrast.staticCheck(builtIns.getValue(name)).flatMap { it.results }
-                    .filter { (it.pair.minimum == 4.5) == text }.minOf { it.ratio },
+                Contrast
+                    .staticCheck(builtIns.getValue(name))
+                    .flatMap { it.results }
+                    .filter { (it.pair.minimum == 4.5) == text }
+                    .minOf { it.ratio },
             )
         val expected =
             mapOf(
@@ -71,8 +88,14 @@ class ContrastTest {
 
     @Test
     fun `T-THEME-23 WCAG reference values`() {
-        assertThat(app.strata.launcher.core.theme.color.Wcag.contrast(0xFF000000.toInt(), 0xFFFFFFFF.toInt())).isWithin(1e-9).of(21.0)
-        assertThat(app.strata.launcher.core.theme.color.Wcag.contrast(0xFF777777.toInt(), 0xFFFFFFFF.toInt())).isWithin(0.005).of(4.48)
+        assertThat(
+            app.strata.launcher.core.theme.color.Wcag
+                .contrast(0xFF000000.toInt(), 0xFFFFFFFF.toInt()),
+        ).isWithin(1e-9).of(21.0)
+        assertThat(
+            app.strata.launcher.core.theme.color.Wcag
+                .contrast(0xFF777777.toInt(), 0xFFFFFFFF.toInt()),
+        ).isWithin(0.005).of(4.48)
     }
 
     @Test
@@ -80,7 +103,9 @@ class ContrastTest {
         for ((name, doc) in builtIns) {
             for (c in Contrast.staticCheck(doc)) {
                 for (r in c.results) {
-                    assertWithMessage("$name ${caseName(c.variant, c.pureBlack)} ${r.pair}").that(r.ratio).isAtLeast(r.pair.minimum)
+                    assertWithMessage(
+                        "$name ${caseName(c.variant, c.pureBlack)} ${r.pair}",
+                    ).that(r.ratio).isAtLeast(r.pair.minimum)
                 }
             }
         }
@@ -101,7 +126,12 @@ class ContrastTest {
         val wallpapers =
             listOf(
                 WallpaperColorsInput(0xFF000000.toInt(), 0xFF101010.toInt(), 0xFF202020.toInt()),
-                WallpaperColorsInput(0xFFFFFFFF.toInt(), 0xFFF0F0F0.toInt(), 0xFFE0E0E0.toInt(), supportsDarkText = true),
+                WallpaperColorsInput(
+                    0xFFFFFFFF.toInt(),
+                    0xFFF0F0F0.toInt(),
+                    0xFFE0E0E0.toInt(),
+                    supportsDarkText = true,
+                ),
                 WallpaperColorsInput(0xFF1E88E5.toInt(), 0xFF43A047.toInt(), 0xFFFDD835.toInt()),
                 WallpaperColorsInput(0xFF8E24AA.toInt(), 0xFFFF7043.toInt(), null),
                 WallpaperColorsInput(0xFF808080.toInt(), null, null),
@@ -113,7 +143,12 @@ class ContrastTest {
                     for (dark in listOf(false, true)) {
                         val platform = PlatformInputs(apiLevel = api, systemDark = dark, wallpaperColors = wc)
                         val t = ThemeResolver.resolve(doc, platform, ThemeGlobals()).theme
-                        val w = doc.wallpaper.copy(show = t.wallpaper.show, dim = t.wallpaper.dim, backgroundOpacity = t.wallpaper.backgroundOpacity)
+                        val w =
+                            doc.wallpaper.copy(
+                                show = t.wallpaper.show,
+                                dim = t.wallpaper.dim,
+                                backgroundOpacity = t.wallpaper.backgroundOpacity,
+                            )
                         assertWithMessage("$name $wc api $api dark $dark runtime")
                             .that(Contrast.passes(t.colors, w, wc.all))
                             .isTrue()

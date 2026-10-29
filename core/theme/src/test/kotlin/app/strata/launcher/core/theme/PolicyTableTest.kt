@@ -63,7 +63,12 @@ class PolicyTableTest {
             row("schemaMinor", "7", IssueCode.NEWER_MINOR, 7) { it.schemaMinor },
             row("id", "\"nope\"", IssueCode.GENERATED, "00000000-0000-4000-8000-000000000001") { it.id },
             row("id", "42", IssueCode.GENERATED, "00000000-0000-4000-8000-000000000001") { it.id },
-            row("id", "\"ABCDEF00-0000-4000-8000-000000000000\"", null, "ABCDEF00-0000-4000-8000-000000000000") { it.id },
+            row(
+                "id",
+                "\"ABCDEF00-0000-4000-8000-000000000000\"",
+                null,
+                "ABCDEF00-0000-4000-8000-000000000000",
+            ) { it.id },
             row("name", "\"\"", IssueCode.GENERATED, "Untitled theme") { it.name },
             row("name", "7", IssueCode.GENERATED, "Untitled theme") { it.name },
             row("name", "\"\\u0007\"", IssueCode.CONTROL_CHARS_REMOVED, "Untitled theme") { it.name },
@@ -98,11 +103,30 @@ class PolicyTableTest {
             row("colors/mode", "3", IssueCode.WRONG_TYPE, ColorMode.SYSTEM) { it.colors.mode },
             row("colors/source/kind", "\"lava\"", IssueCode.UNKNOWN_ENUM, SourceKind.FIXED) { it.colors.sourceKind },
             row("colors/source/seedColor", "\"#12\"", IssueCode.INVALID_VALUE, null) { it.colors.seedColor },
-            row("colors/source/lockedRoles", "[\"foo\",\"accent\",\"accent\",3]", IssueCode.ITEM_DROPPED, setOf(ColorRole.ACCENT)) { it.colors.lockedRoles },
-            row("colors/source/lockedRoles", "\"accent\"", IssueCode.WRONG_TYPE, emptySet<ColorRole>()) { it.colors.lockedRoles },
-            row("colors/source", "{\"kind\":\"seed\"}", IssueCode.SEED_MISSING, SourceKind.SEED) { it.colors.sourceKind },
+            row(
+                "colors/source/lockedRoles",
+                "[\"foo\",\"accent\",\"accent\",3]",
+                IssueCode.ITEM_DROPPED,
+                setOf(ColorRole.ACCENT),
+            ) {
+                it.colors.lockedRoles
+            },
+            row(
+                "colors/source/lockedRoles",
+                "\"accent\"",
+                IssueCode.WRONG_TYPE,
+                emptySet<ColorRole>(),
+            ) { it.colors.lockedRoles },
+            row(
+                "colors/source",
+                "{\"kind\":\"seed\"}",
+                IssueCode.SEED_MISSING,
+                SourceKind.SEED,
+            ) { it.colors.sourceKind },
             row("colors/pureBlack", "\"yes\"", IssueCode.WRONG_TYPE, false) { it.colors.pureBlack },
-            row("colors/light/accent", "\"#12345\"", IssueCode.INVALID_VALUE, BuiltInPalettes.LIGHT.accent) { it.colors.light.accent },
+            row("colors/light/accent", "\"#12345\"", IssueCode.INVALID_VALUE, BuiltInPalettes.LIGHT.accent) {
+                it.colors.light.accent
+            },
             row("colors/light/accent", "\"#aabbcc\"", null, 0xFFAABBCC.toInt()) { it.colors.light.accent },
             row("colors/dark/scrim", "5", IssueCode.WRONG_TYPE, BuiltInPalettes.DARK.scrim) { it.colors.dark.scrim },
             row("colors/dark/glow", "\"#000000\"", IssueCode.UNKNOWN_KEY, BuiltInPalettes.DARK) { it.colors.dark },
@@ -112,18 +136,59 @@ class PolicyTableTest {
             row("wallpaper/dim", "1.2", IssueCode.CLAMPED, 0.95) { it.wallpaper.dim },
             row("wallpaper/dim", "-1", IssueCode.CLAMPED, 0.0) { it.wallpaper.dim },
             row("wallpaper/backgroundOpacity", "2", IssueCode.CLAMPED, 1.0) { it.wallpaper.backgroundOpacity },
-            row("wallpaper/backgroundOpacity", "\"half\"", IssueCode.WRONG_TYPE, 0.0) { it.wallpaper.backgroundOpacity },
+            row(
+                "wallpaper/backgroundOpacity",
+                "\"half\"",
+                IssueCode.WRONG_TYPE,
+                0.0,
+            ) { it.wallpaper.backgroundOpacity },
             row("wallpaper/image", "{\"sha256\":\"xyz\"}", IssueCode.INVALID_VALUE, null) { it.wallpaper.image },
             row("wallpaper/image", "{}", IssueCode.INVALID_VALUE, null) { it.wallpaper.image },
-            row("wallpaper/image", "{\"sha256\":\"${"b".repeat(64)}\",\"mediaType\":\"image/gif\"}", IssueCode.UNKNOWN_ENUM, null) { it.wallpaper.image?.mediaType },
+            row(
+                "wallpaper/image",
+                "{\"sha256\":\"${"b".repeat(64)}\",\"mediaType\":\"image/gif\"}",
+                IssueCode.UNKNOWN_ENUM,
+                null,
+            ) {
+                it.wallpaper.image?.mediaType
+            },
             // §4.4 typography
             row("typography/family", "\"Roboto\"", IssueCode.WRONG_TYPE, FontRef.System) { it.typography.family },
-            row("typography/family", "{\"kind\":\"emoji\"}", IssueCode.UNKNOWN_ENUM, FontRef.System) { it.typography.family },
+            row(
+                "typography/family",
+                "{\"kind\":\"emoji\"}",
+                IssueCode.UNKNOWN_ENUM,
+                FontRef.System,
+            ) { it.typography.family },
             row("typography/family", "{}", IssueCode.INVALID_VALUE, FontRef.System) { it.typography.family },
-            row("typography/family", "{\"kind\":\"bundled\"}", IssueCode.INVALID_VALUE, FontRef.System) { it.typography.family },
-            row("typography/family", "{\"kind\":\"bundled\",\"id\":\"Bad_ID\"}", IssueCode.INVALID_VALUE, FontRef.System) { it.typography.family },
-            row("typography/family", "{\"kind\":\"user\"}", IssueCode.INVALID_VALUE, FontRef.System) { it.typography.family },
-            row("typography/clockFamily", "{\"kind\":\"bundled\",\"id\":\"serif-1\"}", null, FontRef.Bundled("serif-1")) { it.typography.clockFamily },
+            row(
+                "typography/family",
+                "{\"kind\":\"bundled\"}",
+                IssueCode.INVALID_VALUE,
+                FontRef.System,
+            ) { it.typography.family },
+            row(
+                "typography/family",
+                "{\"kind\":\"bundled\",\"id\":\"Bad_ID\"}",
+                IssueCode.INVALID_VALUE,
+                FontRef.System,
+            ) {
+                it.typography.family
+            },
+            row(
+                "typography/family",
+                "{\"kind\":\"user\"}",
+                IssueCode.INVALID_VALUE,
+                FontRef.System,
+            ) { it.typography.family },
+            row(
+                "typography/clockFamily",
+                "{\"kind\":\"bundled\",\"id\":\"serif-1\"}",
+                null,
+                FontRef.Bundled("serif-1"),
+            ) {
+                it.typography.clockFamily
+            },
             row("typography/scale", "0.5", IssueCode.CLAMPED, 0.8) { it.typography.scale },
             row("typography/scale", "3", IssueCode.CLAMPED, 1.5) { it.typography.scale },
             row("typography/labelWeight", "450", IssueCode.ROUNDED, 400) { it.typography.labelWeight },
@@ -132,8 +197,15 @@ class PolicyTableTest {
             row("typography/clockWeight", "0", IssueCode.CLAMPED, 100) { it.typography.clockWeight },
             row("typography/labelWeight", "\"bold\"", IssueCode.WRONG_TYPE, 400) { it.typography.labelWeight },
             row("typography/letterSpacingEm", "1", IssueCode.CLAMPED, 0.2) { it.typography.letterSpacingEm },
-            row("typography/labelCase", "\"camel\"", IssueCode.UNKNOWN_ENUM, LabelCase.AS_IS) { it.typography.labelCase },
-            row("typography/smallTextUsesSystemFont", "\"true\"", IssueCode.WRONG_TYPE, false) { it.typography.smallTextUsesSystemFont },
+            row(
+                "typography/labelCase",
+                "\"camel\"",
+                IssueCode.UNKNOWN_ENUM,
+                LabelCase.AS_IS,
+            ) { it.typography.labelCase },
+            row("typography/smallTextUsesSystemFont", "\"true\"", IssueCode.WRONG_TYPE, false) {
+                it.typography.smallTextUsesSystemFont
+            },
             // §4.5 list
             row("list/density", "\"huge\"", IssueCode.UNKNOWN_ENUM, Density.COMFORTABLE) { it.list.density },
             row("list/rowHeightDp", "40", IssueCode.CLAMPED, 48) { it.list.rowHeightDp },
@@ -151,8 +223,22 @@ class PolicyTableTest {
             row("icons/pack", "5", IssueCode.WRONG_TYPE, null) { it.icons.pack },
             row("icons/pack", "{\"package\":\"nodots\"}", IssueCode.INVALID_VALUE, null) { it.icons.pack },
             row("icons/pack", "{}", IssueCode.INVALID_VALUE, null) { it.icons.pack },
-            row("icons/pack", "{\"package\":\"com.a.b\",\"fallback\":\"x\"}", IssueCode.UNKNOWN_ENUM, PackFallback.SYSTEM) { it.icons.pack?.fallback },
-            row("icons/pack", "{\"package\":\"com.a.b\",\"displayName\":\"${"n".repeat(70)}\"}", IssueCode.TRUNCATED, "n".repeat(64)) { it.icons.pack?.displayName },
+            row(
+                "icons/pack",
+                "{\"package\":\"com.a.b\",\"fallback\":\"x\"}",
+                IssueCode.UNKNOWN_ENUM,
+                PackFallback.SYSTEM,
+            ) {
+                it.icons.pack?.fallback
+            },
+            row(
+                "icons/pack",
+                "{\"package\":\"com.a.b\",\"displayName\":\"${"n".repeat(70)}\"}",
+                IssueCode.TRUNCATED,
+                "n".repeat(64),
+            ) {
+                it.icons.pack?.displayName
+            },
             row("icons/tint", "\"red\"", IssueCode.UNKNOWN_ENUM, IconTint.NONE) { it.icons.tint },
             row("icons/legacyIconPlate", "1", IssueCode.WRONG_TYPE, true) { it.icons.legacyIconPlate },
             row("icons/labelsVisible", "1", IssueCode.WRONG_TYPE, true) { it.icons.labelsVisible },
@@ -169,7 +255,9 @@ class PolicyTableTest {
             // §4.8 favorites
             row("favorites/textScale", "3", IssueCode.CLAMPED, 2.0) { it.favorites.textScale },
             row("favorites/alignment", "1", IssueCode.WRONG_TYPE, Alignment.START) { it.favorites.alignment },
-            row("favorites/verticalPosition", "\"left\"", IssueCode.UNKNOWN_ENUM, VerticalPosition.BOTTOM) { it.favorites.verticalPosition },
+            row("favorites/verticalPosition", "\"left\"", IssueCode.UNKNOWN_ENUM, VerticalPosition.BOTTOM) {
+                it.favorites.verticalPosition
+            },
             row("favorites/showIcons", "1", IssueCode.WRONG_TYPE, false) { it.favorites.showIcons },
             row("favorites/showLabels", "1", IssueCode.WRONG_TYPE, true) { it.favorites.showLabels },
             row("favorites/spacingDp", "40", IssueCode.CLAMPED, 32) { it.favorites.spacingDp },
@@ -179,14 +267,26 @@ class PolicyTableTest {
             row("search/cornerRadiusDp", "30", IssueCode.CLAMPED, 28) { it.search.cornerRadiusDp },
             row("search/showHint", "1", IssueCode.WRONG_TYPE, true) { it.search.showHint },
             // §4.10 alphabetIndex
-            row("alphabetIndex/visibility", "\"sometimes\"", IssueCode.UNKNOWN_ENUM, IndexVisibility.ALWAYS) { it.alphabetIndex.visibility },
+            row("alphabetIndex/visibility", "\"sometimes\"", IssueCode.UNKNOWN_ENUM, IndexVisibility.ALWAYS) {
+                it.alphabetIndex.visibility
+            },
             row("alphabetIndex/side", "\"top\"", IssueCode.UNKNOWN_ENUM, IndexSide.END) { it.alphabetIndex.side },
-            row("alphabetIndex/glyphs", "\"stars\"", IssueCode.UNKNOWN_ENUM, IndexGlyphs.LETTERS) { it.alphabetIndex.glyphs },
+            row(
+                "alphabetIndex/glyphs",
+                "\"stars\"",
+                IssueCode.UNKNOWN_ENUM,
+                IndexGlyphs.LETTERS,
+            ) { it.alphabetIndex.glyphs },
             row("alphabetIndex/textSizeSp", "20", IssueCode.CLAMPED, 18) { it.alphabetIndex.textSizeSp },
             row("alphabetIndex/showBubble", "1", IssueCode.WRONG_TYPE, true) { it.alphabetIndex.showBubble },
             // §4.11 animation, §4.12 haptics
             row("animation/durationScale", "3", IssueCode.CLAMPED, 2.0) { it.animation.durationScale },
-            row("animation/listEntrance", "\"bounce\"", IssueCode.UNKNOWN_ENUM, ListEntrance.FADE) { it.animation.listEntrance },
+            row(
+                "animation/listEntrance",
+                "\"bounce\"",
+                IssueCode.UNKNOWN_ENUM,
+                ListEntrance.FADE,
+            ) { it.animation.listEntrance },
             row("haptics/mode", "\"strong\"", IssueCode.UNKNOWN_ENUM, HapticsMode.FOLLOW_SYSTEM) { it.haptics.mode },
         )
 
@@ -220,7 +320,13 @@ class PolicyTableTest {
         val groupsCovered = HashSet<String>()
         for (r in rows) {
             // Fresh id generator per fixture, so a generated id is always ...0001.
-            val parsed = (app.strata.launcher.core.theme.parse.ThemeParser(newId = fixedIds()).parse(fixture(r.path, r.value)) as app.strata.launcher.core.common.Outcome.Ok).value
+            val parsed =
+                (
+                    app.strata.launcher.core.theme.parse
+                        .ThemeParser(
+                            newId = fixedIds(),
+                        ).parse(fixture(r.path, r.value)) as app.strata.launcher.core.common.Outcome.Ok
+                ).value
             val what = "${r.path} = ${r.value}"
             if (r.code == null) {
                 assertWithMessage(what).that(parsed.issues).isEmpty()
@@ -239,16 +345,32 @@ class PolicyTableTest {
             groupsCovered += r.path.substringBefore('/')
         }
         assertThat(groupsCovered).containsAtLeast(
-            "colors", "wallpaper", "typography", "list", "icons", "clock", "favorites", "search", "alphabetIndex", "animation", "haptics",
+            "colors",
+            "wallpaper",
+            "typography",
+            "list",
+            "icons",
+            "clock",
+            "favorites",
+            "search",
+            "alphabetIndex",
+            "animation",
+            "haptics",
         )
     }
 
     @Test
     fun `T-THEME-20 R rows reject the file`() {
         assertThat(parseErr("""{"id":"$MIN_ID","name":"T"}""")).isInstanceOf(ThemeError.NotATheme::class.java)
-        assertThat(parseErr("""{"schemaVersion":"1","id":"$MIN_ID","name":"T"}""")).isInstanceOf(ThemeError.NotATheme::class.java)
-        assertThat(parseErr("""{"schemaVersion":1.5,"id":"$MIN_ID","name":"T"}""")).isInstanceOf(ThemeError.NotATheme::class.java)
-        assertThat(parseErr("""{"schemaVersion":0,"id":"$MIN_ID","name":"T"}""")).isInstanceOf(ThemeError.NotATheme::class.java)
+        assertThat(
+            parseErr("""{"schemaVersion":"1","id":"$MIN_ID","name":"T"}"""),
+        ).isInstanceOf(ThemeError.NotATheme::class.java)
+        assertThat(
+            parseErr("""{"schemaVersion":1.5,"id":"$MIN_ID","name":"T"}"""),
+        ).isInstanceOf(ThemeError.NotATheme::class.java)
+        assertThat(
+            parseErr("""{"schemaVersion":0,"id":"$MIN_ID","name":"T"}"""),
+        ).isInstanceOf(ThemeError.NotATheme::class.java)
         assertThat(parseErr("""[1]""")).isInstanceOf(ThemeError.NotATheme::class.java)
         val newer = parseErr("""{"schemaVersion":2,"id":"$MIN_ID","name":"T"}""")
         assertThat(newer).isInstanceOf(ThemeError.NewerVersion::class.java)
@@ -299,7 +421,17 @@ class PolicyTableTest {
         val longKey = "k".repeat(4000)
         val p = parseOk(minimal("\"$longKey\":1"))
         assertThat(p.issues.single().code).isEqualTo(IssueCode.UNKNOWN_KEY)
-        assertThat(p.issues.single().message.count { it == 'k' }).isAtMost(64)
-        assertThat(p.issues.single().path.count { it == 'k' }).isAtMost(64)
+        assertThat(
+            p.issues
+                .single()
+                .message
+                .count { it == 'k' },
+        ).isAtMost(64)
+        assertThat(
+            p.issues
+                .single()
+                .path
+                .count { it == 'k' },
+        ).isAtMost(64)
     }
 }

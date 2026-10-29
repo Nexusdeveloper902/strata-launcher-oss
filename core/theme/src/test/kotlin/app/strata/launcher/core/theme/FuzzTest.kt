@@ -47,9 +47,27 @@ class FuzzTest {
         out: MutableList<Leaf> = ArrayList(),
     ): List<Leaf> {
         when (v) {
-            is JsonObject -> for ((k, c) in v.entries) leaves(c, path + Key(k), out)
-            is JsonArray -> if (v.isEmpty()) out += Leaf(path, v) else v.forEachIndexed { i, c -> leaves(c, path + Idx(i), out) }
-            else -> out += Leaf(path, v)
+            is JsonObject -> {
+                for ((k, c) in v.entries) leaves(c, path + Key(k), out)
+            }
+
+            is JsonArray -> {
+                if (v.isEmpty()) {
+                    out += Leaf(path, v)
+                } else {
+                    v.forEachIndexed { i, c ->
+                        leaves(
+                            c,
+                            path + Idx(i),
+                            out,
+                        )
+                    }
+                }
+            }
+
+            else -> {
+                out += Leaf(path, v)
+            }
         }
         return out
     }
@@ -60,9 +78,11 @@ class FuzzTest {
         path: List<Seg> = emptyList(),
         out: MutableList<List<Seg>> = ArrayList(),
     ): List<List<Seg>> {
-        if (v is JsonObject) for ((k, c) in v.entries) {
-            out += path + Key(k)
-            members(c, path + Key(k), out)
+        if (v is JsonObject) {
+            for ((k, c) in v.entries) {
+                out += path + Key(k)
+                members(c, path + Key(k), out)
+            }
         }
         return out
     }
@@ -83,6 +103,7 @@ class FuzzTest {
                     o.with(head.k, set(o[head.k]!!, rest, nv))
                 }
             }
+
             is Idx -> {
                 val a = (v as JsonArray).toMutableList()
                 a[head.i] = if (rest.isEmpty()) nv!! else set(a[head.i], rest, nv)
@@ -93,8 +114,23 @@ class FuzzTest {
 
     private val enumKeys =
         setOf(
-            "mode", "kind", "density", "shape", "tint", "style", "hourFormat", "alignment", "verticalPosition", "position",
-            "visibility", "side", "glyphs", "listEntrance", "labelCase", "fallback", "mediaType",
+            "mode",
+            "kind",
+            "density",
+            "shape",
+            "tint",
+            "style",
+            "hourFormat",
+            "alignment",
+            "verticalPosition",
+            "position",
+            "visibility",
+            "side",
+            "glyphs",
+            "listEntrance",
+            "labelCase",
+            "fallback",
+            "mediaType",
         )
 
     /** Required members of sub-objects: deleting them invalidates that sub-object (D). */
@@ -127,7 +163,11 @@ class FuzzTest {
         var cases = 0
         while (cases < 10_000) {
             val (name, tree) = samples.entries.elementAt(cases % samples.size)
-            val kind = listOf("typeFlip", "outOfRange", "unknownEnum", "truncation", "deletion")[(cases / samples.size) % 5]
+            val kind =
+                listOf("typeFlip", "outOfRange", "unknownEnum", "truncation", "deletion")[
+                    (cases / samples.size) %
+                        5,
+                ]
             val ok = mutate(kind, tree, rnd, "$name #$cases")
             if (ok) {
                 counts.merge(kind, 1, Int::plus)
@@ -153,7 +193,12 @@ class FuzzTest {
                 val r = parse(JsonWriter.prettyBytes(set(tree, l.path, flipped)))
                 val what = "$label typeFlip ${l.pointer} -> $flipped"
                 when {
-                    l.keys == listOf("schemaVersion") -> assertWithMessage(what).that((r as Outcome.Err).error).isInstanceOf(ThemeError.NotATheme::class.java)
+                    l.keys == listOf("schemaVersion") -> {
+                        assertWithMessage(
+                            what,
+                        ).that((r as Outcome.Err).error).isInstanceOf(ThemeError.NotATheme::class.java)
+                    }
+
                     else -> {
                         val p = (r as Outcome.Ok).value
                         val expected =
@@ -164,12 +209,22 @@ class FuzzTest {
                                 else -> IssueCode.WRONG_TYPE
                             }
                         assertWithMessage("$what ${p.issues}").that(hasIssue(p, expected, l.pointer)).isTrue()
-                        assertWithMessage(what).that(p.issues.first { it.code == expected }.policy)
-                            .isEqualTo(if (expected == IssueCode.ITEM_DROPPED || expected == IssueCode.WRONG_TYPE || expected == IssueCode.INVALID_VALUE) Policy.DEFAULT else Policy.GENERATE)
+                        assertWithMessage(what)
+                            .that(p.issues.first { it.code == expected }.policy)
+                            .isEqualTo(
+                                if (expected == IssueCode.ITEM_DROPPED || expected == IssueCode.WRONG_TYPE ||
+                                    expected == IssueCode.INVALID_VALUE
+                                ) {
+                                    Policy.DEFAULT
+                                } else {
+                                    Policy.GENERATE
+                                },
+                            )
                         resolveAll(p)
                     }
                 }
             }
+
             "outOfRange" -> {
                 val l = all.filter { it.value is JsonNumber }.randomOrNull(rnd) ?: return false
                 val high = rnd.nextBoolean()
@@ -177,55 +232,101 @@ class FuzzTest {
                 val r = parse(JsonWriter.prettyBytes(set(tree, l.path, v)))
                 val what = "$label outOfRange ${l.pointer} -> $v"
                 when (l.keys) {
-                    listOf("schemaVersion") ->
-                        assertWithMessage(what).that((r as Outcome.Err).error)
-                            .isInstanceOf(if (high) ThemeError.NewerVersion::class.java else ThemeError.NotATheme::class.java)
-                    listOf("schemaMinor") -> assertWithMessage(what).that(hasIssue((r as Outcome.Ok).value, IssueCode.INVALID_VALUE, l.pointer)).isTrue()
+                    listOf("schemaVersion") -> {
+                        assertWithMessage(what)
+                            .that((r as Outcome.Err).error)
+                            .isInstanceOf(
+                                if (high) ThemeError.NewerVersion::class.java else ThemeError.NotATheme::class.java,
+                            )
+                    }
+
+                    listOf("schemaMinor") -> {
+                        assertWithMessage(
+                            what,
+                        ).that(hasIssue((r as Outcome.Ok).value, IssueCode.INVALID_VALUE, l.pointer)).isTrue()
+                    }
+
                     else -> {
                         val p = (r as Outcome.Ok).value
                         assertWithMessage("$what ${p.issues}").that(hasIssue(p, IssueCode.CLAMPED, l.pointer)).isTrue()
-                        assertWithMessage(what).that(p.issues.first { it.code == IssueCode.CLAMPED }.policy).isEqualTo(Policy.CLAMP)
+                        assertWithMessage(
+                            what,
+                        ).that(p.issues.first { it.code == IssueCode.CLAMPED }.policy).isEqualTo(Policy.CLAMP)
                         resolveAll(p)
                     }
                 }
             }
+
             "unknownEnum" -> {
                 val l = all.filter { it.value is JsonString && it.last in enumKeys }.randomOrNull(rnd) ?: return false
-                val p = (parse(JsonWriter.prettyBytes(set(tree, l.path, JsonString("future-${rnd.nextInt(1000)}")))) as Outcome.Ok).value
+                val p =
+                    (
+                        parse(
+                            JsonWriter.prettyBytes(set(tree, l.path, JsonString("future-${rnd.nextInt(1000)}"))),
+                        ) as Outcome.Ok
+                    ).value
                 val what = "$label unknownEnum ${l.pointer}"
                 assertWithMessage("$what ${p.issues}").that(hasIssue(p, IssueCode.UNKNOWN_ENUM, l.pointer)).isTrue()
                 // D, original preserved verbatim.
                 assertThat(p.issues.first { it.code == IssueCode.UNKNOWN_ENUM }.policy).isEqualTo(Policy.DEFAULT)
                 resolveAll(p)
             }
+
             "truncation" -> {
                 val bytes = JsonWriter.prettyBytes(tree)
                 val cut = rnd.nextInt(0, bytes.size - 1) // always loses the closing brace
                 when (val r = parse(bytes.copyOf(cut))) {
-                    is Outcome.Ok -> error("$label truncated at $cut parsed")
+                    is Outcome.Ok -> {
+                        error("$label truncated at $cut parsed")
+                    }
+
                     is Outcome.Err -> {
-                        assertWithMessage("$label truncation").that(r.error).isInstanceOf(ThemeError.Damaged::class.java)
+                        assertWithMessage(
+                            "$label truncation",
+                        ).that(r.error).isInstanceOf(ThemeError.Damaged::class.java)
                         assertThat(r.error.issue.policy).isEqualTo(Policy.REJECT)
                     }
                 }
             }
+
             "deletion" -> {
                 val m = members(tree).random(rnd)
                 val keys = m.filterIsInstance<Key>().map { it.k }
                 val r = parse(JsonWriter.prettyBytes(set(tree, m, null)))
                 val what = "$label deletion $keys"
                 when {
-                    keys == listOf("schemaVersion") -> assertWithMessage(what).that((r as Outcome.Err).error).isInstanceOf(ThemeError.NotATheme::class.java)
+                    keys == listOf("schemaVersion") -> {
+                        assertWithMessage(
+                            what,
+                        ).that((r as Outcome.Err).error).isInstanceOf(ThemeError.NotATheme::class.java)
+                    }
+
                     else -> {
                         val p = (r as Outcome.Ok).value
                         when {
-                            keys == listOf("id") || keys == listOf("name") ->
-                                assertWithMessage(what).that(p.issues.map { it.code }).containsExactly(IssueCode.GENERATED)
-                            keys.size > 1 && keys.last() in requiredInSubObject && keys[keys.size - 2] in setOf("family", "clockFamily", "image", "pack") ->
-                                assertWithMessage(what).that(p.issues.map { it.code }).containsExactly(IssueCode.INVALID_VALUE)
-                            keys.size > 1 && keys.last() == "id" && keys[keys.size - 2] in setOf("family", "clockFamily") ->
-                                assertWithMessage(what).that(p.issues.map { it.code }).contains(IssueCode.INVALID_VALUE)
-                            else -> assertWithMessage(what).that(p.issues).isEmpty() // field takes its default (D)
+                            keys == listOf("id") || keys == listOf("name") -> {
+                                assertWithMessage(
+                                    what,
+                                ).that(p.issues.map { it.code }).containsExactly(IssueCode.GENERATED)
+                            }
+
+                            keys.size > 1 && keys.last() in requiredInSubObject &&
+                                keys[keys.size - 2] in setOf("family", "clockFamily", "image", "pack") -> {
+                                assertWithMessage(
+                                    what,
+                                ).that(p.issues.map { it.code }).containsExactly(IssueCode.INVALID_VALUE)
+                            }
+
+                            keys.size > 1 && keys.last() == "id" &&
+                                keys[keys.size - 2] in setOf("family", "clockFamily") -> {
+                                assertWithMessage(
+                                    what,
+                                ).that(p.issues.map { it.code }).contains(IssueCode.INVALID_VALUE)
+                            }
+
+                            else -> {
+                                assertWithMessage(what).that(p.issues).isEmpty()
+                            } // field takes its default (D)
                         }
                         resolveAll(p)
                     }
@@ -256,7 +357,11 @@ class FuzzTest {
         val PLATFORMS =
             listOf(
                 PlatformInputs(apiLevel = 26),
-                PlatformInputs(apiLevel = 30, systemDark = true, wallpaperColors = WallpaperColorsInput(0xFF3366AA.toInt(), 0xFFAA6633.toInt())),
+                PlatformInputs(
+                    apiLevel = 30,
+                    systemDark = true,
+                    wallpaperColors = WallpaperColorsInput(0xFF3366AA.toInt(), 0xFFAA6633.toInt()),
+                ),
             )
     }
 }

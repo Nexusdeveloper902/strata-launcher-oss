@@ -49,7 +49,11 @@ fun minimal(extra: String = ""): String =
  * null when Python or jsonschema is not installed (the CI image has both, T-CI-09).
  */
 fun pythonSchemaErrors(files: List<File>): String? {
-    val root = generateSequence(File("").absoluteFile) { it.parentFile }.firstOrNull { File(it, "spec/theme.schema.json").isFile } ?: return null
+    val root =
+        generateSequence(
+            File("").absoluteFile,
+        ) { it.parentFile }.firstOrNull { File(it, "spec/theme.schema.json").isFile }
+            ?: return null
     val script =
         """
         import json, sys
@@ -63,8 +67,15 @@ fun pythonSchemaErrors(files: List<File>): String? {
         """.trimIndent()
     return try {
         val p =
-            ProcessBuilder(listOf("python3", "-I", "-c", script, File(root, "spec/theme.schema.json").path) + files.map { it.path })
-                .redirectErrorStream(true)
+            ProcessBuilder(
+                listOf(
+                    "python3",
+                    "-I",
+                    "-c",
+                    script,
+                    File(root, "spec/theme.schema.json").path,
+                ) + files.map { it.path },
+            ).redirectErrorStream(true)
                 .start()
         val out = p.inputStream.bufferedReader().readText()
         if (!p.waitFor(60, TimeUnit.SECONDS) || p.exitValue() != 0) null else out.trim()

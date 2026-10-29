@@ -75,9 +75,16 @@ object JsonParser {
 
     private fun decodeUtf8(bytes: ByteArray): Outcome<String, JsonError> {
         val start =
-            if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) 3 else 0
+            if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() &&
+                bytes[2] == 0xBF.toByte()
+            ) {
+                3
+            } else {
+                0
+            }
         val decoder =
-            StandardCharsets.UTF_8.newDecoder()
+            StandardCharsets.UTF_8
+                .newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
         val input = ByteBuffer.wrap(bytes, start, bytes.size - start)
@@ -145,12 +152,18 @@ object JsonParser {
                 members[key] = value(depth + 1)
                 skipWs()
                 when (peek()) {
-                    ',' -> i++
+                    ',' -> {
+                        i++
+                    }
+
                     '}' -> {
                         i++
                         return JsonObject(members)
                     }
-                    else -> throw syntaxOrEnd()
+
+                    else -> {
+                        throw syntaxOrEnd()
+                    }
                 }
             }
         }
@@ -170,12 +183,18 @@ object JsonParser {
                 items += value(depth + 1)
                 skipWs()
                 when (peek()) {
-                    ',' -> i++
+                    ',' -> {
+                        i++
+                    }
+
                     ']' -> {
                         i++
                         return JsonArray(items)
                     }
-                    else -> throw syntaxOrEnd()
+
+                    else -> {
+                        throw syntaxOrEnd()
+                    }
                 }
             }
         }
@@ -194,28 +213,60 @@ object JsonParser {
                         i++
                         return sb.toString()
                     }
+
                     ch == '\\' -> {
                         if (i + 1 >= s.length) throw syntax(JsonError.SyntaxKind.UNEXPECTED_END)
                         val e = s[i + 1]
                         when (e) {
-                            '"' -> sb.append('"')
-                            '\\' -> sb.append('\\')
-                            '/' -> sb.append('/')
-                            'b' -> sb.append('\b')
-                            'f' -> sb.append('\u000C')
-                            'n' -> sb.append('\n')
-                            'r' -> sb.append('\r')
-                            't' -> sb.append('\t')
+                            '"' -> {
+                                sb.append('"')
+                            }
+
+                            '\\' -> {
+                                sb.append('\\')
+                            }
+
+                            '/' -> {
+                                sb.append('/')
+                            }
+
+                            'b' -> {
+                                sb.append('\b')
+                            }
+
+                            'f' -> {
+                                sb.append('\u000C')
+                            }
+
+                            'n' -> {
+                                sb.append('\n')
+                            }
+
+                            'r' -> {
+                                sb.append('\r')
+                            }
+
+                            't' -> {
+                                sb.append('\t')
+                            }
+
                             'u' -> {
                                 val cp = hex4(i + 2)
                                 sb.append(cp.toChar())
                                 i += 4
                             }
-                            else -> throw syntax(JsonError.SyntaxKind.INVALID_ESCAPE)
+
+                            else -> {
+                                throw syntax(JsonError.SyntaxKind.INVALID_ESCAPE)
+                            }
                         }
                         i += 2
                     }
-                    ch < ' ' -> throw syntax(JsonError.SyntaxKind.CONTROL_CHARACTER_IN_STRING)
+
+                    ch < ' ' -> {
+                        throw syntax(JsonError.SyntaxKind.CONTROL_CHARACTER_IN_STRING)
+                    }
+
                     else -> {
                         sb.append(ch)
                         i++
@@ -302,7 +353,10 @@ object JsonParser {
         private fun syntaxOrEnd(kind: JsonError.SyntaxKind = JsonError.SyntaxKind.UNEXPECTED_CHARACTER): Failure =
             if (i >= s.length) syntax(JsonError.SyntaxKind.UNEXPECTED_END) else syntax(kind)
 
-        private fun syntax(kind: JsonError.SyntaxKind): Failure = at(minOf(i, s.length)) { l, c -> JsonError.Syntax(l, c, kind) }
+        private fun syntax(kind: JsonError.SyntaxKind): Failure =
+            at(
+                minOf(i, s.length),
+            ) { l, c -> JsonError.Syntax(l, c, kind) }
 
         private fun limit(which: JsonError.Limit): Failure = at(i) { l, c -> JsonError.LimitExceeded(l, c, which) }
 

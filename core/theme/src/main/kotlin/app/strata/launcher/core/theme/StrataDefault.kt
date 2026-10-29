@@ -22,7 +22,13 @@ object StrataDefault {
     /** The document as a (sparse) JSON tree, e.g. for export or as the last-known-good copy. */
     val tree: JsonObject by lazy { ThemeEncoder.encode(document) }
 
-    private val light by lazy { ThemeResolver.resolve(document, PlatformInputs(apiLevel = 26, systemDark = false)).theme }
+    private val light by lazy {
+        ThemeResolver
+            .resolve(
+                document,
+                PlatformInputs(apiLevel = 26, systemDark = false),
+            ).theme
+    }
     private val dark by lazy { ThemeResolver.resolve(document, PlatformInputs(apiLevel = 26, systemDark = true)).theme }
 
     /**

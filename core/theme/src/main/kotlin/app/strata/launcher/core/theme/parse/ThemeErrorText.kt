@@ -8,9 +8,18 @@ package app.strata.launcher.core.theme.parse
 object ThemeErrorText {
     fun english(e: ThemeError): String =
         when (e) {
-            is ThemeError.TooLarge -> "The file is too large."
-            is ThemeError.NotATheme -> "This file isn't a Strata theme."
-            is ThemeError.NewerVersion -> "This theme was made with a newer version of Strata Launcher. Update the app to use it."
+            is ThemeError.TooLarge -> {
+                "The file is too large."
+            }
+
+            is ThemeError.NotATheme -> {
+                "This file isn't a Strata theme."
+            }
+
+            is ThemeError.NewerVersion -> {
+                "This theme was made with a newer version of Strata Launcher. Update the app to use it."
+            }
+
             is ThemeError.Damaged -> {
                 val l = e.issue.line
                 val c = e.issue.column

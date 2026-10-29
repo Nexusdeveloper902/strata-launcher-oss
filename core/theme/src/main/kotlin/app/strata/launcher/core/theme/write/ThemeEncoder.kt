@@ -43,7 +43,11 @@ object ThemeEncoder {
             group("source") {
                 enum("kind", c.sourceKind, dc.sourceKind)
                 c.seedColor?.let { put("seedColor", JsonString(Rgb.toHex(it)), force = true) }
-                if (c.lockedRoles.isNotEmpty() || full) put("lockedRoles", JsonArray(c.lockedRoles.map { JsonString(it.wire) }), force = true)
+                if (c.lockedRoles.isNotEmpty() ||
+                    full
+                ) {
+                    put("lockedRoles", JsonArray(c.lockedRoles.map { JsonString(it.wire) }), force = true)
+                }
             }
             bool("pureBlack", c.pureBlack, dc.pureBlack)
             group("light") { palette(c.light, BuiltInPalettes.LIGHT) }
@@ -126,7 +130,11 @@ object ThemeEncoder {
             enum("alignment", c.alignment, dc.alignment)
             group("date") {
                 bool("visible", c.date.visible, dc.date.visible)
-                if (c.date.skeleton != dc.date.skeleton || full) put("skeleton", JsonString(c.date.skeleton), force = true)
+                if (c.date.skeleton != dc.date.skeleton ||
+                    full
+                ) {
+                    put("skeleton", JsonString(c.date.skeleton), force = true)
+                }
                 int("sizeSp", c.date.sizeSp, dc.date.sizeSp)
             }
         }
@@ -167,9 +175,15 @@ object ThemeEncoder {
 
     private fun font(f: FontRef): JsonObject =
         when (f) {
-            FontRef.System -> JsonObject("kind" to JsonString("system"))
-            is FontRef.Bundled -> JsonObject("kind" to JsonString("bundled"), "id" to JsonString(f.id))
-            is FontRef.User ->
+            FontRef.System -> {
+                JsonObject("kind" to JsonString("system"))
+            }
+
+            is FontRef.Bundled -> {
+                JsonObject("kind" to JsonString("bundled"), "id" to JsonString(f.id))
+            }
+
+            is FontRef.User -> {
                 JsonObject(
                     LinkedHashMap<String, JsonValue>().apply {
                         put("kind", JsonString("user"))
@@ -177,6 +191,7 @@ object ThemeEncoder {
                         f.displayName?.let { put("displayName", JsonString(it)) }
                     },
                 )
+            }
         }
 
     private class Builder(val full: Boolean) {

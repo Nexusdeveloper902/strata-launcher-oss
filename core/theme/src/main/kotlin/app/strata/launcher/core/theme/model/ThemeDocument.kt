@@ -42,7 +42,11 @@ interface WireEnum {
     val wire: String
 }
 
-inline fun <reified E> wireValueOf(s: String): E? where E : Enum<E>, E : WireEnum = enumValues<E>().firstOrNull { it.wire == s }
+inline fun <reified E> wireValueOf(s: String): E? where E : Enum<E>, E : WireEnum =
+    enumValues<E>().firstOrNull {
+        it.wire ==
+            s
+    }
 
 enum class ColorRole(override val wire: String) : WireEnum {
     BACKGROUND("background"),
@@ -103,10 +107,15 @@ data class Palette(
         fun of(roles: Map<ColorRole, Int>): Palette {
             require(roles.keys.containsAll(ColorRole.entries)) { "all nine roles required" }
             return Palette(
-                roles.getValue(ColorRole.BACKGROUND), roles.getValue(ColorRole.SURFACE),
-                roles.getValue(ColorRole.TEXT_PRIMARY), roles.getValue(ColorRole.TEXT_SECONDARY),
-                roles.getValue(ColorRole.ACCENT), roles.getValue(ColorRole.ON_ACCENT),
-                roles.getValue(ColorRole.DIVIDER), roles.getValue(ColorRole.HIGHLIGHT), roles.getValue(ColorRole.SCRIM),
+                roles.getValue(ColorRole.BACKGROUND),
+                roles.getValue(ColorRole.SURFACE),
+                roles.getValue(ColorRole.TEXT_PRIMARY),
+                roles.getValue(ColorRole.TEXT_SECONDARY),
+                roles.getValue(ColorRole.ACCENT),
+                roles.getValue(ColorRole.ON_ACCENT),
+                roles.getValue(ColorRole.DIVIDER),
+                roles.getValue(ColorRole.HIGHLIGHT),
+                roles.getValue(ColorRole.SCRIM),
             )
         }
     }
@@ -306,7 +315,13 @@ data class SearchSpec(
     val showHint: Boolean = true,
 )
 
-enum class IndexVisibility(override val wire: String) : WireEnum { ALWAYS("always"), LIST_ONLY("listOnly"), NEVER("never") }
+enum class IndexVisibility(override val wire: String) : WireEnum {
+    ALWAYS(
+        "always",
+    ),
+    LIST_ONLY("listOnly"),
+    NEVER("never"),
+}
 
 enum class IndexSide(override val wire: String) : WireEnum { END("end"), START("start") }
 

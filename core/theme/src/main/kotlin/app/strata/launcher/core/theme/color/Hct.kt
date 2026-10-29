@@ -259,7 +259,11 @@ internal object HctSolver {
         chroma: Double,
         tone: Double,
     ): Int {
-        if (chroma < 1.0 || tone.roundToInt() <= 0 || tone.roundToInt() >= 100) return Lab.argbFromLstar(tone.coerceIn(0.0, 100.0))
+        if (chroma < 1.0 || tone.roundToInt() <= 0 ||
+            tone.roundToInt() >= 100
+        ) {
+            return Lab.argbFromLstar(tone.coerceIn(0.0, 100.0))
+        }
         val h = ((hue % 360.0) + 360.0) % 360.0
         findByJ(h, chroma, tone)?.let { return it }
         var high = chroma
@@ -268,7 +272,9 @@ internal object HctSolver {
         var answer: Int? = null
         while (abs(high - low) >= CHROMA_STEP_END) {
             val candidate = findByJ(h, mid, tone)
-            if (candidate == null) high = mid else {
+            if (candidate == null) {
+                high = mid
+            } else {
                 answer = candidate
                 low = mid
             }

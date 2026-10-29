@@ -50,7 +50,11 @@ data class RgbF(val r: Double, val g: Double, val b: Double) {
 
     companion object {
         fun of(argb: Int): RgbF =
-            RgbF(Rgb.channelToUnit(Rgb.red(argb)), Rgb.channelToUnit(Rgb.green(argb)), Rgb.channelToUnit(Rgb.blue(argb)))
+            RgbF(
+                Rgb.channelToUnit(Rgb.red(argb)),
+                Rgb.channelToUnit(Rgb.green(argb)),
+                Rgb.channelToUnit(Rgb.blue(argb)),
+            )
 
         val BLACK = RgbF(0.0, 0.0, 0.0)
         val WHITE = RgbF(1.0, 1.0, 1.0)

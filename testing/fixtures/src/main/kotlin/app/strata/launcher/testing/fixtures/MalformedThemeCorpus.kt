@@ -29,22 +29,53 @@ object MalformedThemeCorpus {
             Entry("256KiB+1", paddedTo(256 * 1024 + 1), Expect.TOO_LARGE),
             Entry("depth16", theme("\"x-deep\":" + "[".repeat(15) + "]".repeat(15)).toByteArray(), Expect.OK),
             Entry("depth17", theme("\"x-deep\":" + "[".repeat(16) + "]".repeat(16)).toByteArray(), Expect.LIMIT),
-            Entry("129keys", theme("\"x-k\":" + (0 until 129).joinToString(",", "{", "}") { "\"k$it\":0" }).toByteArray(), Expect.LIMIT),
-            Entry("257items", theme("\"x-a\":" + (0 until 257).joinToString(",", "[", "]") { "0" }).toByteArray(), Expect.LIMIT),
+            Entry(
+                "129keys",
+                theme(
+                    "\"x-k\":" +
+                        (0 until 129).joinToString(",", "{", "}") {
+                            "\"k$it\":0"
+                        },
+                ).toByteArray(),
+                Expect.LIMIT,
+            ),
+            Entry(
+                "257items",
+                theme("\"x-a\":" + (0 until 257).joinToString(",", "[", "]") { "0" }).toByteArray(),
+                Expect.LIMIT,
+            ),
             Entry("2049values", theme(valuesTo(2049)).toByteArray(), Expect.LIMIT),
             Entry("2048values", theme(valuesTo(2048)).toByteArray(), Expect.OK),
             Entry("4097string", theme("\"x-s\":\"" + "s".repeat(4097) + "\"").toByteArray(), Expect.LIMIT),
             Entry("33charNumber", theme("\"x-n\":" + "1".repeat(33)).toByteArray(), Expect.LIMIT),
-            Entry("duplicateKey", "{\"schemaVersion\":1,\n\"name\":\"a\",\n\"name\":\"b\",\"id\":\"$ID\"}".toByteArray(), Expect.DUPLICATE_KEY),
+            Entry(
+                "duplicateKey",
+                "{\"schemaVersion\":1,\n\"name\":\"a\",\n\"name\":\"b\",\"id\":\"$ID\"}".toByteArray(),
+                Expect.DUPLICATE_KEY,
+            ),
             Entry("lineComment", "{\n// comment\n\"schemaVersion\":1}".toByteArray(), Expect.SYNTAX),
             Entry("blockComment", "{/* c */\"schemaVersion\":1}".toByteArray(), Expect.SYNTAX),
             Entry("trailingComma", theme("\"x-a\":[1,2,]").toByteArray(), Expect.SYNTAX),
             Entry("trailingCommaObject", "$HEAD,}".toByteArray(), Expect.SYNTAX),
             Entry("NaN", theme("\"wallpaper\":{\"dim\":NaN}").toByteArray(), Expect.SYNTAX),
             Entry("Infinity", theme("\"wallpaper\":{\"dim\":-Infinity}").toByteArray(), Expect.SYNTAX),
-            Entry("invalidUtf8", HEAD.toByteArray() + ",\"author\":\"".toByteArray() + byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + "\"}".toByteArray(), Expect.ENCODING),
-            Entry("truncatedUtf8", HEAD.toByteArray() + ",\"author\":\"".toByteArray() + byteArrayOf(0xE2.toByte(), 0x82.toByte()) + "\"}".toByteArray(), Expect.ENCODING),
-            Entry("bom", byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + theme("\"author\":\"BOM\"").toByteArray(), Expect.OK),
+            Entry(
+                "invalidUtf8",
+                HEAD.toByteArray() + ",\"author\":\"".toByteArray() + byteArrayOf(0xFF.toByte(), 0xFE.toByte()) +
+                    "\"}".toByteArray(),
+                Expect.ENCODING,
+            ),
+            Entry(
+                "truncatedUtf8",
+                HEAD.toByteArray() + ",\"author\":\"".toByteArray() + byteArrayOf(0xE2.toByte(), 0x82.toByte()) +
+                    "\"}".toByteArray(),
+                Expect.ENCODING,
+            ),
+            Entry(
+                "bom",
+                byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + theme("\"author\":\"BOM\"").toByteArray(),
+                Expect.OK,
+            ),
             Entry("garbageAfter", (theme("\"author\":\"x\"") + "xx").toByteArray(), Expect.SYNTAX),
             Entry("empty", ByteArray(0), Expect.SYNTAX),
         )

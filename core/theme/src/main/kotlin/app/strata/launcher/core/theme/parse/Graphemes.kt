@@ -58,7 +58,10 @@ object Graphemes {
 
     private fun isControl(cp: Int): Boolean {
         val t = Character.getType(cp)
-        return (t == Character.CONTROL.toInt() || t == Character.LINE_SEPARATOR.toInt() || t == Character.PARAGRAPH_SEPARATOR.toInt()) ||
+        return (
+            t == Character.CONTROL.toInt() || t == Character.LINE_SEPARATOR.toInt() ||
+                t == Character.PARAGRAPH_SEPARATOR.toInt()
+        ) ||
             (t == Character.FORMAT.toInt() && cp != ZWJ && cp != 0x200C && cp !in 0xE0020..0xE007F)
     }
 
@@ -87,9 +90,13 @@ object Graphemes {
         val ta = hangulType(a)
         val tb = hangulType(b)
         return when (ta) {
-            'L' -> tb == 'L' || tb == 'V' || tb == 'A' || tb == 'B' // A = LV, B = LVT
+            'L' -> tb == 'L' || tb == 'V' || tb == 'A' || tb == 'B'
+
+            // A = LV, B = LVT
             'V', 'A' -> tb == 'V' || tb == 'T'
+
             'T', 'B' -> tb == 'T'
+
             else -> false
         }
     }

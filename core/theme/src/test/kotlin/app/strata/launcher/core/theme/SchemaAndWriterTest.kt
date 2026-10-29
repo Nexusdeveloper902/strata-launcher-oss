@@ -33,13 +33,17 @@ class SchemaAndWriterTest {
     @Test
     fun `T-CI-09 the six negative fixtures are rejected and the x- case accepted`() {
         // Same cases as tools/check_themes.py. Lenient mode keeps loading, so "rejected" = not strictly valid.
-        assertThat(parseErr("""{"schemaVersion":2,"id":"$zeroId","name":"x"}""")).isInstanceOf(ThemeError.NewerVersion::class.java)
+        assertThat(
+            parseErr("""{"schemaVersion":2,"id":"$zeroId","name":"x"}"""),
+        ).isInstanceOf(ThemeError.NewerVersion::class.java)
         val negatives =
             mapOf(
                 """{"schemaVersion":1,"id":"nope","name":"x"}""" to IssueCode.GENERATED,
-                """{"schemaVersion":1,"id":"$zeroId","name":"x","colors":{"light":{"accent":"#12345"}}}""" to IssueCode.INVALID_VALUE,
+                """{"schemaVersion":1,"id":"$zeroId","name":"x","colors":{"light":{"accent":"#12345"}}}""" to
+                    IssueCode.INVALID_VALUE,
                 """{"schemaVersion":1,"id":"$zeroId","name":"x","typography":{"scale":3}}""" to IssueCode.CLAMPED,
-                """{"schemaVersion":1,"id":"$zeroId","name":"x","typography":{"family":{"kind":"user"}}}""" to IssueCode.INVALID_VALUE,
+                """{"schemaVersion":1,"id":"$zeroId","name":"x","typography":{"family":{"kind":"user"}}}""" to
+                    IssueCode.INVALID_VALUE,
                 """{"schemaVersion":1,"id":"$zeroId","name":"x","unknownKey":1}""" to IssueCode.UNKNOWN_KEY,
             )
         for ((text, code) in negatives) {
@@ -47,13 +51,19 @@ class SchemaAndWriterTest {
             assertWithMessage(text).that(p.isStrictlyValid).isFalse()
             assertWithMessage(text).that(p.issues.map { it.code }).contains(code)
         }
-        val ext = parseOk("""{"schemaVersion":1,"id":"$zeroId","name":"x","x-vendor.thing":{"a":1},"icons":{"x-foo":true,"pack":null}}""")
+        val ext =
+            parseOk(
+                """{"schemaVersion":1,"id":"$zeroId","name":"x","x-vendor.thing":{"a":1},"icons":{"x-foo":true,"pack":null}}""",
+            )
         assertThat(ext.issues).isEmpty()
     }
 
     @Test
     fun `T-CI-09 samples also pass the python schema check when available`() {
-        val files = ThemeFixtures.SAMPLE_NAMES.map { n -> File(tmp.root, n).apply { writeBytes(ThemeFixtures.sample(n)) } }
+        val files =
+            ThemeFixtures.SAMPLE_NAMES.map { n ->
+                File(tmp.root, n).apply { writeBytes(ThemeFixtures.sample(n)) }
+            }
         val errors = pythonSchemaErrors(files)
         assumeTrue("python3 + jsonschema not installed", errors != null)
         assertThat(errors).isEmpty()
@@ -62,7 +72,8 @@ class SchemaAndWriterTest {
     @Test
     fun `T-THEME-03 writer output is formatted and valid for every sample and Strata Default`() {
         val outputs = ArrayList<File>()
-        val trees = ThemeFixtures.samples().mapValues { parseOk(it.value).tree } + ("strata-default.json" to StrataDefault.tree)
+        val trees =
+            ThemeFixtures.samples().mapValues { parseOk(it.value).tree } + ("strata-default.json" to StrataDefault.tree)
         for ((name, tree) in trees) {
             val text = ThemeWriter.writeString(tree)
             // Format: 2-space indent, LF only, exactly one trailing newline.
@@ -75,10 +86,17 @@ class SchemaAndWriterTest {
                 assertWithMessage("$name: $line").that(indent % 2).isEqualTo(0)
             }
             // Schema order of known top-level keys; unknown keys after them in original order.
-            val keys = (JsonParser.parse(text.toByteArray()) as app.strata.launcher.core.common.Outcome.Ok).value.let { it as app.strata.launcher.core.json.JsonObject }.keys
+            val keys =
+                (JsonParser.parse(text.toByteArray()) as app.strata.launcher.core.common.Outcome.Ok)
+                    .value
+                    .let {
+                        it as app.strata.launcher.core.json.JsonObject
+                    }.keys
             val known = keys.filter { it in ThemeParser.TOP }
             assertWithMessage(name).that(known).isInOrder(compareBy<String> { ThemeParser.TOP.indexOf(it) })
-            assertWithMessage(name).that(keys.dropWhile { it in ThemeParser.TOP }.none { it in ThemeParser.TOP }).isTrue()
+            assertWithMessage(
+                name,
+            ).that(keys.dropWhile { it in ThemeParser.TOP }.none { it in ThemeParser.TOP }).isTrue()
             // Valid under our validator, and semantically unchanged.
             val again = parseOk(text)
             assertWithMessage(name).that(again.issues).isEmpty()
@@ -90,7 +108,10 @@ class SchemaAndWriterTest {
 
     @Test
     fun `T-THEME-03 nested groups are written in schema order`() {
-        val tree = json("""{"colors":{"dark":{"scrim":"#000000","background":"#111111"},"mode":"dark","x-a":1},"name":"N","id":"$zeroId","schemaVersion":1}""")
+        val tree =
+            json(
+                """{"colors":{"dark":{"scrim":"#000000","background":"#111111"},"mode":"dark","x-a":1},"name":"N","id":"$zeroId","schemaVersion":1}""",
+            )
         assertThat(ThemeWriter.writeString(tree)).isEqualTo(
             """
             |{

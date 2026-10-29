@@ -123,7 +123,12 @@ object Contrast {
         val cases = ArrayList<ContrastCase>()
         val vs = variants(doc.colors.mode)
         for (v in vs) {
-            cases += ContrastCase(v, v == Variant.DARK && doc.colors.pureBlack, check(palette(doc, v, doc.colors.pureBlack), doc.wallpaper))
+            cases +=
+                ContrastCase(
+                    v,
+                    v == Variant.DARK && doc.colors.pureBlack,
+                    check(palette(doc, v, doc.colors.pureBlack), doc.wallpaper),
+                )
         }
         if (Variant.DARK in vs && !doc.colors.pureBlack) {
             cases += ContrastCase(Variant.DARK, true, check(palette(doc, Variant.DARK, true), doc.wallpaper))

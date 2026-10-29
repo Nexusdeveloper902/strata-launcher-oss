@@ -47,7 +47,9 @@ object ThemeWriter {
     fun canonical(tree: JsonObject): JsonObject {
         var t = tree
         val minor = t["schemaMinor"]
-        if (minor is JsonNumber && minor.isIntegral && minor.toBigDecimal() < java.math.BigDecimal.valueOf(ThemeSchema.MINOR.toLong())) {
+        if (minor is JsonNumber && minor.isIntegral &&
+            minor.toBigDecimal() < java.math.BigDecimal.valueOf(ThemeSchema.MINOR.toLong())
+        ) {
             t = t.with("schemaMinor", JsonNumber.of(ThemeSchema.MINOR))
         }
         return order(t, ROOT)

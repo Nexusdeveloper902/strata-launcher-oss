@@ -38,7 +38,9 @@ import kotlin.random.Random
 
 /** T-THEME-21 (unknown keys round trip) and T-THEME-22 (property-based round trip, 5 000 cases). */
 class RoundTripTest {
-    private fun roundTrip(bytes: ByteArray): Pair<app.strata.launcher.core.theme.parse.ParsedTheme, app.strata.launcher.core.theme.parse.ParsedTheme> {
+    private fun roundTrip(
+        bytes: ByteArray,
+    ): Pair<app.strata.launcher.core.theme.parse.ParsedTheme, app.strata.launcher.core.theme.parse.ParsedTheme> {
         val first = parseOk(bytes)
         val second = parseOk(ThemeWriter.write(first.tree))
         return first to second
@@ -56,8 +58,14 @@ class RoundTripTest {
                 out += "$path:" + v.keys.filter { it !in known }.joinToString(",")
                 for ((k, c) in v.entries) unknownOrder(c, "$path/$k", out)
             }
-            is JsonArray -> v.forEachIndexed { i, c -> unknownOrder(c, "$path/$i", out) }
-            else -> Unit
+
+            is JsonArray -> {
+                v.forEachIndexed { i, c -> unknownOrder(c, "$path/$i", out) }
+            }
+
+            else -> {
+                Unit
+            }
         }
         return out.sorted()
     }
@@ -89,7 +97,11 @@ class RoundTripTest {
     fun `T-THEME-21 nested unknowns, x- keys and future enum values survive parse-write-parse`() {
         val bytes = ThemeFixtures.corpus("unknowns.strata-theme.json")
         val (first, second) = roundTrip(bytes)
-        assertThat(first.issues.map { it.code }).containsAtLeast(IssueCode.UNKNOWN_KEY, IssueCode.UNKNOWN_ENUM, IssueCode.NEWER_MINOR)
+        assertThat(
+            first.issues.map {
+                it.code
+            },
+        ).containsAtLeast(IssueCode.UNKNOWN_KEY, IssueCode.UNKNOWN_ENUM, IssueCode.NEWER_MINOR)
         assertThat(first.issues.none { it.severity == app.strata.launcher.core.theme.parse.Severity.ERROR }).isTrue()
         // JSON-equal to the first parse, and to the source file itself.
         assertThat(second.tree).isEqualTo(first.tree)
@@ -134,7 +146,10 @@ class RoundTripTest {
             val n = r.nextInt(1, max + 1)
             val sb = StringBuilder()
             while (sb.codePointCount(0, sb.length) < n) {
-                val cp = pool.codePointAt(r.nextInt(pool.length).let { if (Character.isLowSurrogate(pool[it])) it - 1 else it })
+                val cp =
+                    pool.codePointAt(
+                        r.nextInt(pool.length).let { if (Character.isLowSurrogate(pool[it])) it - 1 else it },
+                    )
                 sb.appendCodePoint(cp)
             }
             return sb.toString()
@@ -174,23 +189,84 @@ class RoundTripTest {
                         light = palette(),
                         dark = palette(),
                     ),
-                wallpaper = WallpaperSpec(r.nextBoolean(), double(0.0, 0.95), double(0.0, 1.0), if (r.nextBoolean()) WallpaperImage(hex(64), if (r.nextBoolean()) pick<ImageMediaType>() else null) else null),
+                wallpaper =
+                    WallpaperSpec(
+                        r.nextBoolean(),
+                        double(0.0, 0.95),
+                        double(0.0, 1.0),
+                        if (r.nextBoolean()) {
+                            WallpaperImage(
+                                hex(64),
+                                if (r.nextBoolean()) pick<ImageMediaType>() else null,
+                            )
+                        } else {
+                            null
+                        },
+                    ),
                 typography =
                     TypographySpec(
-                        font(), if (r.nextBoolean()) font() else null, double(0.8, 1.5), 100 * r.nextInt(1, 10), 100 * r.nextInt(1, 10),
-                        100 * r.nextInt(1, 10), double(-0.05, 0.2), pick<LabelCase>(), r.nextBoolean(),
+                        font(),
+                        if (r.nextBoolean()) font() else null,
+                        double(0.8, 1.5),
+                        100 * r.nextInt(1, 10),
+                        100 * r.nextInt(1, 10),
+                        100 * r.nextInt(1, 10),
+                        double(-0.05, 0.2),
+                        pick<LabelCase>(),
+                        r.nextBoolean(),
                     ),
-                list = ListSpec(pick<Density>(), if (r.nextBoolean()) r.nextInt(48, 97) else null, r.nextInt(0, 49), r.nextInt(0, 25), r.nextBoolean(), r.nextBoolean()),
+                list =
+                    ListSpec(
+                        pick<Density>(),
+                        if (r.nextBoolean()) r.nextInt(48, 97) else null,
+                        r.nextInt(0, 49),
+                        r.nextInt(0, 25),
+                        r.nextBoolean(),
+                        r.nextBoolean(),
+                    ),
                 icons =
                     base.icons.copy(
-                        visible = r.nextBoolean(), sizeDp = r.nextInt(20, 65), shape = pick<IconShape>(), cornerRadiusPercent = r.nextInt(0, 51),
-                        pack = if (r.nextBoolean()) IconPackRef("com.p${hex(3)}.pack", if (r.nextBoolean()) text(20) else null, pick()) else null,
+                        visible = r.nextBoolean(),
+                        sizeDp = r.nextInt(20, 65),
+                        shape = pick<IconShape>(),
+                        cornerRadiusPercent = r.nextInt(0, 51),
+                        pack =
+                            if (r.nextBoolean()) {
+                                IconPackRef(
+                                    "com.p${hex(3)}.pack",
+                                    if (r.nextBoolean()) text(20) else null,
+                                    pick(),
+                                )
+                            } else {
+                                null
+                            },
                         tint = pick<IconTint>(),
                     ),
-                clock = base.clock.copy(style = pick(), sizeSp = r.nextInt(24, 129), alignment = pick<Alignment>(), date = base.clock.date.copy(skeleton = (1..r.nextInt(1, 17)).map { "yMLdEc"[r.nextInt(6)] }.joinToString(""))),
-                favorites = base.favorites.copy(textScale = double(0.8, 2.0), spacingDp = r.nextInt(0, 33), showIcons = r.nextBoolean()),
+                clock =
+                    base.clock.copy(
+                        style = pick(),
+                        sizeSp = r.nextInt(24, 129),
+                        alignment = pick<Alignment>(),
+                        date =
+                            base.clock.date.copy(
+                                skeleton =
+                                    (1..r.nextInt(1, 17)).map { "yMLdEc"[r.nextInt(6)] }.joinToString(""),
+                            ),
+                    ),
+                favorites =
+                    base.favorites.copy(
+                        textScale = double(0.8, 2.0),
+                        spacingDp = r.nextInt(0, 33),
+                        showIcons = r.nextBoolean(),
+                    ),
                 search = base.search.copy(position = pick(), style = pick(), cornerRadiusDp = r.nextInt(0, 29)),
-                alphabetIndex = base.alphabetIndex.copy(visibility = pick(), side = pick(), glyphs = pick(), textSizeSp = r.nextInt(10, 19)),
+                alphabetIndex =
+                    base.alphabetIndex.copy(
+                        visibility = pick(),
+                        side = pick(),
+                        glyphs = pick(),
+                        textSizeSp = r.nextInt(10, 19),
+                    ),
                 animation = base.animation.copy(durationScale = double(0.0, 2.0), listEntrance = pick()),
                 haptics = base.haptics.copy(mode = pick()),
             )
@@ -214,14 +290,25 @@ class RoundTripTest {
             }
         }
 
-        fun unknownKey(): String = if (r.nextBoolean()) "x-" + hex(1) + "ext." + hex(r.nextInt(1, 8)) else "future" + hex(5)
+        fun unknownKey(): String =
+            if (r.nextBoolean()) {
+                "x-" + hex(1) + "ext." + hex(r.nextInt(1, 8))
+            } else {
+                "future" +
+                    hex(5)
+            }
 
         /** Inserts random unknown members at random positions of every object of the known shape. */
         fun sprinkle(
             obj: JsonObject,
             depth: Int = 1,
         ): JsonObject {
-            val entries = obj.entries.map { (k, v) -> k to (if (v is JsonObject && depth < 4) sprinkle(v, depth + 1) else v) }.toMutableList()
+            val entries =
+                obj.entries
+                    .map { (k, v) ->
+                        k to
+                            (if (v is JsonObject && depth < 4) sprinkle(v, depth + 1) else v)
+                    }.toMutableList()
             repeat(r.nextInt(0, 3)) {
                 entries.add(r.nextInt(entries.size + 1), unknownKey() to jsonValue(depth + 1))
             }
@@ -236,10 +323,24 @@ class RoundTripTest {
             gen.values = 0
             val doc = gen.document()
             val tree = gen.sprinkle(ThemeEncoder.encode(doc, full = gen.r.nextBoolean()))
-            val bytes = app.strata.launcher.core.json.JsonWriter.prettyBytes(tree) // source order, not writer order
+            val bytes =
+                app.strata.launcher.core.json.JsonWriter
+                    .prettyBytes(tree) // source order, not writer order
             val (first, second) = roundTrip(bytes)
-            assertWithMessage("case $case").that(first.issues.none { it.severity == app.strata.launcher.core.theme.parse.Severity.ERROR }).isTrue()
-            assertWithMessage("case $case").that(first.issues.filter { it.code != IssueCode.UNKNOWN_KEY && it.code != IssueCode.NEWER_MINOR }).isEmpty()
+            assertWithMessage("case $case")
+                .that(
+                    first.issues.none {
+                        it.severity ==
+                            app.strata.launcher.core.theme.parse.Severity.ERROR
+                    },
+                ).isTrue()
+            assertWithMessage("case $case")
+                .that(
+                    first.issues.filter {
+                        it.code != IssueCode.UNKNOWN_KEY &&
+                            it.code != IssueCode.NEWER_MINOR
+                    },
+                ).isEmpty()
             assertWithMessage("case $case").that(first.tree).isEqualTo(tree)
             assertWithMessage("case $case").that(second.tree).isEqualTo(first.tree)
             assertWithMessage("case $case").that(second.document).isEqualTo(first.document)
