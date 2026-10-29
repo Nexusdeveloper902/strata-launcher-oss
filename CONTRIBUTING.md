@@ -33,8 +33,18 @@ Follow `AGENTS.md`. Implement from `spec/` only. Never open `research/APK_ANALYS
 `research/PUBLIC_BEHAVIOR.md` while writing code, and never copy code, strings, artwork or
 brand names from the original app.
 
+## Protecting `main`
+GitHub only enforces branch rules on private repositories with a paid plan, so on this
+private Free-plan repository the rules below are a convention, backed by CI and a local hook:
+- Enable the local guard once per clone: `git config core.hooksPath tools/git-hooks`.
+  `tools/git-hooks/pre-push` then refuses direct pushes to `main`.
+- Merge a pull request only when every CI check is green.
+- `.github/rulesets/main.json` records the intended rules (PR required, the 8 CI checks
+  required, squash-only, linear history, no force-push or deletion). It is not enforced now;
+  import it (Settings -> Rules -> Rulesets -> Import) if the repository becomes public or the
+  plan is upgraded. Its required checks must match the job names in
+  `.github/workflows/ci.yml`; change both together.
+
 ## Repository settings (one-time, by the owner)
-- Settings -> Rules -> Rulesets -> New ruleset -> Import ruleset -> pick `.github/rulesets/main.json`.
-  Its required checks must match the job names in `.github/workflows/ci.yml`; change both together.
 - Settings -> General -> Pull Requests: allow only squash merging, and enable
   "Automatically delete head branches".

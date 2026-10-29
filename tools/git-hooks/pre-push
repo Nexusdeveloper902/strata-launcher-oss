@@ -1,0 +1,19 @@
+#!/bin/sh
+# Refuses direct pushes to main. Changes reach main only through a pull request
+# (see CONTRIBUTING.md). GitHub does not enforce branch rules on this private
+# repository, so this hook is the local guard.
+#
+# Enable once per clone:  git config core.hooksPath tools/git-hooks
+# Bypass in an emergency: git push --no-verify
+
+protected="refs/heads/main"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "$protected" ]; then
+    echo "pre-push: direct pushes to main are blocked; open a pull request instead." >&2
+    echo "pre-push: (bypass with --no-verify only if you really mean it)" >&2
+    exit 1
+  fi
+done
+
+exit 0

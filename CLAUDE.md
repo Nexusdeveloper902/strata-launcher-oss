@@ -13,7 +13,8 @@ specification phase is **finished**; the next step is implementation, starting a
   D-011 (personal sideloaded project; primary test phone **Samsung Galaxy A56**; the
   double-tap lock *is* included), D-012 (name/IDs: `app.strata.launcher`).
 - Workflow (see `CONTRIBUTING.md`): work on a branch, open a PR into `main`, squash-merge
-  once CI is green (`main` is protected, linear history, no required human approvals).
+  once CI is green. Never push to `main` (GitHub can't enforce this on the private Free
+  plan; run `git config core.hooksPath tools/git-hooks` so the pre-push hook blocks it).
   Commit at each milestone step, with test IDs (`T-…`) named in the message when they pass.
 - Choose subagent models per task: `opus` for design, architecture and review,
   `sonnet` for mechanical or bulk work, `haiku` for trivial edits.
