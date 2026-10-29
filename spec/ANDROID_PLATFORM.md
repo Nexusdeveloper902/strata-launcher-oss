@@ -335,9 +335,11 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_HIDDEN_PROFILES" /> <!-- used on API 35+ only -->
 
-    <!-- Optional, user-granted in Settings (feature off by default) -->
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
-        tools:ignore="ProtectedPermissions" />
+    <!-- Optional runtime permission, requested only when contact search is enabled (FR-SEARCH, P1) -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Strip AD_ID if any transitive dependency merges it in (NFR-PRIV-02) -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <!-- PACKAGE_USAGE_STATS: not declared in v1 (no v1 requirement uses it; ARCHITECTURE §17) -->
     <!-- Optional: only if Strata applies a theme-bundle wallpaper itself (THEME_SYSTEM) -->
     <!-- <uses-permission android:name="android.permission.SET_WALLPAPER" /> -->
 
@@ -465,6 +467,43 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
                 android:resource="@xml/lock_accessibility_service" />
             <!-- xml: no event types, canRetrieveWindowContent=false, isAccessibilityTool=false -->
         </service>
+        <!-- NOTE: v1 ships the store build variant WITHOUT the lock service above (U-014, ROADMAP). -->
+
+        <!-- Theme import: opens .strata-theme.json / .strata-theme.zip from SAF / share (FR-THEME-21) -->
+        <activity
+            android:name=".theme.ThemeImportActivity"
+            android:exported="true"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+        </activity>
+
+        <!-- Explain permission usage from system privacy dashboard (FR-SET-03) -->
+        <activity
+            android:name=".settings.PermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Share exported themes/backups via content:// URIs (FR-THEME-23) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" /> <!-- only cache/export/ -->
+        </provider>
     </application>
 </manifest>
 ```
@@ -481,7 +520,7 @@ Notes: no `INTERNET`, no `QUERY_ALL_PACKAGES`, no `BIND_APPWIDGET`, no `EXPAND_S
 | `BIND_ACCESSIBILITY_SERVICE` | Service guard (not requested) | signature | Protects our lock service | DOC-042 |
 | Notification-listener access | **Optional**, user grant | special access | Badges/previews; unavailable on low-RAM ≤ Q | DOC-036 |
 | Accessibility service enablement | **Optional**, user grant + Play declaration | special | Lock screen (28+) | DOC-039, DOC-041 |
-| `PACKAGE_USAGE_STATS` | **Optional**, user grant | appop | Screen-time / external-launch usage; default uses our own log | DOC-038, DOC-016 |
+| `PACKAGE_USAGE_STATS` | **Deferred** (not declared in v1; ARCHITECTURE §17) | appop | Screen-time / external-launch usage; default uses our own log | DOC-038, DOC-016 |
 | `SET_WALLPAPER` | Optional (flagged) | normal | Only if themes apply wallpapers directly | DOC-045 |
 | `QUERY_ALL_PACKAGES` | **Rejected** | normal + Play restricted | Not needed (intent `<queries>`); launcher not a named Play permitted use | DOC-019, DOC-021 |
 | `BIND_APPWIDGET` | **Rejected** | signature\|privileged | Never granted to Play apps; user-consent bind path instead | DOC-031, DOC-071 |
