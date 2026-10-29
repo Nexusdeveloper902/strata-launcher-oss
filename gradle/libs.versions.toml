@@ -21,6 +21,7 @@ androidx-test-runner = "1.7.0"
 androidx-test-orchestrator = "1.6.1"
 androidx-benchmark = "1.4.1"
 uiautomator = "2.3.0"
+android-lint = "32.5.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -55,6 +56,9 @@ androidx-test-runner = { module = "androidx.test:runner", version.ref = "android
 androidx-test-orchestrator = { module = "androidx.test:orchestrator", version.ref = "androidx-test-orchestrator" }
 androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "androidx-benchmark" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
+android-lint-api = { module = "com.android.tools.lint:lint-api", version.ref = "android-lint" }
+android-lint-checks = { module = "com.android.tools.lint:lint-checks", version.ref = "android-lint" }
+android-lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref = "android-lint" }
 
 # Build logic (convention plugins)
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }

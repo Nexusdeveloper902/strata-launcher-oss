@@ -27,6 +27,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 }
             }
             configureKotlinCompile()
+            dependencies.add("lintChecks", dependencies.project(mapOf("path" to ":lint-rules")))
             addAndroidTestDependencies()
             addInstrumentedTestDependencies()
             registerPermissionGate()

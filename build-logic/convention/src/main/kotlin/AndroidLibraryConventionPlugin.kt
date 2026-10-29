@@ -23,6 +23,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
                 testOptions { configureStrataUnitTests(target) }
             }
             configureKotlinCompile()
+            dependencies.add("lintChecks", dependencies.project(mapOf("path" to ":lint-rules")))
             addAndroidTestDependencies()
             registerModuleGraphGate(isAndroid = true)
             registerDependencyGate("releaseRuntimeClasspath")

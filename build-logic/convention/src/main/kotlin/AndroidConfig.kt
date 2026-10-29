@@ -4,7 +4,7 @@ import org.gradle.api.Project
 
 /**
  * Lint policy shared by every Android module. T-CI-04 (NFR-I18N-01): externalised-string checks
- * are errors. The custom `StringConcatInUi` rule is added with the CI gates.
+ * are errors. The custom `StringConcatInUi` rule comes from `:lint-rules` (wired as `lintChecks`).
  */
 internal fun Lint.configureStrataLint() {
     abortOnError = true
