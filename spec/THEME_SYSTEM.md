@@ -751,6 +751,8 @@ implementation's unit tests can reproduce these numbers.
 
 ## 15. Requirements
 
+**Priority:** every FR-THEME and NFR-THEME requirement below is **P0 for v1** (D-004: free theming is the core differentiator). Milestone scheduling is in IMPLEMENTATION_ROADMAP (M3, M4, M8, M9).
+
 Acceptance criteria (AC) are written to be testable; test IDs (`T-THEME-nn`) are assigned
 by T-06.
 

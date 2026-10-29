@@ -169,7 +169,7 @@ T-BACKUP-10 kill tests. TalkBack issues found late, mitigated by `enableAccessib
 monkey/StrictMode/kill-during-write campaigns, the full emulator matrix, OEM manual passes on RD-1…RD-5,
 release build hardening (R8, size), Play listing prerequisites (data-safety form: no data collected;
 no accessibility declaration, because v1 ships the `nolock` flavour unless U-014 resolves), release notes.
-**Requirements:** NFR-PERF-01…07, NFR-REL-01, -03, NFR-COMPAT-01…03, plus regression of all v1 P0/P1.
+**Requirements:** NFR-PERF-01…07, NFR-REL-01, -03, NFR-COMPAT-01…03, NFR-THEME-12 (clean-room audit), plus regression of all v1 P0/P1.
 **DoD (release gate):** every v1 P0/P1 test in TEST_PLAN §22 green, plus T-PERF-01…12 within budget on RD-1
 (T-PERF-11 on RD-2), T-REL-01, T-REL-02, T-REL-04, T-COMPAT-01…10, T-CI-07, T-PRIV-01, the T-A11Y-08 pass
 sheet, T-THEME-52 (T-07 clean-room sign-off). There are 0 open P0 bugs and 0 crash/ANR in the 1 h monkey.

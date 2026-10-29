@@ -10,7 +10,7 @@ Phase: specification. Updated 2026-10-29.
 | T-04 | agent:theme | spec/THEME_SYSTEM.md, spec/sample-themes/ | Schema, validation, persistence, import/export, recovery | done |
 | T-05 | agent:product | spec/PRODUCT_SPEC.md, INTERACTION_SPEC.md, VISUAL_SPEC.md | Requirements (FR/NFR IDs), journeys, visual rules | done |
 | T-06 | agent:arch | spec/ARCHITECTURE.md, TEST_PLAN.md, IMPLEMENTATION_ROADMAP.md | Components, tests, milestones | done |
-| T-06b | agent:trace (sonnet) | spec/REQUIREMENTS_TRACEABILITY.md | Requirement → evidence → component → acceptance → test | active |
+| T-06b | agent:trace (sonnet) | spec/REQUIREMENTS_TRACEABILITY.md | Requirement → evidence → component → acceptance → test | done |
 | T-07 | agent:review | research/handoffs/T-07-review.md | Independent consistency/clean-room review | todo (needs T-06) |
 
 Blockers: decompilation paused (U-001); no runtime device (U-002).
