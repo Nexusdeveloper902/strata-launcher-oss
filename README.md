@@ -10,11 +10,12 @@ launcher: a minimal, vertical-list home screen with a theme system that is
 > must use its own name, branding, artwork, copy and code.
 
 ## Status
-Specification phase. No launcher code exists here by design. See `research/STATUS.md`.
+Specification complete; implementation starts at milestone M0. See `CLAUDE.md` and `research/STATUS.md`.
 
 ## Layout
 | Path | Purpose |
 |---|---|
+| `CLAUDE.md` | **Start here** for a new session: rules, reading order for M0, environment notes |
 | `AGENTS.md` | Rules, task-assignment and handoff convention for all agents |
 | `research/` | Method, evidence, APK analysis, decisions, unresolved questions |
 | `spec/` | The product specification a coding agent implements from |

@@ -1,6 +1,6 @@
 # Status (keep short)
 
-Phase: specification. Updated 2026-10-29.
+Phase: **specification complete → implementation next (M0)**. Updated 2026-10-29. Start with `CLAUDE.md`.
 
 | Task | Owner | Owned output | Question | State |
 |---|---|---|---|---|
@@ -25,6 +25,7 @@ Blockers: decompilation paused (U-001); no runtime device (U-002).
 - [x] Theme import/export/malformed/newer-version behaviour defined (THEME_SYSTEM §§9–12); samples pass `tools/check_themes.py`.
 - [x] Every P0/P1 requirement has acceptance criteria and ≥1 test (REQUIREMENTS_TRACEABILITY validation report, regenerate with `python3 tools/trace/build.py`; `python3 tools/check_themes.py` needs `pip install jsonschema`).
 - [x] Review findings R-01…R-32 resolved (research/handoffs/T-08.md).
-- [ ] Open, owner-dependent: legal review (U-001, U-003, U-004), device validation (U-002, U-015…U-020).
+- [x] Name decided (D-012), repo renamed to `strata-launcher`, `main` is the default branch (D-013).
+- [ ] Open, owner-dependent: legal review (U-001, U-003, U-004; only if shared/published), device validation (U-002, U-015…U-020).
 
 Next: implementation milestone **M0** (spec/IMPLEMENTATION_ROADMAP.md).
