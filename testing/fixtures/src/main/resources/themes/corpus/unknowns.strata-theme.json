@@ -1,0 +1,23 @@
+{
+  "x-first": {"note": "an extension before every known key", "list": [3, 2, 1]},
+  "schemaVersion": 1,
+  "schemaMinor": 5,
+  "id": "6b0f3e2a-1c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "name": "Unknowns fixture",
+  "futureTopLevel": {"from": "minor 5", "values": [1.50, 2e3, -0.0, true, null, "s"]},
+  "colors": {
+    "mode": "sepia",
+    "x-gamut": "p3",
+    "source": {"kind": "fixed", "lockedRoles": [], "futureSourceOption": 1},
+    "light": {"accent": "#8A3B12", "x-accent-alt": "#000000", "glow": "#FFFFFF"},
+    "dark": {"background": "#101010"}
+  },
+  "wallpaper": {"show": true, "dim": 0.70, "blur": {"radius": 12, "x-engine": "v2"}},
+  "typography": {"family": {"kind": "variable", "axes": {"wght": 450}}, "scale": 1.10},
+  "icons": {"pack": {"package": "com.example.pack", "fallback": "themed", "x-order": ["a", "b"]}, "tint": "duotone"},
+  "clock": {"style": "binary", "date": {"skeleton": "EEEEd", "calendar": "hebrew"}},
+  "animation": {"listEntrance": "bounce", "spring": {"stiffness": 400}},
+  "haptics": {"mode": "rich"},
+  "x-last": [{"a": {"b": {"c": [1, {"d": "deep"}]}}}],
+  "zLastUnknown": false
+}
