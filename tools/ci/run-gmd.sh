@@ -15,7 +15,22 @@ dump_emulator_diagnostics() {
   ls -l /dev/kvm 2>&1 || true
   "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/emulator/emulator" -accel-check 2>&1 | head -20 || true
   df -h / 2>&1 | head -5 || true
-  find "$HOME/.android" /tmp -maxdepth 4 \( -name 'emulator*.log' -o -name 'hardware-qemu.ini' -o -name '*.log' \) -newer "$log" 2>/dev/null | head -20 | while read -r f; do
+  # AGP swallows the emulator's own output; start the AVD it just built by hand to see why it exits.
+  local sdk avd_home avd
+  sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+  avd_home="$HOME/.android/avd/gradle-managed"
+  ls -la "$avd_home" 2>&1 | head -20 || true
+  "$sdk/emulator/emulator" -version 2>&1 | head -3 || true
+  avd="$(find "$avd_home" -maxdepth 1 -name '*.ini' -printf '%f\n' 2>/dev/null | head -1)"
+  avd="${avd%.ini}"
+  if [ -n "$avd" ]; then
+    echo "--- manual start of $avd (60 s)"
+    ANDROID_AVD_HOME="$avd_home" timeout 60 "$sdk/emulator/emulator" -avd "$avd" -no-window -no-audio -no-boot-anim \
+      -no-snapshot -read-only -gpu swiftshader_indirect -verbose 2>&1 | tail -n 60 || true
+    pkill -f qemu-system || true
+    cat "$avd_home/$avd.avd/config.ini" 2>/dev/null | head -60 || true
+  fi
+  find "$HOME/.android" /tmp -maxdepth 5 \( -name 'emulator*.log' -o -name 'hardware-qemu.ini' -o -name '*.log' \) -newer "$log" 2>/dev/null | head -20 | while read -r f; do
     echo "--- $f"; tail -n 60 "$f"
   done
   echo "::endgroup::"
