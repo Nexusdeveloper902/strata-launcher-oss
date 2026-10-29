@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "schemaMinor": 0,
+  "id": "f647effd-96dc-4522-80cf-66af0a8a9dbe",
+  "name": "Harbor",
+  "author": "Strata Launcher sample",
+  "description": "Uses the system's Material dynamic colours on Android 12+, follows the system light/dark setting, and falls back to sea-blue palettes on older devices.",
+  "colors": {
+    "mode": "system",
+    "source": { "kind": "dynamic" },
+    "light": {
+      "background": "#F3F7FA",
+      "surface": "#E3ECF2",
+      "textPrimary": "#13212B",
+      "textSecondary": "#3F5463",
+      "accent": "#1F5F8B",
+      "onAccent": "#FFFFFF",
+      "divider": "#C7D5DF",
+      "highlight": "#D6E3EC",
+      "scrim": "#FFFFFF"
+    },
+    "dark": {
+      "background": "#0F1A21",
+      "surface": "#1A2731",
+      "textPrimary": "#E4EEF4",
+      "textSecondary": "#A9BCC9",
+      "accent": "#8CC8F0",
+      "onAccent": "#06283D",
+      "divider": "#2B3A45",
+      "highlight": "#22323D",
+      "scrim": "#000000"
+    }
+  },
+  "wallpaper": { "show": false },
+  "icons": { "visible": true, "sizeDp": 36, "shape": "system", "tint": "monochrome", "labelsVisible": true },
+  "search": { "position": "bottom", "style": "pill" },
+  "x-example.note": "Extension keys like this one are preserved verbatim on import/export."
+}

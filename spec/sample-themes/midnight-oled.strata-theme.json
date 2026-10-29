@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "schemaMinor": 0,
+  "id": "3e3cd7e0-1034-46fe-a53b-a5a5252e5f3f",
+  "name": "Midnight OLED",
+  "author": "Strata Launcher sample",
+  "description": "Pure black for OLED panels, soft white text, amber accent, monochrome icons, minimal motion.",
+  "colors": {
+    "mode": "dark",
+    "source": { "kind": "fixed" },
+    "pureBlack": true,
+    "dark": {
+      "background": "#000000",
+      "surface": "#121212",
+      "textPrimary": "#F2F2F2",
+      "textSecondary": "#A6A6A6",
+      "accent": "#FFB74A",
+      "onAccent": "#241400",
+      "divider": "#262626",
+      "highlight": "#1F1F1F",
+      "scrim": "#000000"
+    }
+  },
+  "wallpaper": { "show": false },
+  "typography": {
+    "family": { "kind": "system" },
+    "scale": 1.1,
+    "labelWeight": 300,
+    "headingWeight": 500,
+    "clockWeight": 100,
+    "letterSpacingEm": 0.02,
+    "labelCase": "lower",
+    "smallTextUsesSystemFont": true
+  },
+  "list": { "density": "spacious", "horizontalPaddingDp": 28, "sectionHeaders": false },
+  "icons": { "visible": true, "sizeDp": 24, "shape": "circle", "tint": "monochrome", "reshapeLegacy": true, "labelsVisible": true },
+  "clock": {
+    "visible": true, "style": "numericStacked", "hourFormat": "system", "sizeSp": 96, "alignment": "start",
+    "date": { "visible": true, "skeleton": "EEEEd", "sizeSp": 14 }
+  },
+  "favorites": { "textScale": 1.5, "alignment": "start", "verticalPosition": "bottom", "showIcons": false },
+  "search": { "position": "top", "style": "underline", "showHint": true },
+  "alphabetIndex": { "visibility": "listOnly", "side": "end", "glyphs": "dots", "textSizeSp": 10, "showBubble": true },
+  "animation": { "durationScale": 0.5, "listEntrance": "none" },
+  "haptics": { "mode": "off" }
+}

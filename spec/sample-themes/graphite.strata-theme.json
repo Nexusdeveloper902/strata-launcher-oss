@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "schemaMinor": 0,
+  "id": "79ba1e83-d3f4-481e-8d2e-c9eb37b31ad5",
+  "name": "Graphite",
+  "author": "Strata Launcher sample",
+  "description": "Cool dark grey over a heavily dimmed wallpaper, with a teal accent and small rounded icons.",
+  "colors": {
+    "mode": "dark",
+    "source": { "kind": "fixed" },
+    "dark": {
+      "background": "#1C1E21",
+      "surface": "#2A2D31",
+      "textPrimary": "#E8EAED",
+      "textSecondary": "#B4B9C0",
+      "accent": "#5FC9B8",
+      "onAccent": "#06231F",
+      "divider": "#3A3E44",
+      "highlight": "#33373C",
+      "scrim": "#0E0F11"
+    }
+  },
+  "wallpaper": { "show": true, "dim": 0.6, "backgroundOpacity": 0.7 },
+  "typography": {
+    "family": { "kind": "system" },
+    "scale": 1.0,
+    "labelWeight": 400,
+    "headingWeight": 500,
+    "clockWeight": 200,
+    "letterSpacingEm": 0.0,
+    "labelCase": "asIs"
+  },
+  "list": { "density": "comfortable", "horizontalPaddingDp": 16, "sectionHeaders": true },
+  "icons": { "visible": true, "sizeDp": 28, "shape": "roundedSquare", "cornerRadiusPercent": 30, "tint": "none", "reshapeLegacy": true, "labelsVisible": true },
+  "clock": {
+    "visible": true, "style": "numeric", "hourFormat": "h24", "sizeSp": 72, "alignment": "center",
+    "date": { "visible": true, "skeleton": "EdMMM", "sizeSp": 14 }
+  },
+  "favorites": { "textScale": 1.25, "alignment": "center", "verticalPosition": "center", "showIcons": true },
+  "search": { "position": "bottom", "style": "pill", "cornerRadiusDp": 24 },
+  "alphabetIndex": { "visibility": "always", "side": "end", "glyphs": "letters", "showBubble": true },
+  "animation": { "durationScale": 1.0, "listEntrance": "slide" },
+  "haptics": { "mode": "followSystem" }
+}

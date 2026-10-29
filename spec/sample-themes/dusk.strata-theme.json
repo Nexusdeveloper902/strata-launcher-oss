@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "schemaMinor": 0,
+  "id": "3f4c4574-2d43-49e5-a19f-110a333910ba",
+  "name": "Dusk",
+  "author": "Strata Launcher sample",
+  "description": "Palette derived from the current wallpaper; light or dark chosen from the wallpaper's own hints. Fixed fallback palettes are violet-tinted.",
+  "colors": {
+    "mode": "wallpaper",
+    "source": { "kind": "wallpaper", "lockedRoles": ["scrim"] },
+    "light": {
+      "background": "#F7F2FA",
+      "surface": "#ECE5F2",
+      "textPrimary": "#1E1A24",
+      "textSecondary": "#4A4458",
+      "accent": "#6A4BA8",
+      "onAccent": "#FFFFFF",
+      "divider": "#D3CADC",
+      "highlight": "#E2D9EC",
+      "scrim": "#FFFFFF"
+    },
+    "dark": {
+      "background": "#17131D",
+      "surface": "#241E2C",
+      "textPrimary": "#EDE6F4",
+      "textSecondary": "#C6BDD2",
+      "accent": "#C9B3FF",
+      "onAccent": "#2A1659",
+      "divider": "#3A3245",
+      "highlight": "#2F2839",
+      "scrim": "#000000"
+    }
+  },
+  "wallpaper": { "show": true, "dim": 0.75, "backgroundOpacity": 0 },
+  "typography": {
+    "family": { "kind": "system" },
+    "scale": 1.0,
+    "labelWeight": 500,
+    "headingWeight": 600,
+    "letterSpacingEm": 0.0,
+    "labelCase": "asIs"
+  },
+  "list": { "density": "compact", "horizontalPaddingDp": 16, "sectionHeaders": true },
+  "icons": { "visible": true, "sizeDp": 32, "shape": "squircle", "tint": "accent", "reshapeLegacy": true, "labelsVisible": true },
+  "clock": {
+    "visible": true, "style": "words", "hourFormat": "system", "sizeSp": 40, "alignment": "start",
+    "date": { "visible": true, "skeleton": "EEEEdMMMM", "sizeSp": 16 }
+  },
+  "favorites": { "textScale": 1.2, "alignment": "start", "verticalPosition": "center", "showIcons": true },
+  "search": { "position": "bottom", "style": "box", "cornerRadiusDp": 12 },
+  "alphabetIndex": { "visibility": "always", "side": "end", "glyphs": "letters", "textSizeSp": 12 },
+  "animation": { "durationScale": 1.0, "listEntrance": "fade" },
+  "haptics": { "mode": "followSystem" }
+}

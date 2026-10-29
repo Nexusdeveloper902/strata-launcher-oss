@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "schemaMinor": 0,
+  "id": "c5017d5b-b2b0-48ff-83ed-33f77fd14754",
+  "name": "Paper",
+  "author": "Strata Launcher sample",
+  "description": "Warm off-white page with ink-dark text. Solid background, wallpaper hidden.",
+  "colors": {
+    "mode": "light",
+    "source": { "kind": "fixed" },
+    "light": {
+      "background": "#F6F2E9",
+      "surface": "#ECE6D8",
+      "textPrimary": "#23201A",
+      "textSecondary": "#5C564A",
+      "accent": "#8A3B12",
+      "onAccent": "#FFFFFF",
+      "divider": "#D9D1BF",
+      "highlight": "#E3DBC8",
+      "scrim": "#FFFFFF"
+    }
+  },
+  "wallpaper": { "show": false },
+  "typography": {
+    "family": { "kind": "system" },
+    "scale": 1.0,
+    "labelWeight": 400,
+    "headingWeight": 600,
+    "letterSpacingEm": 0.01,
+    "labelCase": "asIs"
+  },
+  "list": { "density": "comfortable", "horizontalPaddingDp": 24, "sectionHeaders": true, "showDividers": true },
+  "icons": { "visible": false, "labelsVisible": true },
+  "clock": {
+    "visible": true, "style": "numeric", "hourFormat": "system", "sizeSp": 64, "alignment": "start",
+    "date": { "visible": true, "skeleton": "EEEEdMMMM", "sizeSp": 16 }
+  },
+  "favorites": { "textScale": 1.4, "alignment": "start", "verticalPosition": "bottom", "showIcons": false },
+  "search": { "position": "bottom", "style": "underline", "showHint": true },
+  "alphabetIndex": { "visibility": "listOnly", "side": "end", "glyphs": "letters", "textSizeSp": 12 },
+  "animation": { "durationScale": 1.0, "listEntrance": "fade" },
+  "haptics": { "mode": "followSystem" }
+}
