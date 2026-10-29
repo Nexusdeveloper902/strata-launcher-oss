@@ -15,3 +15,13 @@
 | U-011 | Research gap | Per-app icon changes free or paid in original (PUB-018 vs SEC-002). | None (ours free). | Observation. | open — low priority |
 | U-012 | Contradiction | Widget backup: PUB-047 (newer) says widgets backed up; APK-031 strings say widgets may fail to restore. | Consistent reading: widgets restored when the provider still exists, else reported. Our spec adopts that. | — | resolved (interpretation) |
 | U-013 | Contradiction | Search gesture: SEC-002 says swipe down; PUB-014 says swipe down = notification shade, swipe up = search; APK-028 swipe-up. | Majority + APK → swipe up = search. | — | resolved |
+| U-014 | Policy | Will Play accept a screen-lock-only AccessibilityService on a launcher? | Quick-lock may need a build flag. | Play review. | open — feature ships behind flag |
+| U-015 | Platform | Confirm LauncherApps visibility filtering + intent `<queries>` completeness on API 30+. | App list correctness. | Device test (T-PLAT tests). | open |
+| U-016 | Platform/OEM | ROLE_HOME dialog behaviour on OEM builds; HyperOS 2+ blocking third-party homes (PUB-076). | Onboarding fallback. | Device matrix. | open |
+| U-017 | Platform | Does Auto Backup carry widget-host state so `APPWIDGET_HOST_RESTORED` fires? | Widget restore promise. | Restore test. | open |
+| U-018 | Platform | Android 16 QPR2 auto-themed icons availability to third-party launchers. | Themed-icon coverage. | Device test. | open |
+| U-019 | Platform | `exported` value for listener/accessibility services across OEMs. | Binding reliability. | Device test. | open |
+| U-020 | OEM | Battery-manager killing of listener/accessibility services. | Badge/lock reliability. | Field test. | open |
+| U-021 | Platform | Meaning of `ACCESS_LAUNCHER_DATA` (36.1) for home apps. | Possible future manifest requirement. | Track API docs. | open |
+| U-022 | Product | v1 scope for contacts/calendar/location features. | Permissions. | Decided in PRODUCT_SPEC (T-05). | open |
+| U-023 | Platform | APK-013 note corrected: LauncherApps results are package-visibility filtered (DOC evidence, ANDROID_PLATFORM). | — | — | resolved |
