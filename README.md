@@ -1,5 +1,7 @@
 # Strata Launcher
 
+[![CI](https://github.com/Nexusdeveloper902/strata-launcher/actions/workflows/ci.yml/badge.svg)](https://github.com/Nexusdeveloper902/strata-launcher/actions/workflows/ci.yml)
+
 Research and an implementation-ready specification for an **independent** Android
 launcher: a minimal, vertical-list home screen with a theme system that is
 **fully free** and user-controlled.
@@ -11,6 +13,11 @@ launcher: a minimal, vertical-list home screen with a theme system that is
 
 ## Status
 Specification complete; implementation starts at milestone M0. See `CLAUDE.md` and `research/STATUS.md`.
+
+## Building
+Needs JDK 21 and the Android SDK (`platforms;android-36`, build-tools 36.1.0). Use the Gradle
+wrapper: `./gradlew assembleDebug`. The full local check and the PR workflow are in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Layout
 | Path | Purpose |
