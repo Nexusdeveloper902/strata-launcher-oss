@@ -25,6 +25,15 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        // ARCHITECTURE 17: release-like, not debuggable, profileable (src/benchmark manifest), signed with debug
+        // keys so Macrobenchmark can install it. Never distributed.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
+            proguardFiles("benchmark-rules.pro")
+        }
     }
 }
 

@@ -21,10 +21,14 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     targetCompatibility = StrataBuild.JAVA_VERSION
                 }
                 lint { configureStrataLint() }
-                testOptions { configureStrataUnitTests(target) }
+                testOptions {
+                    configureStrataUnitTests(target)
+                    configureStrataManagedDevices()
+                }
             }
             configureKotlinCompile()
             addAndroidTestDependencies()
+            addInstrumentedTestDependencies()
             registerPermissionGate()
             registerModuleGraphGate(isAndroid = true)
             registerDependencyGate("releaseRuntimeClasspath")

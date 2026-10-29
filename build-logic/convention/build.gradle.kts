@@ -31,6 +31,10 @@ gradlePlugin {
             id = "strata.android.library"
             implementationClass = "AndroidLibraryConventionPlugin"
         }
+        register("androidBenchmark") {
+            id = "strata.android.benchmark"
+            implementationClass = "AndroidBenchmarkConventionPlugin"
+        }
         register("androidCompose") {
             id = "strata.android.compose"
             implementationClass = "AndroidComposeConventionPlugin"

@@ -21,6 +21,8 @@ class AndroidComposeConventionPlugin : Plugin<Project> {
             dependencies.add("testImplementation", bom)
             dependencies.add("testImplementation", libs.lib("androidx-compose-ui-test-junit4"))
             dependencies.add("debugImplementation", libs.lib("androidx-compose-ui-test-manifest"))
+            dependencies.add("androidTestImplementation", bom)
+            dependencies.add("androidTestImplementation", libs.lib("androidx-compose-ui-test-junit4"))
             Unit
         }
 }

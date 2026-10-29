@@ -37,3 +37,37 @@ internal fun Project.addAndroidTestDependencies() {
     dependencies.add("testImplementation", libs.lib("androidx-test-core"))
     dependencies.add("testImplementation", libs.lib("androidx-test-ext-junit"))
 }
+
+/**
+ * Gradle Managed Devices for the per-PR smoke matrix (ARCHITECTURE 14.3: API 26, 34, 36 phones, x86_64) and the
+ * AndroidX Test Orchestrator (each test in its own process, state cleared).
+ * ATD images exist for API 34; 26 and 36 use the regular Google APIs image.
+ */
+internal fun TestOptions.configureStrataManagedDevices() {
+    execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    managedDevices.localDevices.apply {
+        create("api26") {
+            device = "Pixel 6"
+            apiLevel = 26
+            systemImageSource = "google"
+        }
+        create("api34") {
+            device = "Pixel 6"
+            apiLevel = 34
+            systemImageSource = "google-atd"
+        }
+        create("api36") {
+            device = "Pixel 6"
+            apiLevel = 36
+            systemImageSource = "google"
+        }
+    }
+}
+
+internal fun Project.addInstrumentedTestDependencies() {
+    dependencies.add("androidTestImplementation", libs.lib("androidx-test-runner"))
+    dependencies.add("androidTestImplementation", libs.lib("androidx-test-ext-junit"))
+    dependencies.add("androidTestImplementation", libs.lib("androidx-test-core"))
+    dependencies.add("androidTestImplementation", libs.lib("truth"))
+    dependencies.add("androidTestUtil", libs.lib("androidx-test-orchestrator"))
+}

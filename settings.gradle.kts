@@ -47,4 +47,4 @@ include(":backup")
 
 include(":testing:fakes")
 include(":testing:fixtures")
-// :benchmark (com.android.test, Macrobenchmark) is added together with the CI pipeline.
+include(":benchmark")
