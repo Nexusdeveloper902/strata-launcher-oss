@@ -165,13 +165,15 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
 | T-SET-01 | Entry points | — | Open settings from: list end, home menu, sheet overflow, system App info gear (`APPLICATION_PREFERENCES`) | Settings opens from all four | I + C | FR-SET-01 |
-| T-SET-02 | Groups | — | Read the settings root | Groups in order: Home, App list, Search, Gestures, Notifications, Themes, Apps, Backup, Privacy & permissions, About | C | FR-SET-01 |
+| T-SET-02 | Groups | — | Read the settings root | Groups in order: Home, App list, Search, Gestures, Notifications, Themes, Icons (once FR-SET-07 ships), Apps, Backup, Privacy & permissions, About | C | FR-SET-01 |
 | T-SET-03 | Default-home row and uninstall | Strata default | Read the row status. Tap "Uninstall Strata" | Status "Strata is your home app". Guidance → home settings. After switching, the uninstall dialog opens | I | FR-SET-02 |
 | T-SET-04 | Privacy page | contacts granted, NLS not | Open Privacy & permissions. Trigger the system permission-usage link (`VIEW_PERMISSION_USAGE`) on API 31 | Each optional access listed with state, purpose and an action. "Strata has no internet access" shown. The system link opens this page | I | FR-SET-03 |
 | T-SET-05 | Per-app language | API 33+; `localeConfig` | Set Strata to German in system settings | Strata UI in German. System language unchanged | I | FR-SET-04 |
 | T-SET-06 | Haptics master | master off; theme haptics `followSystem` | Scrub the index, long-press, reorder | 0 haptic calls (`FakeHaptics` / spy on `performHapticFeedback`) | C | FR-SET-05, FR-THEME-17 |
 | T-SET-07 | Launch-log controls | 10 launches logged | Pause logging, launch 3 apps. Resume. Clear history | Paused launches not logged. Clear empties the recents and the log table immediately | R + C | FR-SET-05, NFR-PRIV-05 |
 | T-SET-08 | About and licences | — | Open About → Licences | Version shown. Each bundled OFL font (VISUAL_SPEC §4.2) and each OSS dependency listed with its licence. Privacy statement present | C | FR-SET-06 |
+| T-SET-09 | Icon coverage list and export | fake coverage of 10 apps (2 override, 2 pack, 2 glyph, 1 monochrome, 3 desaturated), tint `monochrome`; then tint `none` | Open Settings -> Icons. Tap "Export list". Switch the tint | Rows show label and source. Counts 2/2/2/1/3. The 3 desaturated rows are highlighted. The export intent is `ACTION_SEND` `text/plain` with 3 lines "Label (package)" (all-apps toggle: 10). Tint `none`: note shown, no highlights; the 6 apps without override or pack icon show source "System icon (untinted)" (count 6, no glyph/monochrome/desaturated rows). No file written, no network call, manifest permissions unchanged | C + R | FR-SET-07, NFR-PRIV-01 |
+| T-SET-10 | Coverage on the real device | Galaxy A56 (API 36) with its installed apps; tint `monochrome` | Open Settings -> Icons. Compare 5 apps per source with the home list. Export to a notes app | Source shown matches the icon drawn on home for each sampled app. Counts sum to the launchable-app total. Export text lists label and package of the desaturated apps. Works in airplane mode | MAN | FR-SET-07, FR-THEME-35 |
 
 ## 11. BACKUP
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -294,6 +296,8 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-THEME-51 | No network | StrictMode `detectNetwork` penalty-death; the theme module dependency graph | Run all theme flows (T-THEME-27…40 and T-THEME-42; T-THEME-41 joins at M8) | No violation. No network dependency (T-CI-02) | I + CI | NFR-THEME-11 |
 | T-THEME-52 | Clean-room review | — | T-07 reviews the schema keys, values, file types and assets | Signed off. No item derived from the original | MAN | NFR-THEME-12 |
 | T-THEME-53 | Apply latency | RD-1 | Apply a theme. Measure from tap to the first resolved frame | ≤ 300 ms | M | NFR-PERF-06 |
+| T-THEME-54 | Icon source precedence | fake inputs, 12 cases: override, pack, glyph, monochrome layer, none; tint `none`/`monochrome`/`accent`; `pack.fallback` system/monochrome; API 32 and 33 | Call `IconSourceResolver.resolve` for each | Order is override, pack, glyph, platform monochrome (API 33+ only), desaturated. Tint `none` with fallback `system` yields `Plain` (coverage label "System icon (untinted)"), never a glyph, monochrome or desaturated; override and pack still win over `Plain`. `pack.fallback: monochrome` follows glyph, monochrome, desaturated. An uninstalled pack drops step 2 only | U | FR-THEME-35, FR-THEME-11 |
+| T-THEME-55 | Glyph index and bundle | test `glyph_index.txt` plus the production index | Parse; look up present, absent and malformed lines; check drawables | Present package returns its id, absent returns null. Malformed lines are skipped and reported. Production index: no duplicate packages, every id has a single-colour vector drawable. A fixture glyph added by data only appears in `resolve` with no code change. Bundle version: changing only one glyph drawable's bytes (index unchanged) changes the build-time bundle version and makes the old cached bitmap a cache miss; an identical bundle keeps the same version | U + R | FR-THEME-35 |
 
 ## 16. PERF (RD-1, `APPS500`, release-like `benchmark` build with Baseline Profile)
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -421,6 +425,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-SET-04 | T-SET-05 |
 | FR-SET-05 | T-SET-06, T-SET-07, T-LIST-04, T-SEARCH-16 |
 | FR-SET-06 | T-SET-08, T-CI-05 |
+| FR-SET-07 | T-SET-09, T-SET-10 |
 | FR-BACKUP-01 | T-BACKUP-01, T-BACKUP-02, T-BACKUP-03, T-BACKUP-13 |
 | FR-BACKUP-02 | T-BACKUP-04 … T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-WIDGET-10 |
 | FR-BACKUP-03 | T-BACKUP-08 |
@@ -447,7 +452,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-THEME-08 | T-THEME-09, T-A11Y-05 |
 | FR-THEME-09 | T-THEME-10 |
 | FR-THEME-10 | T-THEME-11, T-APPS-10 |
-| FR-THEME-11 | T-THEME-12 |
+| FR-THEME-11 | T-THEME-12, T-THEME-54 |
 | FR-THEME-12 | T-THEME-13, T-HOME-04, T-I18N-05 |
 | FR-THEME-13 | T-THEME-14, T-HOME-04 |
 | FR-THEME-14 | T-THEME-15, T-HOME-04 |

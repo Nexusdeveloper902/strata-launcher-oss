@@ -254,6 +254,31 @@ uses the icon pack *displayName*, which is not installed", with a button that op
 store listing via `market://details?id=<package>` (an intent built only from the package
 name; the app itself fetches nothing). Inferred (APK-023, APK-024) as capabilities.
 
+**Icon source precedence (FR-THEME-35; owner request, D-014; Proposed).** For each app the
+icon pipeline (ARCHITECTURE section 9) takes the first step that yields an icon:
+
+1. per-app override (FR-APPS-06), drawn as supplied;
+2. icon-pack mapping of the active `pack` (drawn as supplied);
+3. **Strata glyph** for the app's package name (below);
+4. platform monochrome layer, `AdaptiveIconDrawable.getMonochrome()` (API 33+, when present);
+5. desaturated icon (the app's normal icon, desaturated) as the last resort.
+
+Steps 3-5 apply only when the icon is tinted: `tint` is `monochrome` or `accent`, or the app
+falls back through `pack.fallback: monochrome` (apps the pack does not cover, or an
+uninstalled pack). With `tint: none` and `pack.fallback: system` the app's normal system icon
+is shown (reported by the coverage tool, FR-SET-07, as "System icon (untinted)") and the glyph step is **not** used: a glyph is a monochrome drawing and would
+replace a full-colour icon the user did not ask to replace. Glyphs are drawn in the tint role
+colour (`textPrimary` or `accent`) and masked like other icons per `shape`. Glyph precedence
+over the platform monochrome layer is deliberate: a hand-drawn glyph gives a consistent look,
+while the platform layer varies by developer. No schema field is added; `pack.fallback:
+monochrome` simply follows steps 3-5.
+
+**Strata glyph set (FR-THEME-35).** Monochrome vector drawables drawn for this project in one
+consistent style (single path, 24 dp viewport, fill replaced by the tint colour), bundled in
+the APK and keyed by package name through a plain-text index (ARCHITECTURE section 9.1). They
+are original drawings, never extracted from apps or from the original launcher. Adding a
+glyph is a resource and index change only, not a code change. Trademark note: U-026.
+
 ### 4.7 `clock` and date
 
 | Field | Type | Default | Allowed | On invalid |
@@ -775,7 +800,7 @@ implementation's unit tests can reproduce these numbers.
 
 ## 15. Requirements
 
-**Priority:** every FR-THEME and NFR-THEME requirement below is **P0 for v1** (D-004: free theming is the core differentiator). Milestone scheduling is in IMPLEMENTATION_ROADMAP (M3, M4, M8, M9).
+**Priority:** every FR-THEME and NFR-THEME requirement below is **P0 for v1**, except FR-THEME-35 (P2, owner request, D-014) (D-004: free theming is the core differentiator). Milestone scheduling is in IMPLEMENTATION_ROADMAP (M3, M4, M8, M9).
 
 Acceptance criteria (AC) are written to be testable; test IDs (`T-THEME-nn`) are assigned
 by T-06.
@@ -794,7 +819,7 @@ by T-06.
 | FR-THEME-08 | Typography: system / bundled OFL / user font by hash; scale 0.8–1.5 multiplied by system scale; weights; letter spacing; label case. | Each field changes rendered text measurably; missing user font falls back with a warning; system font scale 2.0 × theme scale 1.5 renders without clipping. | Inferred (APK-022) |
 | FR-THEME-09 | Option to render small/long text in the system font. | With the option on, text < 14 sp uses `FontFamily.Default` while other text uses the theme font. | Inferred (APK-022) |
 | FR-THEME-10 | Icons: visibility, size, shape mask, legacy icon plate, labels, icon pack with fallback. | Shapes apply to adaptive icons; legacy icons get a plate when `legacyIconPlate`; uninstalling the pack switches to `pack.fallback` without restart and shows the one-time notice with store button. | Inferred (APK-023) |
-| FR-THEME-11 | Monochrome/accent icon tint using the platform monochrome layer. | API 33+ uses `getMonochrome()` when present; otherwise a desaturated icon tinted with the role colour. | Proposed |
+| FR-THEME-11 | Monochrome/accent icon tint using the platform monochrome layer. | API 33+ uses `getMonochrome()` when present; otherwise a desaturated icon tinted with the role colour. Where FR-THEME-35 is built, a bundled Strata glyph is tried first (section 4.6). | Proposed |
 | FR-THEME-12 | Clock and date presentation (style, hour format, seconds, size, alignment, date skeleton). | Date text equals `DateFormat.getBestDateTimePattern(locale, skeleton)` output for 5 test locales incl. one RTL; alignment mirrors in RTL. | Inferred (APK-026) |
 | FR-THEME-13 | Favourites presentation (scale, alignment, vertical position, icons, labels, spacing). | Labels are forced on when both icons and labels are off; changing the theme never changes which apps are favourites. | Inferred (APK-026) |
 | FR-THEME-14 | Search-bar presentation (position, style, radius, hint). | `hidden` still allows opening search by its gesture; styles render per §4.9. | Proposed |
@@ -818,6 +843,7 @@ by T-06.
 | FR-THEME-32 | Migration framework with frozen fixtures and `.bak` safety copy. | A synthetic v0→v1 test migrator passes fixture tests; the `.bak` is removed only after a successful boot. | Proposed |
 | FR-THEME-33 | Theme data included in Auto Backup / device transfer per §11.4, re-validated on restore. | Restored invalid files land in quarantine; valid ones appear in the library. | Proposed |
 | FR-THEME-34 | Theme wallpaper images applied only with explicit confirmation, by handing the image to the system wallpaper activity (`getCropAndSetWallpaperIntent`, fallback `ACTION_ATTACH_DATA`); no `SET_WALLPAPER` permission (D-009). | Declining starts no wallpaper intent; accepting starts exactly one with a `content:` `image/*` URI and a read grant; the merged manifest has no `SET_WALLPAPER`. | Proposed |
+| FR-THEME-35 | Strata glyph set and icon source precedence (override, pack, glyph, platform monochrome, desaturated). **P2**, M8. | G tint `monochrome`, app X has a bundled glyph and a monochrome layer, no override or pack icon; W X is drawn; T the glyph is used. Without a glyph the monochrome layer is used (API 33+), else the desaturated icon. With `tint: none`, X shows its normal icon and no glyph. An override or pack mapping beats the glyph. Adding a glyph file and one index line makes it appear with no code change. | Proposed (D-014, owner request) |
 
 ### 15.2 Non-functional
 

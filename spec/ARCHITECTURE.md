@@ -61,7 +61,7 @@ no account, no analytics, no billing (D-004, D-007, NFR-PRIV-01/02). The theme f
                              composables (rows, sheet, pill, index, snackbar host, focus ring)
 :platform:apps               LauncherApps/UserManager catalog source, profile monitor, app launcher,
                              shortcuts, uninstall/app-info intents, private space & quiet mode
-:platform:icons              icon loader & render pipeline, icon-pack discovery/parser (§9)
+:platform:icons              icon loader & render pipeline, icon-pack discovery/parser (§9), Strata glyph bundle (§9.1)
 :platform:widgets            AppWidgetHost controller, provider catalog, bind/configure flow,
                              HostRestored handling
 :platform:notifications      NotificationListenerService → in-memory BadgeSource
@@ -452,7 +452,8 @@ L1 memory LruCache<cacheKey, ImageBitmap>  (byte-sized, max = memoryClass/8; tri
    ▼ miss
 L2 disk cacheDir/icons/<cacheKey>.webp     (excluded from backups; LRU-capped at 32 MB; deleted on pack/theme change)
    ▼ miss
-Source: override (pack drawable) → pack appfilter mapping → LauncherActivityInfo.getIcon(density)
+Source: override (pack drawable) → pack appfilter mapping → [tinted only: Strata glyph (§9.1)
+        → getMonochrome (API 33+)] → LauncherActivityInfo.getIcon(density) (desaturated when tinted)
         (badged icon for work profile via getBadgedIcon)
    ▼
 Render (Default, limited 4): AdaptiveIconDrawable layers clipped by our shape path; legacy plate;
@@ -472,6 +473,22 @@ ImageBitmap → L1 (+ L2 async write)
   (NFR-COMPAT-04). A pack removal invalidates L1/L2 for its keys and falls back (FR-THEME-10).
 - **Invalidation triggers:** package update (`onPackageChanged`), theme icon fields, density change,
   system dark/theme change (monochrome tint), pack install/remove.
+
+
+### 9.1 Strata glyph bundle (FR-THEME-35, D-014)
+- **Location:** `:platform:icons` resources: vector drawables `res/drawable-nodpi/glyph_<id>.xml` and one
+  index `res/raw/glyph_index.txt`, one line per glyph: `<package name> <glyph id>` (UTF-8, `#` comments).
+  Several packages may share a glyph; a package appears once. Adding a glyph = one XML file and one line.
+- **Lookup:** `GlyphIndex` (pure Kotlin, parsed once, kept in memory) maps package name to `@DrawableRes`.
+  The pure `IconSourceResolver.resolve(app, themeIcons, override, packMapping, hasMonochrome, apiLevel)` returns
+  `Override | Pack | Glyph | PlatformMonochrome | Desaturated | Plain` (`Plain` = the app's normal system icon, untinted; the coverage tool shows it as "System icon (untinted)"). The render pipeline and the coverage tool
+  (`:feature:settings`, through `IconProvider.coverage(): List<IconCoverageEntry>` in `:core:platform-api`) share
+  it, so the tool cannot disagree with what is drawn.
+- **Cache:** the `IconRequest` cacheKey includes a glyph-bundle version: a hash over the index **and the bytes of every referenced glyph
+  drawable**, computed at build time and exposed as a generated constant (no manual step), so any change to the
+  index or to a glyph's artwork invalidates L1/L2 after an app update.
+- **Checks:** T-THEME-55 validates the index (no duplicate packages, every id has a drawable, every drawable is a
+  single-colour vector). No settings field (section 4.2 unchanged) and no permission: the coverage tool is read-only.
 
 ---
 

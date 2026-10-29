@@ -120,6 +120,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-SET-04 | P1 | Per-app language through localeConfig | Inferred | APK-016, DOC-069 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-05 | M8 [spec Rel: v1] |
 | FR-SET-05 | P0 | Haptics master toggle and launch-log controls | Inferred (haptics); Proposed (log) | APK-029 | :feature:settings, :core:data (area); cited ARCH §3, §4.2 | PRODUCT_SPEC §4.9 | T-SET-06, T-SET-07, T-LIST-04, T-SEARCH-16 | M3 [spec Rel: v1] |
 | FR-SET-06 | P0 | About screen: version, licences, privacy statement | Proposed | — | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-08, T-CI-05 | M8 [spec Rel: v1] |
+| FR-SET-07 | P2 | Icon coverage tool with export list | Proposed | — | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-09, T-SET-10 | M8 [spec Rel: v1 (M8; cuttable)] |
 
 ## FR-BACKUP (PRODUCT_SPEC §4)
 
@@ -172,7 +173,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-THEME-08 | — | Typography: family, scale, weights, spacing, label case | Inferred (APK-022) | APK-022 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-09, T-A11Y-05 | M4 |
 | FR-THEME-09 | — | Option to render small text in system font | Inferred (APK-022) | APK-022 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-10 | M4 |
 | FR-THEME-10 | — | Icon visibility, size, shape, legacy plate and packs | Inferred (APK-023) | APK-023 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9 | THEME_SYSTEM §15.1 | T-THEME-11, T-APPS-10 | M4, M5 |
-| FR-THEME-11 | — | Monochrome or accent icon tinting | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9 | THEME_SYSTEM §15.1 | T-THEME-12 | M4, M5 |
+| FR-THEME-11 | — | Monochrome or accent icon tinting | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9 | THEME_SYSTEM §15.1 | T-THEME-12, T-THEME-54 | M4, M5 |
 | FR-THEME-12 | — | Clock and date presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-13, T-HOME-04, T-I18N-05 | M4 |
 | FR-THEME-13 | — | Favourites presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-14, T-HOME-04 | M4 |
 | FR-THEME-14 | — | Search-bar presentation options | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-15, T-HOME-04 | M4 |
@@ -196,6 +197,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-THEME-32 | — | Migration framework with fixtures and backup copy | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-40 | M4 |
 | FR-THEME-33 | — | Theme data in Auto Backup, revalidated on restore | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-41, T-BACKUP-09, T-BACKUP-11 | M8 |
 | FR-THEME-34 | — | Wallpaper image applied only after user confirmation | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §13 | THEME_SYSTEM §15.1 | T-THEME-42, T-CI-01 | M5 |
+| FR-THEME-35 | — | Strata glyph set and icon source precedence | Proposed (D-014, owner request) | D-014 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9.1 | THEME_SYSTEM §15.1 | T-SET-10^, T-THEME-54^, T-THEME-55^ | M8 |
 
 ## NFR-PERF (PRODUCT_SPEC §5)
 
@@ -223,7 +225,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| NFR-PRIV-01 | P0 | No network access or networking libraries | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §9 | PRODUCT_SPEC §5 | T-PRIV-01, T-CI-01, T-CI-02, T-SEARCH-15 | M0 |
+| NFR-PRIV-01 | P0 | No network access or networking libraries | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §9 | PRODUCT_SPEC §5 | T-PRIV-01, T-CI-01, T-CI-02, T-SEARCH-15, T-SET-09^ | M0 |
 | NFR-PRIV-02 | P0 | No analytics, ads, crash upload, accounts or billing | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PRIV-02, T-CI-02 | M0 |
 | NFR-PRIV-03 | P0 | Least-permission set diffed against approved list | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §17 | PRODUCT_SPEC §5 | T-PRIV-03, T-CI-01 | M0 |
 | NFR-PRIV-04 | P0 | Sensitive data never persisted | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §4 | PRODUCT_SPEC §5 | T-PRIV-04, T-PRIV-06, T-NOTIF-07, T-APPS-16, T-BACKUP-01 | M7 |
@@ -275,19 +277,19 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 ## Validation report
 
 ### Counts
-- Requirements: **154** (114 FR, 40 NFR). PRODUCT_SPEC: 108 (80 FR, 28 NFR). THEME_SYSTEM: 46 (34 FR, 12 NFR).
-- Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 11, —: 46.
-- Requirements with at least one test: 143; without: 11.
-- Requirements with a roadmap milestone: 150; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 252; §22 rows: 143.
+- Requirements: **156** (116 FR, 40 NFR). PRODUCT_SPEC: 109 (81 FR, 28 NFR). THEME_SYSTEM: 47 (35 FR, 12 NFR).
+- Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
+- Requirements with at least one test: 145; without: 11.
+- Requirements with a roadmap milestone: 152; without: 4.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 256; §22 rows: 144.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
-- Requirements whose tests come **only** from Covers columns (absent from §22): None.
-- §22-only pairs (~): none. Covers-only pairs (^): none.
-- §22/Covers disagreements in total: 0 §22-only pairs, 0 Covers-only pairs (suffixes in the matrix).
+- Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
+- §22-only pairs (~): none. Covers-only pairs (^): FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-PRIV-01/T-SET-09.
+- §22/Covers disagreements in total: 0 §22-only pairs, 4 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria
@@ -311,6 +313,6 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 ### Other observations
 - IDs cited in ARCHITECTURE.md that do not exist as requirements: None.
-- Requirements never cited in ARCHITECTURE.md (component is area-derived only): 86 of 154.
-- THEME_SYSTEM §15 has no priority and no release column: all 46 THEME rows show `—` for Pri. PRODUCT_SPEC §4.9 declares the theme area P0 / v1 as a block; this is not repeated per row.
+- Requirements never cited in ARCHITECTURE.md (component is area-derived only): 87 of 156.
+- THEME_SYSTEM §15 has no priority and no release column: all 47 THEME rows show `—` for Pri. PRODUCT_SPEC §4.9 declares the theme area P0 / v1 as a block; this is not repeated per row.
 - PRODUCT_SPEC §5 NFR rows have no per-row evidence or label; they inherit “Proposed” from the §5 intro. Several NFRs cite platform constraints informally (for example DOC-052, SEC-006).

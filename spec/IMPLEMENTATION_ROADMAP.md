@@ -180,10 +180,12 @@ artifact), export with the privacy warning, validate → preview → replace wit
 Backup XML rules (ANDROID_PLATFORM §17) and restore detection via the install marker (ARCHITECTURE §12.3 step 6); accessibility pass on every screen, keyboard/switch
 navigation, reduced motion; pseudo-locales, RTL, plurals, date/time.
 **Requirements:** FR-SET-01, -03, -04, -06; FR-BACKUP-01…04; FR-THEME-33; FR-A11Y-04; NFR-A11Y-01…05;
-NFR-I18N-01…04; NFR-REL-02.
+NFR-I18N-01…04; NFR-REL-02; plus the **P2, cuttable** owner request FR-THEME-35 and FR-SET-07 (D-014): Strata glyph
+set and icon source precedence in `:platform:icons`, and Settings -> Icons coverage tool with "Export list". It needs the
+M5 icon pipeline. The glyph artwork is authored later from the owner's exported list and is not an M8 gate.
 **DoD:** T-SET-01, T-SET-02, T-SET-04, T-SET-05, T-SET-08, T-CI-05, T-BACKUP-01…13, T-WIDGET-10, T-WIDGET-11
 (record the U-017 outcome), T-THEME-41, T-THEME-47, T-A11Y-06…10, T-A11Y-12, T-I18N-01…05, T-PRIV-04, T-PRIV-06,
-T-SEC-04, T-REL-03.
+T-SEC-04, T-REL-03; for the P2 items T-THEME-54, T-THEME-55, T-SET-09, T-SET-10 (T-SET-10 is a pass on the A56).
 **Risks:** restore atomicity across Room + DataStore + theme files, mitigated by the undo-snapshot design and
 T-BACKUP-10 kill tests. TalkBack issues found late, mitigated by `enableAccessibilityChecks()` running from M1.
 
