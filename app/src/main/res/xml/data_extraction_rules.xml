@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 31+. Rules: ANDROID_PLATFORM §17. Paths for later milestones are listed now so the policy is
+     fixed from day one; `no_backup` (logs, launch_log.db) is always excluded by the platform. -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <include domain="file" path="datastore/" />
+        <include domain="file" path="themes/user/" />
+        <include domain="file" path="themes/fonts/" />
+        <include domain="file" path="themes/lkg.strata-theme.json" />
+        <include domain="database" path="strata.db" />
+        <include domain="database" path="strata.db-wal" />
+        <include domain="database" path="strata.db-shm" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="datastore/" />
+        <include domain="file" path="themes/user/" />
+        <include domain="file" path="themes/fonts/" />
+        <include domain="file" path="themes/images/" />
+        <include domain="file" path="themes/lkg.strata-theme.json" />
+        <include domain="database" path="strata.db" />
+        <include domain="database" path="strata.db-wal" />
+        <include domain="database" path="strata.db-shm" />
+    </device-transfer>
+</data-extraction-rules>
