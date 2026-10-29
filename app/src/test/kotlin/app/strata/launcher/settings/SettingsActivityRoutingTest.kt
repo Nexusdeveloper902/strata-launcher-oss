@@ -28,9 +28,10 @@ class SettingsActivityRoutingTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
 
-    private fun launcherIntent() = Intent(Intent.ACTION_MAIN)
-        .addCategory(Intent.CATEGORY_LAUNCHER)
-        .setComponent(ComponentName(context, SettingsActivity::class.java))
+    private fun launcherIntent() =
+        Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setComponent(ComponentName(context, SettingsActivity::class.java))
 
     private fun start(intent: Intent): SettingsActivity {
         val activity = Robolectric.buildActivity(SettingsActivity::class.java, intent).setup().get()
@@ -61,8 +62,9 @@ class SettingsActivityRoutingTest {
     @Test
     fun tHome13_applicationPreferences_opensSettingsRoot() {
         TestAppGraph(onboardingStore = FakeOnboardingStore(initial = false)).install()
-        val intent = Intent(Intent.ACTION_APPLICATION_PREFERENCES)
-            .setComponent(ComponentName(context, SettingsActivity::class.java))
+        val intent =
+            Intent(Intent.ACTION_APPLICATION_PREFERENCES)
+                .setComponent(ComponentName(context, SettingsActivity::class.java))
         val activity = start(intent)
         compose.onNodeWithTag(SettingsTestTags.ROOT).assertExists()
         compose.onNodeWithTag(OnboardingTestTags.ROOT).assertDoesNotExist()

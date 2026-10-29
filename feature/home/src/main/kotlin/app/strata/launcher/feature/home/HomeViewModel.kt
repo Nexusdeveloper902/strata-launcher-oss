@@ -67,12 +67,20 @@ class HomeViewModel(
 
     fun onAction(action: HomeAction) {
         when (action) {
-            HomeAction.RefreshRole -> viewModelScope.launch {
-                isDefaultHome.value = withContext(ioDispatcher) { roleController.isDefaultHome() }
+            HomeAction.RefreshRole -> {
+                viewModelScope.launch {
+                    isDefaultHome.value = withContext(ioDispatcher) { roleController.isDefaultHome() }
+                }
             }
-            HomeAction.HomePressed -> effectChannel.trySend(HomeEffect.ReturnToRest)
-            HomeAction.CompleteOnboarding -> viewModelScope.launch {
-                onboardingStore.setOnboardingDone(true)
+
+            HomeAction.HomePressed -> {
+                effectChannel.trySend(HomeEffect.ReturnToRest)
+            }
+
+            HomeAction.CompleteOnboarding -> {
+                viewModelScope.launch {
+                    onboardingStore.setOnboardingDone(true)
+                }
             }
         }
     }

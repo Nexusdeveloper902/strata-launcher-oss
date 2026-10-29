@@ -30,9 +30,10 @@ class HomeActivityTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
 
-    private fun homeIntent() = Intent(Intent.ACTION_MAIN)
-        .addCategory(Intent.CATEGORY_HOME)
-        .setComponent(ComponentName(context, HomeActivity::class.java))
+    private fun homeIntent() =
+        Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_HOME)
+            .setComponent(ComponentName(context, HomeActivity::class.java))
 
     private fun start(intent: Intent = homeIntent()): HomeActivity {
         val activity = Robolectric.buildActivity(HomeActivity::class.java, intent).setup().get()
@@ -43,7 +44,10 @@ class HomeActivityTest {
     /** T-HOME-01 (M0: placeholder shown) — and no banner while Strata is the default home. */
     @Test
     fun tHome01_placeholderShown_noBannerWhenDefault() {
-        TestAppGraph(roleController = FakeRoleController(defaultHome = true), onboardingStore = FakeOnboardingStore(true)).install()
+        TestAppGraph(
+            roleController = FakeRoleController(defaultHome = true),
+            onboardingStore = FakeOnboardingStore(true),
+        ).install()
         start()
         compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
         compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER).assertDoesNotExist()
@@ -52,7 +56,10 @@ class HomeActivityTest {
     /** T-HOME-02 (banner stub): APP_MODE banner when the role is not held; the debug button is present. */
     @Test
     fun tHome02_appModeBannerWhenNotDefault() {
-        TestAppGraph(roleController = FakeRoleController(defaultHome = false), onboardingStore = FakeOnboardingStore(true)).install()
+        TestAppGraph(
+            roleController = FakeRoleController(defaultHome = false),
+            onboardingStore = FakeOnboardingStore(true),
+        ).install()
         start()
         compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
         compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER).assertExists()
@@ -76,11 +83,15 @@ class HomeActivityTest {
     /** T-SEC-03 (Robolectric half): arbitrary extras have no effect beyond showing home. */
     @Test
     fun tSec03_extrasIgnored() {
-        TestAppGraph(roleController = FakeRoleController(defaultHome = true), onboardingStore = FakeOnboardingStore(true)).install()
-        val hostile = homeIntent()
-            .putExtra(Intent.EXTRA_INTENT, Intent(Intent.ACTION_VIEW, Uri.parse("content://evil/x")))
-            .putExtra("component", "com.example/.Evil")
-            .putExtra("uri", "https://example.com")
+        TestAppGraph(
+            roleController = FakeRoleController(defaultHome = true),
+            onboardingStore = FakeOnboardingStore(true),
+        ).install()
+        val hostile =
+            homeIntent()
+                .putExtra(Intent.EXTRA_INTENT, Intent(Intent.ACTION_VIEW, Uri.parse("content://evil/x")))
+                .putExtra("component", "com.example/.Evil")
+                .putExtra("uri", "https://example.com")
         val activity = start(hostile)
         compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
         assertThat(shadowOf(activity).nextStartedActivity).isNull()

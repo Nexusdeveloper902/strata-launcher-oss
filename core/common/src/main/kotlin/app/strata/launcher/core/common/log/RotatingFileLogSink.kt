@@ -19,9 +19,10 @@ class RotatingFileLogSink(
     private val directory: () -> File,
     private val maxBytes: Long = DEFAULT_MAX_BYTES,
     private val fileCount: Int = DEFAULT_FILE_COUNT,
-    private val executor: Executor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "strata-log").apply { isDaemon = true }
-    },
+    private val executor: Executor =
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "strata-log").apply { isDaemon = true }
+        },
 ) : LogSink {
     init {
         require(fileCount >= 1) { "fileCount must be at least 1" }
@@ -56,12 +57,20 @@ class RotatingFileLogSink(
         fun fileName(index: Int): String = "strata-$index.log"
 
         internal fun format(entry: LogEntry): String {
-            val time = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT)
-                .apply { timeZone = TimeZone.getTimeZone("UTC") }
-                .format(Date(entry.timeMillis))
-            val sb = StringBuilder()
-                .append(time).append(' ').append(entry.level.letter).append('/')
-                .append(entry.tag).append(": ").append(entry.message).append('\n')
+            val time =
+                SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT)
+                    .apply { timeZone = TimeZone.getTimeZone("UTC") }
+                    .format(Date(entry.timeMillis))
+            val sb =
+                StringBuilder()
+                    .append(time)
+                    .append(' ')
+                    .append(entry.level.letter)
+                    .append('/')
+                    .append(entry.tag)
+                    .append(": ")
+                    .append(entry.message)
+                    .append('\n')
             entry.throwable?.let { t ->
                 val sw = StringWriter()
                 t.printStackTrace(PrintWriter(sw))

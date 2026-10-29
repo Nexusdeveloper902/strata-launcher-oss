@@ -7,11 +7,12 @@ import app.strata.launcher.core.platformapi.system.SystemIntent
 class FakeRoleController(
     @Volatile var defaultHome: Boolean = false,
     var request: SystemIntent = SystemIntent.RequestHomeRole,
-    var fallbacks: List<SystemIntent> = listOf(
-        SystemIntent.HomeSettings,
-        SystemIntent.DefaultAppsSettings,
-        SystemIntent.Settings,
-    ),
+    var fallbacks: List<SystemIntent> =
+        listOf(
+            SystemIntent.HomeSettings,
+            SystemIntent.DefaultAppsSettings,
+            SystemIntent.Settings,
+        ),
 ) : RoleController {
     var isDefaultHomeCalls: Int = 0
         private set

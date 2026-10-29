@@ -17,17 +17,18 @@ import app.strata.launcher.core.platformapi.system.SystemIntent
 class AndroidRoleController(context: Context) : RoleController {
     private val appContext = context.applicationContext
 
-    override fun isDefaultHome(): Boolean = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roles = appContext.getSystemService(RoleManager::class.java)
-            roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME) && roles.isRoleHeld(RoleManager.ROLE_HOME)
-        } else {
-            preferredHomePackage() == appContext.packageName
+    override fun isDefaultHome(): Boolean =
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val roles = appContext.getSystemService(RoleManager::class.java)
+                roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME) && roles.isRoleHeld(RoleManager.ROLE_HOME)
+            } else {
+                preferredHomePackage() == appContext.packageName
+            }
+        } catch (e: RuntimeException) {
+            // SecurityException / IllegalStateException while the user is locked: treat as "not default".
+            false
         }
-    } catch (e: RuntimeException) {
-        // SecurityException / IllegalStateException while the user is locked: treat as "not default".
-        false
-    }
 
     override fun requestIntent(): SystemIntent =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roleAvailable()) {
@@ -39,11 +40,12 @@ class AndroidRoleController(context: Context) : RoleController {
     override fun fallbackIntents(): List<SystemIntent> = FALLBACK_CHAIN
 
     @RequiresApi(Build.VERSION_CODES.Q)
-    private fun roleAvailable(): Boolean = try {
-        appContext.getSystemService(RoleManager::class.java)?.isRoleAvailable(RoleManager.ROLE_HOME) == true
-    } catch (e: RuntimeException) {
-        false
-    }
+    private fun roleAvailable(): Boolean =
+        try {
+            appContext.getSystemService(RoleManager::class.java)?.isRoleAvailable(RoleManager.ROLE_HOME) == true
+        } catch (e: RuntimeException) {
+            false
+        }
 
     private fun preferredHomePackage(): String? {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
@@ -55,25 +57,37 @@ class AndroidRoleController(context: Context) : RoleController {
 
     companion object {
         /** ANDROID_PLATFORM §2: home settings → default apps → settings. */
-        val FALLBACK_CHAIN: List<SystemIntent> = listOf(
-            SystemIntent.HomeSettings,
-            SystemIntent.DefaultAppsSettings,
-            SystemIntent.Settings,
-        )
+        val FALLBACK_CHAIN: List<SystemIntent> =
+            listOf(
+                SystemIntent.HomeSettings,
+                SystemIntent.DefaultAppsSettings,
+                SystemIntent.Settings,
+            )
     }
 }
 
 /** Builds the framework [Intent] for a [SystemIntent]. Returns null when it cannot exist on this API level. */
 object SystemIntentFactory {
-    fun create(context: Context, intent: SystemIntent): Intent? = when (intent) {
-        SystemIntent.RequestHomeRole ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.getSystemService(RoleManager::class.java)?.createRequestRoleIntent(RoleManager.ROLE_HOME)
-            } else {
-                null
+    fun create(context: Context, intent: SystemIntent): Intent? =
+        when (intent) {
+            SystemIntent.RequestHomeRole -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    context.getSystemService(RoleManager::class.java)?.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                } else {
+                    null
+                }
             }
-        SystemIntent.HomeSettings -> Intent(Settings.ACTION_HOME_SETTINGS)
-        SystemIntent.DefaultAppsSettings -> Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-        SystemIntent.Settings -> Intent(Settings.ACTION_SETTINGS)
-    }
+
+            SystemIntent.HomeSettings -> {
+                Intent(Settings.ACTION_HOME_SETTINGS)
+            }
+
+            SystemIntent.DefaultAppsSettings -> {
+                Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+            }
+
+            SystemIntent.Settings -> {
+                Intent(Settings.ACTION_SETTINGS)
+            }
+        }
 }

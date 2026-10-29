@@ -1,0 +1,25 @@
+# Runtime artifacts allowed on release runtime classpaths (T-CI-02). Source of truth: spec/ARCHITECTURE.md section 15.
+# `group:name` or `group:*`. Anything not listed (and anything in forbidden-dependencies.txt) fails checkDependencies.
+# Test-only and build-only tools (section 15) never reach a runtime classpath and are not listed.
+
+# Kotlin stdlib and kotlinx-coroutines (core, android)
+org.jetbrains.kotlin:*
+org.jetbrains.kotlinx:kotlinx-coroutines-core
+org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm
+org.jetbrains.kotlinx:kotlinx-coroutines-android
+org.jetbrains.kotlinx:kotlinx-coroutines-bom
+org.jetbrains:annotations
+# Pulled by androidx.savedstate (no JSON or network adapter; kotlinx-serialization-json is deliberately absent)
+org.jetbrains.kotlinx:kotlinx-serialization-core
+org.jetbrains.kotlinx:kotlinx-serialization-core-jvm
+org.jetbrains.kotlinx:kotlinx-serialization-bom
+# Okio is a file/stream I/O library pulled by datastore-core (section 15). It has no network code; OkHttp is forbidden.
+com.squareup.okio:okio
+com.squareup.okio:okio-jvm
+# Transitive helpers of AndroidX
+org.jspecify:jspecify
+com.google.guava:listenablefuture
+
+# AndroidX: core, activity, lifecycle, Compose (BOM, ui, foundation, material3), DataStore, startup,
+# profileinstaller and their transitive AndroidX artifacts. Network-capable AndroidX artifacts do not exist.
+androidx.*

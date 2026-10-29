@@ -41,15 +41,16 @@ class HomeActivity : ComponentActivity() {
 
     private var roleRequestStartedAt = 0L
 
-    private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val elapsed = SystemClock.elapsedRealtime() - roleRequestStartedAt
-        appGraph.logger.i(TAG, "role request result=${result.resultCode} after ${elapsed}ms")
-        if (result.resultCode != Activity.RESULT_OK && elapsed < SILENT_REFUSAL_MS) {
-            // "Don't ask again" refuses at once without UI (ANDROID_PLATFORM §2): go to settings instead of looping.
-            launchFallback()
+    private val roleRequest =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val elapsed = SystemClock.elapsedRealtime() - roleRequestStartedAt
+            appGraph.logger.i(TAG, "role request result=${result.resultCode} after ${elapsed}ms")
+            if (result.resultCode != Activity.RESULT_OK && elapsed < SILENT_REFUSAL_MS) {
+                // "Don't ask again" refuses at once without UI (ANDROID_PLATFORM §2): go to settings instead of looping.
+                launchFallback()
+            }
+            viewModel.onAction(HomeAction.RefreshRole)
         }
-        viewModel.onAction(HomeAction.RefreshRole)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -102,7 +103,10 @@ class HomeActivity : ComponentActivity() {
                     launchFallback()
                 }
             }
-            else -> launchFallback()
+
+            else -> {
+                launchFallback()
+            }
         }
     }
 

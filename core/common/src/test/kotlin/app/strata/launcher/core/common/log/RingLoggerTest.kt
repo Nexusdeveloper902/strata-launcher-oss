@@ -38,7 +38,8 @@ class RingLoggerTest {
     @Test
     fun forwardsToSinksAndFiltersByMinLevel() {
         val seen = mutableListOf<LogEntry>()
-        val logger = RingLogger(capacity = 10, clock = clock, sinks = listOf(LogSink { seen += it }), minLevel = LogLevel.WARN)
+        val logger =
+            RingLogger(capacity = 10, clock = clock, sinks = listOf(LogSink { seen += it }), minLevel = LogLevel.WARN)
         logger.d("t", "debug")
         logger.e("t", "error")
         assertThat(seen.map { it.message }).containsExactly("error")

@@ -10,10 +10,11 @@ data class AppDispatchers(
     val default: CoroutineDispatcher,
 ) {
     companion object {
-        fun standard(): AppDispatchers = AppDispatchers(
-            main = Dispatchers.Main,
-            io = Dispatchers.IO,
-            default = Dispatchers.Default,
-        )
+        fun standard(): AppDispatchers =
+            AppDispatchers(
+                main = Dispatchers.Main,
+                io = Dispatchers.IO,
+                default = Dispatchers.Default,
+            )
     }
 }

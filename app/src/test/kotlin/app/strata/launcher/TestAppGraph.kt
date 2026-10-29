@@ -16,15 +16,17 @@ class TestAppGraph(
     override val onboardingStore: FakeOnboardingStore = FakeOnboardingStore(),
     override val logger: RecordingLogger = RecordingLogger(),
 ) : AppGraph {
-    override val dispatchers = AppDispatchers(
-        main = Dispatchers.Main,
-        io = Dispatchers.Unconfined,
-        default = Dispatchers.Unconfined,
-    )
+    override val dispatchers =
+        AppDispatchers(
+            main = Dispatchers.Main,
+            io = Dispatchers.Unconfined,
+            default = Dispatchers.Unconfined,
+        )
     override val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 
     /** Installs this graph into the Robolectric application before any activity starts. */
-    fun install(): TestAppGraph = apply {
-        ApplicationProvider.getApplicationContext<StrataApplication>().graph = this
-    }
+    fun install(): TestAppGraph =
+        apply {
+            ApplicationProvider.getApplicationContext<StrataApplication>().graph = this
+        }
 }

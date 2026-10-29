@@ -11,16 +11,19 @@ import android.os.StrictMode
 object StrictModeSetup {
     fun install() {
         StrictMode.setThreadPolicy(
-            StrictMode.ThreadPolicy.Builder()
+            StrictMode.ThreadPolicy
+                .Builder()
                 .detectAll()
                 .penaltyLog()
                 .penaltyDeath()
                 .build(),
         )
-        val vm = StrictMode.VmPolicy.Builder()
-            .detectLeakedClosableObjects()
-            .detectContentUriWithoutPermission()
-            .penaltyLog()
+        val vm =
+            StrictMode.VmPolicy
+                .Builder()
+                .detectLeakedClosableObjects()
+                .detectContentUriWithoutPermission()
+                .penaltyLog()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) vm.detectUnsafeIntentLaunch()
         StrictMode.setVmPolicy(vm.build())
     }

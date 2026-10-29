@@ -24,13 +24,19 @@ object OnboardingTestTags {
 /** M0 stand-in for the first-run flow (FR-ONBOARD-01, full flow in M6). "Continue" sets `onboarding_done`. */
 @Composable
 fun OnboardingStubScreen(onContinue: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize().testTag(OnboardingTestTags.ROOT)) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = modifier.fillMaxSize().testTag(OnboardingTestTags.ROOT),
+    ) {
         Column(
             modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(text = stringResource(R.string.onboarding_welcome_title), style = MaterialTheme.typography.headlineMedium)
+            Text(
+                text = stringResource(R.string.onboarding_welcome_title),
+                style = MaterialTheme.typography.headlineMedium,
+            )
             Text(text = stringResource(R.string.onboarding_welcome_body), style = MaterialTheme.typography.bodyLarge)
             Button(onClick = onContinue, modifier = Modifier.testTag(OnboardingTestTags.CONTINUE)) {
                 Text(text = stringResource(R.string.onboarding_continue))

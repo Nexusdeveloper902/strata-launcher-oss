@@ -35,9 +35,18 @@ gradlePlugin {
             id = "strata.android.compose"
             implementationClass = "AndroidComposeConventionPlugin"
         }
+        register("rootGates") {
+            id = "strata.gates"
+            implementationClass = "RootGatesConventionPlugin"
+        }
         register("jvmLibrary") {
             id = "strata.jvm.library"
             implementationClass = "JvmLibraryConventionPlugin"
         }
     }
+}
+
+dependencies {
+    testImplementation(libs.junit4)
+    testImplementation(libs.truth)
 }

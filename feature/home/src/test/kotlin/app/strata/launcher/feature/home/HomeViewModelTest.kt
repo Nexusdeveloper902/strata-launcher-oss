@@ -42,22 +42,24 @@ class HomeViewModelTest {
 
     /** D-008 / T-ONBOARD-09 (stub): onboarding is the first layer until Continue sets the flag. */
     @Test
-    fun onboardingLayerUntilCompleted() = runTest(dispatcher) {
-        store.setOnboardingDone(false)
-        val vm = viewModel()
-        assertThat(vm.state.value.showOnboarding).isTrue()
-        vm.onAction(HomeAction.CompleteOnboarding)
-        assertThat(store.value).isTrue()
-        assertThat(vm.state.value.showOnboarding).isFalse()
-    }
+    fun onboardingLayerUntilCompleted() =
+        runTest(dispatcher) {
+            store.setOnboardingDone(false)
+            val vm = viewModel()
+            assertThat(vm.state.value.showOnboarding).isTrue()
+            vm.onAction(HomeAction.CompleteOnboarding)
+            assertThat(store.value).isTrue()
+            assertThat(vm.state.value.showOnboarding).isFalse()
+        }
 
     /** ANDROID_PLATFORM §1: Home pressed while in front → return to rest. */
     @Test
-    fun homePressedEmitsReturnToRest() = runTest(dispatcher) {
-        val vm = viewModel()
-        vm.effects.test {
-            vm.onAction(HomeAction.HomePressed)
-            assertThat(awaitItem()).isEqualTo(HomeEffect.ReturnToRest)
+    fun homePressedEmitsReturnToRest() =
+        runTest(dispatcher) {
+            val vm = viewModel()
+            vm.effects.test {
+                vm.onAction(HomeAction.HomePressed)
+                assertThat(awaitItem()).isEqualTo(HomeEffect.ReturnToRest)
+            }
         }
-    }
 }

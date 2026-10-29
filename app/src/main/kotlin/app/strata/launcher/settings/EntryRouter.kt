@@ -22,8 +22,9 @@ object EntryRouter {
             EntryKind.SETTINGS
         }
 
-    fun route(kind: EntryKind, onboardingDone: Boolean): EntryRoute = when (kind) {
-        EntryKind.SETTINGS -> EntryRoute.SETTINGS_ROOT
-        EntryKind.LAUNCHER_ICON -> if (onboardingDone) EntryRoute.HOME else EntryRoute.ONBOARDING
-    }
+    fun route(kind: EntryKind, onboardingDone: Boolean): EntryRoute =
+        when (kind) {
+            EntryKind.SETTINGS -> EntryRoute.SETTINGS_ROOT
+            EntryKind.LAUNCHER_ICON -> if (onboardingDone) EntryRoute.HOME else EntryRoute.ONBOARDING
+        }
 }

@@ -22,7 +22,10 @@ object SettingsTestTags {
 /** Placeholder settings root; `:feature:settings` replaces it in M8. */
 @Composable
 fun SettingsRootStub(modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize().testTag(SettingsTestTags.ROOT)) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = modifier.fillMaxSize().testTag(SettingsTestTags.ROOT),
+    ) {
         Column(
             modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

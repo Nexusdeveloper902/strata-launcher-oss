@@ -25,10 +25,11 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     override val logger: Logger by lazy {
         RingLogger(
-            sinks = listOf(
-                RotatingFileLogSink(directory = { File(appContext.noBackupFilesDir, "logs") }),
-                LogcatSink(minLevel = if (BuildConfig.DEBUG) LogLevel.DEBUG else LogLevel.WARN),
-            ),
+            sinks =
+                listOf(
+                    RotatingFileLogSink(directory = { File(appContext.noBackupFilesDir, "logs") }),
+                    LogcatSink(minLevel = if (BuildConfig.DEBUG) LogLevel.DEBUG else LogLevel.WARN),
+                ),
         )
     }
 

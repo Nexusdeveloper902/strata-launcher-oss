@@ -35,10 +35,11 @@ class RingLogger(
     }
 
     /** Entries currently held, oldest first. */
-    fun snapshot(): List<LogEntry> = synchronized(lock) {
-        val start = (next - size + capacity) % capacity
-        List(size) { i -> checkNotNull(buffer[(start + i) % capacity]) }
-    }
+    fun snapshot(): List<LogEntry> =
+        synchronized(lock) {
+            val start = (next - size + capacity) % capacity
+            List(size) { i -> checkNotNull(buffer[(start + i) % capacity]) }
+        }
 
     companion object {
         const val DEFAULT_CAPACITY = 2_000

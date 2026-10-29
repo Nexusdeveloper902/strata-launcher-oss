@@ -8,7 +8,9 @@ import org.junit.Test
 class HomeIntentsTest {
     @Test
     fun mainHomeIsHomePress() {
-        assertThat(HomeIntents.isHomePress(Intent.ACTION_MAIN, setOf(Intent.CATEGORY_HOME, Intent.CATEGORY_DEFAULT))).isTrue()
+        assertThat(
+            HomeIntents.isHomePress(Intent.ACTION_MAIN, setOf(Intent.CATEGORY_HOME, Intent.CATEGORY_DEFAULT)),
+        ).isTrue()
     }
 
     @Test
