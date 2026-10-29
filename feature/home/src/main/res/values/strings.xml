@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_placeholder">Strata</string>
+    <string name="home_banner_not_default">Strata is not your default home app. The Home key opens another launcher.</string>
+    <string name="home_banner_set_default">Set as default</string>
+</resources>
