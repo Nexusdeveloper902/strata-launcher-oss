@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g
+
+jobs:
+  build:
+    name: Build (debug APK, androidTest APK, benchmark)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Assemble
+        run: ./gradlew assembleDebug assembleDebugAndroidTest :app:assembleBenchmark :benchmark:assemble --stacktrace
+      - name: Upload debug APK (sideload)
+        uses: actions/upload-artifact@v4
+        with:
+          name: strata-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  unit:
+    name: Unit and Robolectric tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests (JVM, Robolectric, lint rules) and build-logic gate tests
+        run: ./gradlew testDebugUnitTest :build-logic:convention:test --stacktrace
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
+
+  lint:
+    name: Android Lint (T-CI-04)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew lintDebug --stacktrace
+      - name: Upload lint reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: "**/build/reports/lint-results-debug.*"
+          retention-days: 7
+
+  ktlint:
+    name: ktlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew ktlintCheck --stacktrace
+
+  static-gates:
+    name: Static gates (permissions, dependencies, module graph, entitlements)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: T-CI-01 checkPermissions, T-CI-02 checkDependencies, T-CI-03 checkModuleGraph, T-CI-08 checkEntitlements
+        run: ./gradlew checkPermissions checkDependencies checkModuleGraph checkEntitlements --stacktrace
+
+  gmd-smoke:
+    name: GMD smoke (API ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            task: api26DebugAndroidTest
+          - api: 34
+            task: api34DebugAndroidTest
+          - api: 36
+            task: api36DebugAndroidTest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Cache emulator system images
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/avd/gradle-managed
+          key: gmd-${{ runner.os }}-${{ matrix.api }}-${{ hashFiles('build-logic/convention/src/main/kotlin/AndroidConfig.kt') }}
+      - name: Smoke test on the managed device (retries only infrastructure failures)
+        run: tools/ci/run-gmd.sh ${{ matrix.task }}
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmd-reports-api${{ matrix.api }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 7
