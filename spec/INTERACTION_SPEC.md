@@ -4,8 +4,9 @@ Task T-05 · Owner: agent:product · 2026-10-29 · Status: review
 Requirement IDs refer to `spec/PRODUCT_SPEC.md` and `spec/THEME_SYSTEM.md`. Platform
 details are in `spec/ANDROID_PLATFORM.md` (§n refers to that file unless prefixed).
 
-**Labels.** `Corroborated` = the original is documented/declared to behave this way
-(evidence given); `Proposed` = our design. **Every timing and threshold is Proposed**:
+**Labels** follow `research/RESEARCH_METHOD.md` §1: `Corroborated` = at least two independent
+source classes show the original behaves this way (e.g. APK + vendor docs); `Inferred` = one
+source class only (APK-only, vendor-docs-only or secondary-only); `Proposed` = our design. **Every timing and threshold is Proposed**:
 the original was never run (U-002). Where a system value exists (`ViewConfiguration`),
 we use it instead of a constant.
 
@@ -22,15 +23,18 @@ we use it instead of a constant.
 | S-FAVEDIT | Edit favourites | full-screen mode | reorder/remove with handles | FR-FAV-02 |
 | S-SET | Settings (+ sub-pages: Hidden apps, Privacy & permissions, Backup, About/Licences) | stack of screens | configuration | FR-SET-* , FR-BACKUP-* |
 | S-THEME | Theme library + editor + import summary | stack | THEME_SYSTEM §10.4, §13 | FR-THEME-* |
-| S-ONB | Onboarding (Welcome, Pick favourites, Set default, Done) | stack, first run | FR-ONBOARD-* |
+| S-ONB | Onboarding (Welcome, Pick favourites, Set default, Done) | stack, first run; hosted by the entry activity or as the first layer of the home activity (D-008) | FR-ONBOARD-* |
 | S-WPICK | Widget picker | full-screen | choose a provider | FR-WIDGET-02 |
 | S-ICON | Icon chooser (per app) | full-screen | pick pack icon / reset | FR-APPS-06 |
 | S-DISC | Disclosure dialog (notifications, contacts, lock) | dialog | consent before a system grant | FR-NOTIF-01, FR-GEST-03, FR-SEARCH-06 |
 
 ### 1.1 Navigation graph
 ```
-                    ┌──────────── S-ONB (first run only) ───────────┐
-                    ▼                                               │
+  Strata icon in another launcher ──► ENTRY (SettingsActivity) ──onboarding not done──► S-ONB ──► S-HOME
+                                         └──onboarding done──► S-HOME (explicit intent; APP_MODE if not default)
+  Home key / system starts home ──► HomeActivity ──onboarding not done──► S-ONB as first layer ──► S-HOME
+  APPLICATION_PREFERENCES (system App info gear) ──► S-SET directly (no routing)
+
   Home key ──► S-HOME ──swipe up / pill / key──► S-SEARCH ──launch──► (app)
                 │  │  └─index touch / "All apps"──► S-LIST ──tap──► (app)
                 │  │                                 │  └─field tap──► S-SEARCH
@@ -47,6 +51,12 @@ At most one modal at a time. Opening a new layer from a modal closes the modal f
 Format: steps → outcome; failure branches. Each journey lists its requirements, label and evidence.
 
 **J-01 First run and set default** (FR-ONBOARD-01…03; Corroborated APK-033, SEC-002; flow Proposed)
+0. Entry (D-008): first run starts from whichever entry point the user reaches first. From the
+   launcher icon, the entry activity hosts the flow and, on Done or "Not now", starts the home
+   activity with an explicit intent. If the system starts the home activity first (the user
+   picked Strata as home in system settings), the home activity shows the same flow as its first
+   layer; step 3 then shows "Strata is your home app" and needs no action. `onboarding_done`
+   (ARCHITECTURE §4.2) is set when the flow ends, by any path.
 1. Welcome: one screen with the privacy promise and "Continue".
 2. Pick favourites: alphabetical checklist with search, up to 12. "Skip" is allowed.
 3. Set default: explains that Home will open Strata and how to switch back. "Set as default" →
@@ -55,7 +65,7 @@ Format: steps → outcome; failure branches. Each journey lists its requirements
    - RESULT_OK and `isRoleHeld` → Done → S-HOME.
    - RESULT_CANCELED (user denied) → card "Strata isn't your home app yet" with [Try again]
      [Open settings] [Not now]. A second cancel within 2 s without UI means don't-ask-again
-     (Inferred, ANDROID_PLATFORM §2). "Try again" then opens `ACTION_HOME_SETTINGS` directly.
+     (Proposed heuristic, based on the AOSP behaviour in ANDROID_PLATFORM §2). "Try again" then opens `ACTION_HOME_SETTINGS` directly.
    - OEM failure (OK but role not held, or the settings path made no change, or intent not
      found) → OEM help card (generic steps; HyperOS 2+ specific note, PUB-076) + [Retry]
      [Not now]. Every settings intent sits in a try/catch and falls through
@@ -67,7 +77,7 @@ Format: steps → outcome; failure branches. Each journey lists its requirements
 `startMainActivity` with row bounds → the system open animation. The layer state is kept for
 FR-HOME-07. Failures, see §8.
 
-**J-03 Find an app with the alphabet index** (FR-LIST-02; Corroborated PUB-001, PUB-012)
+**J-03 Find an app with the alphabet index** (FR-LIST-02; Inferred PUB-001, PUB-012)
 1. Touch the index (home or list). If on home, S-LIST slides in and jumps to the letter
    under the finger.
 2. Drag: each letter change → list jumps (no smooth scroll), bubble updates, one haptic
@@ -76,23 +86,23 @@ FR-HOME-07. Failures, see §8.
    expanded for 1.5 s.
 4. Tap the app. Alternative: TalkBack "Jump to letter" (FR-A11Y-02).
 
-**J-04 Search and launch with Enter** (FR-SEARCH-01…04; Corroborated APK-028; Proposed keys)
+**J-04 Search and launch with Enter** (FR-SEARCH-01…04; Inferred APK-028; Proposed keys)
 Swipe up → S-SEARCH, IME up → type "sp" → results update on every keystroke → the top result
 has a selection outline → IME Go/Enter → launch → on return, search is closed and the query
 cleared. Empty results → §8 "No results".
 
-**J-05 Hide / unhide** (FR-APPS-04; Corroborated APK-027)
+**J-05 Hide / unhide** (FR-APPS-04; Inferred APK-027)
 Long-press → S-SHEET → "Hide from list" → the sheet closes, the row collapses (200 ms), and a
 snackbar "Hidden. [Undo]" shows for 5 s. Unhide: Settings → Hidden apps → toggle, or S-SEARCH
 (if hidden apps are shown) → long-press → "Show in list".
 
-**J-06 Rename** (FR-APPS-05; Corroborated PUB-018)
+**J-06 Rename** (FR-APPS-05; Inferred PUB-018)
 S-SHEET → tap the name in the header (or "Rename") → inline field, preselected, IME up → Done
 saves (empty = reset). An empty or whitespace-only name is not saved. A name with a new first
 letter moves the row to its new section, and the list keeps the renamed row in view.
 "Reset name" appears when a custom name exists.
 
-**J-07 Reorder favourites** (FR-FAV-02; Corroborated PUB-007)
+**J-07 Reorder favourites** (FR-FAV-02; Inferred PUB-007)
 Long-press a favourite → S-SHEET → "Edit favourites" (or S-HMENU) → S-FAVEDIT: rows with drag
 handles and remove buttons. Drag starts on the handle immediately, or anywhere on the row
 after a long-press. Done/back saves. A11y: actions "Move up / down / to top / Remove".
@@ -112,10 +122,10 @@ Settings → Notifications → "Show badges" → S-DISC (what is read, kept in m
 stored or sent) → [Continue] opens the system listener detail page; [Cancel] leaves the toggle
 off. On return: if granted, toggle on and badges appear. If not granted, toggle off with a
 "Not allowed" note and an [Open settings] action. Sideloaded on 13+ with a restricted-setting
-block: explain the "Allow restricted settings" step (Corroborated PUB-033). Revoked later →
+block: explain the "Allow restricted settings" step (Inferred PUB-033). Revoked later →
 badges vanish on next resume. No nagging.
 
-**J-10 Add / remove a widget** (FR-WIDGET-01…04; Corroborated PUB-023)
+**J-10 Add / remove a widget** (FR-WIDGET-01…04; Inferred PUB-023)
 Long-press empty → S-HMENU → Widgets → S-WPICK (search + grouped list) → tap a widget →
 bind (silent if allowed, else the system dialog) → configure activity if needed → placed in
 the header → "Replace clock?" choice on first add. Cancel at any step → ID freed + snackbar
@@ -143,7 +153,8 @@ disappears on callback. Cancel → no change. Uninstall Strata itself → FR-SET
 | SEARCH(origin) | §4 triggers | origin (back, Esc, empty-field back), app launch → origin reset | query saved across config change |
 | SHEET / HMENU | long-press | previous state | only one modal |
 | FAVEDIT | sheet/menu | HOME_REST | Home key = Done (saves) |
-| APP_MODE (not default) | role not held | — | same UI + banner; Home key is the system's |
+| ONBOARDING | first start of the home activity while `onboarding_done` is false (D-008) | HOME_REST | full-screen first layer; Back leaves it only after the flow ends |
+| APP_MODE (not default) | role not held (reached from the launcher icon via the entry activity, D-008) | — | same UI + banner; Home key is the system's |
 Home key from any state → HOME_REST (modal closed, IME hidden, query cleared). Locking the
 screen while in SEARCH → HOME_REST on next resume (Proposed). Returning from an app
 ≥ 3 s later → HOME_REST (FR-HOME-07).
@@ -154,18 +165,18 @@ screen while in SEARCH → HOME_REST on next resume (Proposed). Returning from a
 ### 4.1 Gesture table
 | Gesture | Where | Result | Threshold (Proposed) | Alternative | Label · Evidence |
 |---|---|---|---|---|---|
-| Tap | row, favourite | launch | system tap | a11y click, Enter | Corroborated |
-| Tap | clock / date | clock app / calendar app | — | a11y click | Corroborated PUB-008 |
+| Tap | row, favourite | launch | system tap | a11y click, Enter | Proposed |
+| Tap | clock / date | clock app / calendar app | — | a11y click | Inferred PUB-008 |
 | Tap | search pill | open search | — | key, a11y | Proposed |
-| Long press | app (any surface) | S-SHEET + `LONG_PRESS` haptic | `ViewConfiguration.getLongPressTimeout()` | a11y actions, Shift+F10 / Menu key | Corroborated PUB-008 |
+| Long press | app (any surface) | S-SHEET + `LONG_PRESS` haptic | `ViewConfiguration.getLongPressTimeout()` | a11y actions, Shift+F10 / Menu key | Inferred PUB-008 |
 | Long press | empty home / widget area | S-HMENU / widget menu | same | a11y action on home root | Proposed |
 | Swipe up | home outside widget | open search | ≥ 48 dp travel and angle within 30° of vertical; or a fling ≥ 1 000 dp/s | pill, a11y "Search" | Corroborated APK-028, PUB-013 |
 | Swipe down | home | None (default) / notifications (opt-in, FR-GEST-04) | ≥ 48 dp | system top-edge pull | Proposed (P-8) |
 | Swipe down | list at top / search with empty results | close to home | over-scroll ≥ 64 dp | Back | Proposed |
-| Vertical drag | alphabet index | scrub sections, tick per letter | touch-down inside the index rect | "Jump to letter" | Corroborated PUB-001, PUB-012 |
-| Double tap | empty home area | lock screen (opt-in) | `getDoubleTapTimeout()` | none needed (power key) | Corroborated capability APK-007; location Proposed |
+| Vertical drag | alphabet index | scrub sections, tick per letter | touch-down inside the index rect | "Jump to letter" | Inferred PUB-001, PUB-012 |
+| Double tap | empty home area | lock screen (opt-in) | `getDoubleTapTimeout()` | none needed (power key) | Inferred capability APK-007; location Proposed |
 | Horizontal swipe | rows | **not used** | — | — | Proposed (differs from PUB-008) |
-| Drag | handle in S-FAVEDIT | reorder | immediate | a11y move actions | Corroborated PUB-007 |
+| Drag | handle in S-FAVEDIT | reorder | immediate | a11y move actions | Inferred PUB-007 |
 
 ### 4.2 Conflict rules (Proposed; DOC-055, DOC-056, DOC-057)
 1. **System edges win.** No home gesture starts in the left/right `systemGestures` inset except
@@ -183,7 +194,7 @@ screen while in SEARCH → HOME_REST on next resume (Proposed). Returning from a
 5. **Widgets own their touches.** Gestures that start inside the widget area go to the widget.
    Home long-press is suppressed while the widget scrolls (`requestDisallowInterceptTouchEvent`).
 6. **Double-tap delay.** Double-tap is listened for only on empty space, so taps on apps are never
-   delayed. Corroborated reasoning (PUB-034 declines double-tap on apps).
+   delayed. Inferred reasoning (PUB-034 declines double-tap on apps).
 7. **Three-button nav.** Same rules. There are no edge gestures to protect, so the index keeps
    its full height.
 
@@ -203,10 +214,10 @@ FR-THEME-17). At most 1 tick per 16 ms. A fast scrub that skips letters ticks on
 | IME options | `ImeAction.Go`, autocorrect off, no personalised learning (`IME_FLAG_NO_PERSONALIZED_LEARNING`), single line | Proposed |
 | Enter / Go | launch the selected result (default: top) | Proposed |
 | Results scrolled by touch | hide the IME; the query stays; tap the field to show it again | Proposed |
-| Hardware keyboard on home/list | printable key → open search with that character; Tab → open S-LIST / move focus; Esc → back; Ctrl+, → Settings; Up/Down → move selection in results; Menu / Shift+F10 → sheet for the focused app | Corroborated PUB-054 (letters start search, Esc, Tab); Proposed (the rest) |
+| Hardware keyboard on home/list | printable key → open search with that character; Tab → open S-LIST / move focus; Esc → back; Ctrl+, → Settings; Up/Down → move selection in results; Menu / Shift+F10 → sheet for the focused app | Inferred PUB-054 (letters start search, Esc, Tab); Proposed (the rest) |
 | Digit keys | typed into the query (we do **not** use "digit n launches nth result") | Proposed (differs from PUB-054) |
 | Dismissal | Back with a non-empty query: first back hides the IME, second closes search. Back with an empty query closes search. Home key closes search and clears it. | Proposed |
-| Resume | home resumes with the IME hidden (`stateAlwaysHidden`) | Corroborated APK-003 |
+| Resume | home resumes with the IME hidden (`stateAlwaysHidden`) | Proposed (our manifest choice) |
 | IME insets | results list bottom-padded by `WindowInsets.ime`; search pill rides above the IME (animated on 30+, jumps on 26–29) | Proposed |
 
 ---
@@ -219,7 +230,7 @@ FR-THEME-17). At most 1 tick per 16 ms. A fast scrub that skips letters ticks on
   system handles back (no "press again to exit").
 - **Home key while in front** (`onNewIntent` with CATEGORY_HOME): close modal → close search
   (clear) → close list → scroll favourites to start; then optionally open search
-  (FR-HOME-05 setting). Corroborated PUB-051 (reset); Proposed (order).
+  (FR-HOME-05 setting). Inferred PUB-051 (reset); Proposed (order).
 
 ---
 
@@ -241,17 +252,18 @@ FR-THEME-17). At most 1 tick per 16 ms. A fast scrub that skips letters ticks on
 | No search results | "No apps match "q"" + rows: store search, (v1.x) web search; contact hint if contacts are off and the query looks like a name (once) | Proposed; APK-028 |
 | Empty list (all hidden, or fresh profile) | "All apps are hidden" + [Manage hidden apps] | Proposed |
 | No favourites | home shows "Add favourites" button → picker | Proposed |
-| App removed while shown | the row animates out on callback. If it is tapped first, the launch fails → "App isn't available", then reconcile. An open sheet closes with a snackbar | Corroborated APK-027 (message); Proposed |
-| Launch failure (exception, disabled, DPC) | snackbar "Couldn't open <label>" + [App info]; never crash | Corroborated APK-027 |
+| App removed while shown | the row animates out on callback. If it is tapped first, the launch fails → "Can't open this app right now", then reconcile. An open sheet closes with a snackbar | Proposed |
+| Launch failure (exception, disabled, DPC) | snackbar "Couldn't open <label>" + [App info]; never crash | Proposed (wording); Inferred capability (APK-027) |
 | Icon missing / fails to load | generated monogram tile (first grapheme of the label on `surface`, `textSecondary`) | Proposed |
-| Icon pack missing | THEME_SYSTEM FR-THEME-25 notice | Corroborated APK-024 |
+| Icon pack missing | THEME_SYSTEM FR-THEME-25 notice | Inferred APK-024 |
 | Duplicate labels | secondary line (FR-APPS-11) | Proposed |
-| Work profile paused | work rows dimmed (60 % α), badge "Paused"; tap → dialog "Turn on work apps?" → `requestQuietModeEnabled(false)`; the credential prompt is handled by the system | Corroborated PUB-055 |
+| Suspended app (FR-LIST-08) | row greyed with a "Suspended" tag; tap → the platform's suspended-app dialog | Proposed |
+| Work profile paused | work rows dimmed (60 % α), badge "Paused"; tap → dialog "Turn on work apps?" → `requestQuietModeEnabled(false)`; the credential prompt is handled by the system | Inferred PUB-055 |
 | Private space locked | the container shows "Private space — Unlock" (unless entry hidden, 36+); no rows | Proposed per DOC-014/015 |
-| Shortcut no longer available | snackbar "Shortcut isn't available"; entry removed from the sheet | Corroborated APK-027 |
-| Widget provider gone / bind denied | placeholder card (FR-WIDGET-04) / snackbar | Corroborated APK-031 |
+| Shortcut no longer available | snackbar "This shortcut was removed by its app"; entry removed from the sheet | Proposed |
+| Widget provider gone / bind denied | placeholder card (FR-WIDGET-04) / snackbar | Inferred APK-031 |
 | Theme failed to load | THEME_SYSTEM §12 banner | Proposed |
-| Default lost | banner (FR-ONBOARD-04) | Corroborated PUB-050 |
+| Default lost | banner (FR-ONBOARD-04) | Inferred PUB-050 |
 | Notification access revoked | badges hidden; settings toggle shows "Not allowed" | Proposed |
 
 ---

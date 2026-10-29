@@ -41,7 +41,7 @@
     "labelCase": "asIs"
   },
   "list": { "density": "compact", "horizontalPaddingDp": 16, "sectionHeaders": true },
-  "icons": { "visible": true, "sizeDp": 32, "shape": "squircle", "tint": "accent", "reshapeLegacy": true, "labelsVisible": true },
+  "icons": { "visible": true, "sizeDp": 32, "shape": "squircle", "tint": "accent", "legacyIconPlate": true, "labelsVisible": true },
   "clock": {
     "visible": true, "style": "words", "hourFormat": "system", "sizeSp": 40, "alignment": "start",
     "date": { "visible": true, "skeleton": "EEEEdMMMM", "sizeSp": 16 }

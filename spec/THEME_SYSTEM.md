@@ -7,16 +7,22 @@ Companion files: `spec/theme.schema.json` (formal JSON Schema, draft 2020-12),
 **Clean-room note.** This design is independent. `research/APK_ANALYSIS.md` §5 was used
 only as a *feature inventory* (which kinds of appearance controls a list launcher offers).
 No file format, key name, default value, font list, palette, clock design or theme content
-of the original app was seen or reused. The original's theme and backup file types are
+of the original app was seen or reused. Key names are our own; `icons.legacyIconPlate`
+replaced an earlier key whose wording echoed one of the original's setting names (T-07 R-02).
+Numeric ranges were chosen from WCAG and system-scale reasoning; the lower bound of
+`typography.scale` (0.80) happens to coincide with a value documented for the original
+(PUBLIC_BEHAVIOR P3, U-009), which we accept as a functional coincidence (T-07 R-18). The original's theme and backup file types are
 neither read nor written (D-006).
 
-**Labels.** Every requirement carries one label:
+**Labels** follow `research/RESEARCH_METHOD.md` §1. Every requirement carries one:
 - `Proposed` — our own design; rationale given inline.
-- `Corroborated (APK-nnn)` — the *capability* mirrors a feature whose existence is
-  evidenced in the APK inventory; the way we specify it is still our own design.
-- Platform API facts are cited by API name and level. They are to be cross-checked and
-  registered as `DOC-nnn` by T-03 (`spec/ANDROID_PLATFORM.md`); until then treat them as
-  `Proposed` design assumptions.
+- `Inferred (APK-nnn)` — the *capability* mirrors a feature whose existence is evidenced
+  only by the APK resource inventory (one source class, so at most Inferred); the way we
+  specify it is still our own design.
+- `Corroborated` would need a second independent source (e.g. vendor docs matching the APK
+  evidence); no row here claims it.
+- Platform API facts are Verified in `spec/ANDROID_PLATFORM.md` (DOC-043 adaptive and
+  monochrome icons, DOC-045/DOC-046 wallpaper and `WallpaperColors`, DOC-049 dynamic colour).
 
 ---
 
@@ -86,6 +92,17 @@ Because content providers often label files `application/octet-stream` or `text/
 the importer identifies content by sniffing (first non-whitespace byte `{` → JSON;
 bytes `50 4B 03 04` → zip), not by MIME type or name.
 
+### 3.1 Accepted import types (canonical list; every other file refers here)
+| Entry point | MIME types offered / matched | Notes |
+|---|---|---|
+| In-app theme import (SAF `ACTION_OPEN_DOCUMENT`, `EXTRA_MIME_TYPES`) | `application/json`, `application/zip`, `application/octet-stream`, `text/plain` | `text/plain` is accepted **only** here |
+| From other apps: `ACTION_VIEW` filter | `application/json`, `application/zip`, `application/octet-stream`; `scheme="content"` only | ANDROID_PLATFORM §22 |
+| From other apps: `ACTION_SEND` filter | same three types; the `EXTRA_STREAM` URI must be `content:` (checked in code) | SEND has no data URI, so the filter cannot pin the scheme |
+| Font manager (*Add font*, SAF) | `font/ttf`, `font/otf`, `application/octet-stream` | §10.3.3 validation |
+| Backup restore (SAF, ARCHITECTURE §12) | `application/json`, `application/octet-stream`, `text/plain` | not offered to other apps |
+File names and extensions (`.strata-theme.json`, `.strata-theme.zip`, `.strata-backup.json`)
+are suggested on export only; import never relies on them.
+
 ---
 
 ## 4. Schema (schemaVersion 1, schemaMinor 0)
@@ -101,9 +118,9 @@ Legend for **On invalid**: **C** = clamp to range; **D** = use the default for r
 | `schemaVersion` | integer | — (required) | `1` | missing / non-integer / `< 1` → R ("Not a Strata theme"); `> 1` → R ("Made with a newer version", §10.5) |
 | `schemaMinor` | integer | `0` | `0..1000` | D (`0`) |
 | `id` | string (UUID) | — (required) | 8-4-4-4-12 hex; compared case-insensitively | missing/malformed → G (new random UUID v4) |
-| `name` | string | — (required) | 1–64 Unicode grapheme clusters, no control chars | missing/empty → G ("Untitled theme"); too long → T |
-| `author` | string | absent | ≤ 64 graphemes | T |
-| `description` | string | absent | ≤ 500 graphemes | T |
+| `name` | string | — (required) | 1–64 Unicode grapheme clusters, no control chars (both app-enforced; the schema can only bound code points) | missing/empty → G ("Untitled theme"); too long → T; control characters removed (issue `fixed`) |
+| `author` | string | absent | ≤ 64 graphemes, no control chars | T; control characters removed |
+| `description` | string | absent | ≤ 500 graphemes, no control chars except line feed | T; other control characters removed |
 | `createdAt`, `modifiedAt` | string | absent (set on save) | RFC 3339 date-time | D (drop and re-stamp on save) |
 | `basedOn` | string (UUID) | absent | UUID | D (drop) |
 | `$schema` | string | absent | ≤ 512 chars | ignored; never fetched; preserved |
@@ -151,7 +168,7 @@ allowed in colours — the order ambiguity between `#AARRGGBB` (Android) and `#R
 
 **Pure black** (`pureBlack: true`): when the dark variant is in effect, `background` and
 `scrim` resolve to `#000000`; other roles unchanged. Ignored in the light variant.
-Corroborated (APK-020) as a capability.
+Inferred (APK-020) as a capability.
 
 ### 4.3 `wallpaper` (transparency and dimming)
 
@@ -167,8 +184,11 @@ Effective background, bottom to top: wallpaper `W` → `scrim` at alpha `dim` �
 `background` at alpha `backgroundOpacity`. With `show: false` the background is drawn
 opaque and `dim`/`backgroundOpacity` are ignored. A theme's `image` is **never** set as
 the system wallpaper silently: applying a theme that carries one asks "Also set this
-theme's wallpaper?" (needs the normal `SET_WALLPAPER` permission;
-`WallpaperManager.setStream`). Corroborated (APK-026: dim-wallpaper toggle) as a capability.
+theme's wallpaper?". On "Yes", Strata hands the image to the system wallpaper activity with
+`WallpaperManager.getCropAndSetWallpaperIntent(contentUri)` through its `FileProvider`
+(fallback `ACTION_ATTACH_DATA`), and the user confirms there; Strata holds no
+`SET_WALLPAPER` permission and never calls `setStream`/`setBitmap` (D-009, ANDROID_PLATFORM
+§12). Inferred (APK-026: dim-wallpaper toggle) as a capability.
 
 ### 4.4 `typography`
 
@@ -196,7 +216,7 @@ The **bundled-font catalogue** (IDs, files, licence texts) is owned by the visua
 (T-05) and must be chosen independently from OFL sources (e.g. Google Fonts / upstream
 repos) with each licence file shipped in the APK and shown in *Settings → Licences*.
 IDs are stable forever once released. Weights a font file lacks are synthesised by the
-platform. Corroborated (APK-022: bundled OFL fonts, user fonts, size steps, system-font
+platform. Inferred (APK-022: bundled OFL fonts, user fonts, size steps, system-font
 readability option) as capabilities; our range is continuous rather than stepped.
 
 ### 4.5 `list` (density and spacing)
@@ -225,14 +245,14 @@ never clipped to honour a row height (NFR-THEME-10).
 | `pack.package` | string | — | Java package name, ≤ 255 chars | see above |
 | `pack.fallback` | enum | `system` | `system`, `monochrome` — used for apps the pack does not cover, and for everything if the pack is not installed | D |
 | `tint` | enum | `none` | `none`; `monochrome` (adaptive icon monochrome layer, `AdaptiveIconDrawable.getMonochrome()` API 33+, else desaturated) drawn in `textPrimary`; `accent` (same, drawn in `accent`) | D |
-| `reshapeLegacy` | boolean | `true` | place non-adaptive icons on a `surface`-coloured plate in the chosen shape | D |
-| `labelsVisible` | boolean | `true` | app-name labels next to icons (list rows always keep an accessible content description) | D |
+| `legacyIconPlate` | boolean | `true` | place non-adaptive icons on a `surface`-coloured plate in the chosen shape | D |
+| `labelsVisible` | boolean | `true` | app-name labels next to icons. When `false`, list rows show the icon only, keep the label as their accessible name, and stay ≥ 48 dp; if `visible` is also `false`, labels are forced on | D |
 
-Shapes apply only to `AdaptiveIconDrawable` icons and to reshaped legacy icons; icon-pack
+Shapes apply only to `AdaptiveIconDrawable` icons and to plated legacy icons; icon-pack
 bitmaps are drawn as supplied. A missing `pack` app shows a one-time notice "This theme
 uses the icon pack *displayName*, which is not installed", with a button that opens the
 store listing via `market://details?id=<package>` (an intent built only from the package
-name; the app itself fetches nothing). Corroborated (APK-023, APK-024) as capabilities.
+name; the app itself fetches nothing). Inferred (APK-023, APK-024) as capabilities.
 
 ### 4.7 `clock` and date
 
@@ -248,7 +268,7 @@ name; the app itself fetches nothing). Corroborated (APK-023, APK-024) as capabi
 | `date.skeleton` | string | `EEEEdMMMM` | `^[yMLdEc]{1,16}$`, a CLDR skeleton localised with `DateFormat.getBestDateTimePattern(locale, skeleton)`, so ordering and punctuation are always locale-correct | D |
 | `date.sizeSp` | integer | `16` | `12..32` | C |
 
-Corroborated (APK-026: clock styles, date toggle) as capabilities. The four style IDs are
+Inferred (APK-026: clock styles, date toggle) as capabilities. The four style IDs are
 our own and are defined visually by T-05.
 
 ### 4.8 `favorites`
@@ -262,7 +282,7 @@ our own and are defined visually by T-05.
 | `showLabels` | boolean | `true` | if both `showIcons` and `showLabels` are false, labels are forced on | D |
 | `spacingDp` | integer | `8` | `0..32` | C |
 
-Which apps are favourites, and their order, is *not* theme data (§6). Corroborated
+Which apps are favourites, and their order, is *not* theme data (§6). Inferred
 (APK-026: hide favourites' labels) as a capability.
 
 ### 4.9 `search`
@@ -288,7 +308,7 @@ Search providers and behaviour are global settings (§6). Proposed.
 
 Index letters use `textSecondary`; the active letter uses `accent`. The index stays
 usable through TalkBack (each section is an accessibility action) even when `never`.
-Corroborated (APK-026) as a capability.
+Inferred (APK-026) as a capability.
 
 ### 4.11 `animation`
 
@@ -309,7 +329,7 @@ a global setting (NFR-THEME-06). Proposed.
 |---|---|---|---|---|
 | `mode` | enum | `followSystem` | `followSystem` (use `View.performHapticFeedback` constants, which respect the system touch-feedback setting), `off` | D |
 
-The global "Disable all haptics" switch (§6) always wins. Corroborated (APK-029) as a capability.
+The global "Disable all haptics" switch (§6) always wins. Inferred (APK-029) as a capability.
 
 ---
 
@@ -322,14 +342,14 @@ The global "Disable all haptics" switch (§6) always wins. Corroborated (APK-029
 | `system` | `dark` when `Configuration.uiMode` night bit is set, else `light`; re-evaluated on configuration change. |
 | `wallpaper` | API 31+: `dark` unless `WallpaperColors.getColorHints()` contains `HINT_SUPPORTS_DARK_TEXT`. API 27–30: `light` if the relative luminance of `WallpaperColors.getPrimaryColor()` > 0.5, else `dark`. API 26, or `getWallpaperColors()` returns null (some live wallpapers): behave as `system`. Re-evaluated on `WallpaperManager.OnColorsChangedListener`. |
 
-Corroborated (APK-020: follow device / follow wallpaper / always on / always off).
+Inferred (APK-020: follow device / follow wallpaper / always on / always off).
 A combined "device-and-wallpaper" mode is not in v1 (could be added in a minor).
 
 ### 5.2 Palette derivation (`colors.source.kind`)
 | Kind | Palette | Fallback chain |
 |---|---|---|
 | `fixed` | `colors.light` / `colors.dark` as written (missing roles from built-in) | — |
-| `seed` | Generated from `seedColor` with a tonal-palette algorithm (Apache-2.0 `material-color-utilities`, "tonal spot" scheme) | invalid seed → `fixed` |
+| `seed` | Generated from `seedColor` with a tonal-palette algorithm (HCT colour space, "tonal spot" style), implemented in `:core:theme` with no runtime library (ARCHITECTURE §15). If code is ported from the Apache-2.0 `material-color-utilities` project, its licence and NOTICE ship in Settings → Licences | invalid seed → `fixed` |
 | `wallpaper` | Generated the same way from `WallpaperColors.getPrimaryColor()` (API 27+) | API 26 / null colours → `fixed` |
 | `dynamic` | System Material dynamic colour scheme (`dynamicLightColorScheme` / `dynamicDarkColorScheme`, API 31+) | API < 31 → `wallpaper` → `fixed` |
 
@@ -342,7 +362,7 @@ Roles listed in `lockedRoles` keep the theme's fixed value even for derived kind
 fixed `light`/`dark` palettes of a derived theme therefore serve two purposes: locked
 roles and the fallback. `pureBlack` is applied after derivation. Derived palettes are
 **always** passed through contrast enforcement (§7.5), because the user did not choose
-those colours. Corroborated (APK-021: auto/wallpaper-and-system/standard palettes) as a
+those colours. Inferred (APK-021: auto/wallpaper-and-system/standard palettes) as a
 capability.
 
 ---
@@ -350,8 +370,9 @@ capability.
 ## 6. Global settings vs per-theme settings
 
 Rule (Proposed): a setting is per-theme if it changes **how things look**; it is global if
-it changes **what is there, how it behaves, or an accessibility guarantee**. Corroborated
-(APK-024: "some settings are global, not per-theme") as a principle.
+it changes **what is there, how it behaves, or an accessibility guarantee**. Inferred
+(APK-024: global vs per-theme split) as a principle. Keys, types and defaults of every
+global setting: ARCHITECTURE §4.2 (the single settings catalogue).
 
 | Global (stored in app settings, never in theme files) | Per-theme (in the file) |
 |---|---|
@@ -359,8 +380,8 @@ it changes **what is there, how it behaves, or an accessibility guarantee**. Cor
 | Appearance override: `followTheme` (default) / `system` / `light` / `dark` (overrides `colors.mode`) | |
 | Enforce minimum contrast: on (default) / off (§7.5) | |
 | Disable all haptics (master off) | |
-| Favourite apps and order; hidden apps; renamed apps; per-app icon overrides; categories | |
-| Search providers, web search engine, gestures, sorting, home layout behaviour | |
+| Favourite apps and order; hidden apps; renamed apps; per-app icon overrides (categories: later, not v1) | |
+| Search options (hidden apps in search, recents, contacts), gestures, sorting, home layout behaviour (web search hand-off: v1.x, no engine choice) | |
 | Status-bar visibility, rotation, notification badges | |
 | Language; the system font scale and animator scale (read, never stored) | |
 
@@ -507,18 +528,17 @@ non-`x-` keys are reserved for future minors of this schema.
 ## 10. Import and export
 
 ### 10.1 Entry points
-- **In-app import:** `ACTION_OPEN_DOCUMENT` (Storage Access Framework) with
-  `EXTRA_MIME_TYPES = [application/json, application/zip, application/octet-stream, text/plain]`;
-  content sniffed (§3).
-- **From other apps:** activity handling `ACTION_VIEW` and `ACTION_SEND` for
-  `application/json`, `application/zip`, `application/octet-stream` with `content:` URIs.
+- **In-app import:** `ACTION_OPEN_DOCUMENT` (Storage Access Framework) with the SAF types of
+  §3.1; content sniffed (§3).
+- **From other apps:** `ThemeImportActivity` handling `ACTION_VIEW` and `ACTION_SEND` for
+  the types of §3.1, `content:` URIs only. `text/plain` is not matched here.
   The import screen always shows a summary first; nothing is applied automatically.
 - **Export:** `ACTION_CREATE_DOCUMENT` with suggested name `<name>.strata-theme.json`
   (or `.zip`).
 - **Share:** `ACTION_SEND` with a `FileProvider` URI to a temporary export copy in
   `cacheDir/share/`, `FLAG_GRANT_READ_URI_PERMISSION`; the copy is deleted after 24 h or
   on next start.
-Corroborated (APK-024: import, export/share) as capabilities.
+Inferred (APK-024: import, export/share) as capabilities.
 
 ### 10.2 Single JSON
 Export writes the stored document (with preserved unknowns) and refreshes `modifiedAt`.
@@ -563,15 +583,15 @@ be listed; `theme.json` must reference only listed fonts/images.
 | Archive | ≤ 24 MiB on disk; ≤ 8 entries; ≤ 24 MiB total decompressed (counted while streaming); per-entry decompressed/compressed ratio ≤ 200; no encrypted entries; no ZIP64 |
 | `theme.json` | all of §8 |
 | Font | ≤ 4 MiB; first 4 bytes `00 01 00 00`, `OTTO` or `true` (collections `ttcf`, WOFF/WOFF2 rejected); table directory sane (≤ 64 tables, every table inside the file, required `cmap head hhea hmtx maxp name`); then `Typeface.Builder(file).build()` (no fallback set) must return non-null and measure a test string with non-zero width. Otherwise reject the bundle ("A font in this bundle couldn't be read") |
-| Image | ≤ 16 MiB; decode bounds first; ≤ 8192 px per side and ≤ 40 MP; decode with sampling to ≤ display size × 2; re-encode to WebP (lossless for PNG sources) before storing; hash recomputed after re-encode and the theme reference rewritten |
+| Image | ≤ 16 MiB; decode bounds first; ≤ 8192 px per side and ≤ 40 MP; decode with sampling to ≤ display size × 2. A WebP source that is already within these limits and carries no EXIF/XMP/ICC metadata chunks is stored byte-for-byte. Any other source is re-encoded to WebP (lossless for PNG sources, quality 90 for JPEG and lossy WebP sources); the hash is recomputed after re-encoding and the theme reference rewritten. Because the stored file is then a stripped WebP, a second import of an exported bundle keeps the same bytes and hash |
 | Extraction | stream into `cacheDir/import/<random>/` using hash-derived names only; move into stores only after all checks pass; temp dir deleted in `finally` |
 
 User fonts in the font store are content-addressed and shared between themes; an
 orphaned font/image is garbage-collected when no stored theme references it.
 Exporting a bundle with a user font shows: "Only share fonts whose licence allows it."
 User-added fonts outside bundles come from the font manager (*Add font* →
-`ACTION_OPEN_DOCUMENT` for `font/ttf`, `font/otf`, `application/octet-stream`), with the
-same validation. Corroborated (APK-022: user fonts, invalid-font error) as a capability.
+`ACTION_OPEN_DOCUMENT`, types per §3.1), with the same validation. Inferred (APK-022: user
+fonts, invalid-font error) as a capability.
 
 ### 10.4 Import flow and conflicts
 1. Validate (§8 / §10.3). 2. Show summary: name, author, preview thumbnail, warnings
@@ -594,7 +614,7 @@ App constants: `MAJOR = 1`, `MINOR = 0`.
 | `schemaVersion == 1`, `schemaMinor > 0` | Import; unknown keys/enum values preserved and listed as "newer settings kept"; written back with `schemaMinor = max(file, app)` |
 | `schemaVersion > 1` | Reject with the "newer version" message. If such a file arrives via backup restore it is kept on disk untouched and listed as "Needs app update" (not applicable, not deleted) |
 | `schemaVersion < 1` / missing | Reject ("not a Strata theme") |
-Corroborated (APK-024: import fails when made by a newer app version) as a capability.
+Inferred (APK-024: newer-version import failure) as a capability.
 
 Minor-version contract: a minor may only **add** optional fields or enum values whose
 absence or replacement by the default renders acceptably. Anything else is a new major.
@@ -671,7 +691,11 @@ rebuilt by scanning `themes/user/` at startup. Files are the source of truth.
 4. **Crash-loop guard:** `applyInProgress = true` is written before applying a theme and
    cleared after the first successful frame. If a start finds it still true (twice
    within 5 minutes), the app boots with Strata Default, marks the theme
-   "Caused a problem — not applied", and keeps the file.
+   "Caused a problem — not applied", and keeps the file. **Precedence:** the process-level
+   `boot_attempts` counter (ARCHITECTURE §10) is checked first; if it triggers safe mode,
+   safe mode already uses Strata Default, and this guard only decides which theme to mark
+   as the offender (the one with `applyInProgress` still set). It never starts its own
+   safe mode.
 5. Any exception inside theme resolution is caught at the resolution boundary, logged
    locally (no upload, D-007), and handled as step 2. Theme code never throws past this
    boundary (NFR-THEME-01).
@@ -691,7 +715,7 @@ rebuilt by scanning `themes/user/` at startup. Files are the source of truth.
   wallpaper colours and from the dynamic scheme, live contrast chip (§7.6).
 - **Create from image:** pick an image with the system photo picker (no storage
   permission), extract a seed colour, generate a `seed` palette; optionally keep the
-  image as the theme's wallpaper. Corroborated (APK-010: start theme from image) as a
+  image as the theme's wallpaper. Inferred (APK-010: start theme from image) as a
   capability.
 - **Undo/redo:** per-session stack of immutable theme snapshots, ≥ 100 steps; a slider
   drag or a text-field edit session is coalesced into one step. Undo survives
@@ -705,7 +729,7 @@ rebuilt by scanning `themes/user/` at startup. Files are the source of truth.
   "Copy JSON" — supports the human-editable goal.
 - Every editor control has a TalkBack label and value; sliders support keyboard/D-pad
   steps.
-Corroborated (APK-024: create from scratch, edit current theme) as capabilities.
+Inferred (APK-024: create from scratch, edit current theme) as capabilities.
 
 ---
 
@@ -723,8 +747,8 @@ original sample themes below, shipped as assets with fixed IDs.
 | `harbor.strata-theme.json` | Harbor | Sparse file (most fields default) using system dynamic colour; sea-blue fallbacks; demonstrates an `x-` key | system / dynamic | hidden |
 
 ### 14.1 Verification results (2026-10-29)
-A throw-away checker (Python 3.13, `jsonschema` 4.26.0, kept outside the repo in the
-session scratchpad) validated each file against `spec/theme.schema.json` (strict mode,
+The checker `tools/check_themes.py` (Python 3.13, `jsonschema` 4.26.0; run as
+`python3 -I tools/check_themes.py spec/theme.schema.json spec/sample-themes/*.json`) validated each file against `spec/theme.schema.json` (strict mode,
 after `check_schema` on the schema itself) and computed P1–P8 per §7 using the static
 worst-case wallpaper method (§7.3), for every variant the theme can show and, for dark
 variants, also with `pureBlack` forced on. It also checked the all-defaults theme and six
@@ -763,37 +787,37 @@ by T-06.
 | FR-THEME-01 | All theming features are free and ungated. | No billing dependency in the build; no code path checks entitlement for any §4 field; any number of themes can be saved, imported and applied; no theme field marks "premium" content. | Proposed (D-004; deliberate contrast to APK-025) |
 | FR-THEME-02 | Themes are single JSON documents with `schemaVersion`, `.strata-theme.json`, `application/json`. | A file containing only `schemaVersion`, `id`, `name` imports and renders as Strata Default; the writer output validates against `theme.schema.json`. | Proposed (D-006) |
 | FR-THEME-03 | Nine colour roles in separate light and dark palettes, with per-role defaults. | Omitting any role uses the built-in value of that variant; each role visibly changes its documented UI element in the preview. | Proposed |
-| FR-THEME-04 | Appearance modes `system`, `light`, `dark`, `wallpaper`, plus a global override. | Switching system dark mode flips `system` themes without restart; `wallpaper` mode follows §5.1 on API 26, 27–30 and 31+ (instrumented tests per level). | Corroborated (APK-020) |
-| FR-THEME-05 | Pure-black option for the dark variant. | With `pureBlack`, background and scrim render `#000000` in dark only; no effect in light. | Corroborated (APK-020) |
-| FR-THEME-06 | Colour sources `fixed`, `seed`, `wallpaper`, `dynamic` with fallback chain and locked roles. | On API 30 a `dynamic` theme uses wallpaper colours; on API 26 it uses fixed palettes; locked roles never change after a wallpaper change; derived palettes always pass P1–P8 after enforcement. | Corroborated (APK-021) |
-| FR-THEME-07 | Wallpaper visibility, dim and background opacity. | Effective background equals §7.2 formula within ±1/255 per channel in a screenshot test with a solid test wallpaper. | Corroborated (APK-026) |
-| FR-THEME-08 | Typography: system / bundled OFL / user font by hash; scale 0.8–1.5 multiplied by system scale; weights; letter spacing; label case. | Each field changes rendered text measurably; missing user font falls back with a warning; system font scale 2.0 × theme scale 1.5 renders without clipping. | Corroborated (APK-022) |
-| FR-THEME-09 | Option to render small/long text in the system font. | With the option on, text < 14 sp uses `FontFamily.Default` while other text uses the theme font. | Corroborated (APK-022) |
-| FR-THEME-10 | Icons: visibility, size, shape mask, legacy reshape, labels, icon pack with fallback. | Shapes apply to adaptive icons; legacy icons get a plate when `reshapeLegacy`; uninstalling the pack switches to `pack.fallback` without restart and shows the one-time notice with store button. | Corroborated (APK-023) |
+| FR-THEME-04 | Appearance modes `system`, `light`, `dark`, `wallpaper`, plus a global override. | Switching system dark mode flips `system` themes without restart; `wallpaper` mode follows §5.1 on API 26, 27–30 and 31+ (instrumented tests per level). | Inferred (APK-020) |
+| FR-THEME-05 | Pure-black option for the dark variant. | With `pureBlack`, background and scrim render `#000000` in dark only; no effect in light. | Inferred (APK-020) |
+| FR-THEME-06 | Colour sources `fixed`, `seed`, `wallpaper`, `dynamic` with fallback chain and locked roles. | On API 30 a `dynamic` theme uses wallpaper colours; on API 26 it uses fixed palettes; locked roles never change after a wallpaper change; derived palettes always pass P1–P8 after enforcement. | Inferred (APK-021) |
+| FR-THEME-07 | Wallpaper visibility, dim and background opacity. | Effective background equals §7.2 formula within ±1/255 per channel in a screenshot test with a solid test wallpaper. | Inferred (APK-026) |
+| FR-THEME-08 | Typography: system / bundled OFL / user font by hash; scale 0.8–1.5 multiplied by system scale; weights; letter spacing; label case. | Each field changes rendered text measurably; missing user font falls back with a warning; system font scale 2.0 × theme scale 1.5 renders without clipping. | Inferred (APK-022) |
+| FR-THEME-09 | Option to render small/long text in the system font. | With the option on, text < 14 sp uses `FontFamily.Default` while other text uses the theme font. | Inferred (APK-022) |
+| FR-THEME-10 | Icons: visibility, size, shape mask, legacy icon plate, labels, icon pack with fallback. | Shapes apply to adaptive icons; legacy icons get a plate when `legacyIconPlate`; uninstalling the pack switches to `pack.fallback` without restart and shows the one-time notice with store button. | Inferred (APK-023) |
 | FR-THEME-11 | Monochrome/accent icon tint using the platform monochrome layer. | API 33+ uses `getMonochrome()` when present; otherwise a desaturated icon tinted with the role colour. | Proposed |
-| FR-THEME-12 | Clock and date presentation (style, hour format, seconds, size, alignment, date skeleton). | Date text equals `DateFormat.getBestDateTimePattern(locale, skeleton)` output for 5 test locales incl. one RTL; alignment mirrors in RTL. | Corroborated (APK-026) |
-| FR-THEME-13 | Favourites presentation (scale, alignment, vertical position, icons, labels, spacing). | Labels are forced on when both icons and labels are off; changing the theme never changes which apps are favourites. | Corroborated (APK-026) |
+| FR-THEME-12 | Clock and date presentation (style, hour format, seconds, size, alignment, date skeleton). | Date text equals `DateFormat.getBestDateTimePattern(locale, skeleton)` output for 5 test locales incl. one RTL; alignment mirrors in RTL. | Inferred (APK-026) |
+| FR-THEME-13 | Favourites presentation (scale, alignment, vertical position, icons, labels, spacing). | Labels are forced on when both icons and labels are off; changing the theme never changes which apps are favourites. | Inferred (APK-026) |
 | FR-THEME-14 | Search-bar presentation (position, style, radius, hint). | `hidden` still allows opening search by its gesture; styles render per §4.9. | Proposed |
-| FR-THEME-15 | Alphabet-index appearance (visibility incl. list-only, side, glyphs, size, bubble). | `listOnly` hides it on home only; index remains reachable via TalkBack actions when `never`. | Corroborated (APK-026) |
+| FR-THEME-15 | Alphabet-index appearance (visibility incl. list-only, side, glyphs, size, bubble). | `listOnly` hides it on home only; index remains reachable via TalkBack actions when `never`. | Inferred (APK-026) |
 | FR-THEME-16 | Animation duration scale and entrance style, honouring the system animator scale. | With system "Remove animations" on, no theme animation runs for any `durationScale`; effective duration = base × theme × system. | Proposed |
-| FR-THEME-17 | Haptics `followSystem` / `off`, with a global master off. | With master off, no haptic call is made for any theme. | Corroborated (APK-029) |
+| FR-THEME-17 | Haptics `followSystem` / `off`, with a global master off. | With master off, no haptic call is made for any theme. | Inferred (APK-029) |
 | FR-THEME-18 | Per-field invalid-value policies (clamp / default / generate / truncate / reject) as in §4. | A fuzzed corpus of ≥ 10 000 mutated sample files never crashes; each mutation class yields the documented policy and an `Issue` entry. | Proposed |
 | FR-THEME-19 | Unknown keys, `x-` keys and unknown enum values are preserved on round-trip. | `parse(write(parse(f)))` is JSON-equal to `parse(f)` for all samples and a fixture with nested unknowns and a future enum value. | Proposed |
 | FR-THEME-20 | Contrast checking per §7 with live chips, banner, auto-fix and global enforcement. | Unit tests reproduce §14.1 ratios to 2 decimals; a failing palette shows the banner; "Fix" makes all pairs pass in one undoable step; enforcement output passes P1–P8. | Proposed |
-| FR-THEME-21 | Import a single JSON via SAF, `ACTION_VIEW` and `ACTION_SEND`, with content sniffing and a summary before applying. | Files labelled `application/octet-stream` or `text/plain` import; nothing is applied until the user confirms. | Corroborated (APK-024) |
+| FR-THEME-21 | Import a single JSON via SAF, `ACTION_VIEW` and `ACTION_SEND`, with content sniffing and a summary before applying (types per §3.1). | Files labelled `application/octet-stream` import through all three paths and `text/plain` through SAF; nothing is applied until the user confirms. | Inferred (APK-024) |
 | FR-THEME-22 | Import/export `.strata-theme.zip` bundles with manifest and hashes. | Bundles produced by export re-import on a clean install with identical fonts/images; any hash mismatch, unlisted entry or bad name rejects the bundle. | Proposed |
-| FR-THEME-23 | Export to a document and share via `FileProvider`. | Exported JSON validates against the schema; share target receives a readable `content:` URI; temp copies are purged. | Corroborated (APK-024) |
-| FR-THEME-24 | Version gate: newer major rejected with a clear message; newer minor imported with unknowns preserved. | Fixture with `schemaVersion: 2` shows the "newer version" message; fixture with `schemaMinor: 5` and unknown keys imports and round-trips them. | Corroborated (APK-024) |
-| FR-THEME-25 | Missing icon pack notice with store link built from the package name. | Notice shows once per theme apply; the button fires an intent for `market://details?id=<package>`; no network request is made by the app. | Corroborated (APK-024) |
+| FR-THEME-23 | Export to a document and share via `FileProvider`. | Exported JSON validates against the schema; share target receives a readable `content:` URI; temp copies are purged. | Inferred (APK-024) |
+| FR-THEME-24 | Version gate: newer major rejected with a clear message; newer minor imported with unknowns preserved. | Fixture with `schemaVersion: 2` shows the "newer version" message; fixture with `schemaMinor: 5` and unknown keys imports and round-trips them. | Inferred (APK-024) |
+| FR-THEME-25 | Missing icon pack notice with store link built from the package name. | Notice shows once per theme apply; the button fires an intent for `market://details?id=<package>`; no network request is made by the app. | Inferred (APK-024) |
 | FR-THEME-26 | Import conflict handling by `id` and `name` (§10.4). | All four rows of the conflict table are covered by tests; built-in IDs are never overwritten. | Proposed |
-| FR-THEME-27 | Preset library: built-ins, unlimited user themes, duplicate, edit, delete with undo, hide built-ins. | 500 stored themes list and apply correctly; delete is undoable for 5 s; editing a built-in creates a copy. | Corroborated (APK-024) |
+| FR-THEME-27 | Preset library: built-ins, unlimited user themes, duplicate, edit, delete with undo, hide built-ins. | 500 stored themes list and apply correctly; delete is undoable for 5 s; editing a built-in creates a copy. | Inferred (APK-024) |
 | FR-THEME-28 | Active-theme pointer, last-known-good and invalid-theme recovery (§12). | Corrupting the active file, the index, or both still boots to a usable launcher with the banner; crash-loop guard triggers after two failed starts. | Proposed |
-| FR-THEME-29 | Theme editor with live preview, undo/redo, per-field/group/theme reset, JSON view, draft recovery. | ≥ 100 undo steps; slider drags coalesce; killing the process mid-edit offers the draft on return. | Corroborated (APK-024) |
-| FR-THEME-30 | Create a theme from an image via the photo picker. | Picking an image yields a `seed` theme whose palette passes P1–P8; no storage permission is requested. | Corroborated (APK-010) |
-| FR-THEME-31 | Global vs per-theme split per §6. | Switching themes never changes favourites, hidden apps, renames, per-app icons, search providers or gestures. | Corroborated (APK-024) |
+| FR-THEME-29 | Theme editor with live preview, undo/redo, per-field/group/theme reset, JSON view, draft recovery. | ≥ 100 undo steps; slider drags coalesce; killing the process mid-edit offers the draft on return. | Inferred (APK-024) |
+| FR-THEME-30 | Create a theme from an image via the photo picker. | Picking an image yields a `seed` theme whose palette passes P1–P8; no storage permission is requested. | Inferred (APK-010) |
+| FR-THEME-31 | Global vs per-theme split per §6. | Switching themes never changes favourites, hidden apps, renames, per-app icons, search providers or gestures. | Inferred (APK-024) |
 | FR-THEME-32 | Migration framework with frozen fixtures and `.bak` safety copy. | A synthetic v0→v1 test migrator passes fixture tests; the `.bak` is removed only after a successful boot. | Proposed |
 | FR-THEME-33 | Theme data included in Auto Backup / device transfer per §11.4, re-validated on restore. | Restored invalid files land in quarantine; valid ones appear in the library. | Proposed |
-| FR-THEME-34 | Theme wallpaper images applied only with explicit confirmation. | Applying a theme with `wallpaper.image` never calls `WallpaperManager` without a positive user choice. | Proposed |
+| FR-THEME-34 | Theme wallpaper images applied only with explicit confirmation, by handing the image to the system wallpaper activity (`getCropAndSetWallpaperIntent`, fallback `ACTION_ATTACH_DATA`); no `SET_WALLPAPER` permission (D-009). | Declining starts no wallpaper intent; accepting starts exactly one with a `content:` `image/*` URI and a read grant; the merged manifest has no `SET_WALLPAPER`. | Proposed |
 
 ### 15.2 Non-functional
 
@@ -816,8 +840,9 @@ by T-06.
 
 ## 16. Open questions (proposed for `research/UNRESOLVED.md`)
 - **TQ-1** Bundled OFL font catalogue (which fonts, total APK size budget) — owner T-05.
-- **TQ-2** Confirm API levels cited here (`WallpaperColors.getColorHints`, `getMonochrome`,
-  dynamic colour, `ZipPathValidator`) — owner T-03; register as `DOC-nnn`.
+- **TQ-2** *Closed (T-08):* API levels are registered in ANDROID_PLATFORM (DOC-043
+  `getMonochrome` API 33, DOC-046 `getColorHints` API 31, DOC-049 dynamic colour API 31).
+  `ZipPathValidator` (API 34) is only a secondary defence (§9) and needs no DOC entry.
 - **TQ-3** Whether to add an optional label text-shadow/halo to improve legibility on busy
   wallpapers (affects §7.4 guarantees) — owner T-05.
 - **TQ-4** Final schema `$id` domain once the product name is chosen (U-006).

@@ -32,10 +32,10 @@ are cited only to show which capability areas exist (feature inventory).
 | P-1 | Package discovery uses `LauncherApps` plus a `<queries>` intent for `MAIN`/`LAUNCHER`. **Do not request `QUERY_ALL_PACKAGES`.** | Proposed (based on Inferred + Verified) | DOC-010, DOC-019, DOC-020, DOC-021, DOC-022 |
 | P-2 | Becoming the default home uses `RoleManager.createRequestRoleIntent(ROLE_HOME)` on API 29+. Fallback is `Settings.ACTION_HOME_SETTINGS`, then `ACTION_MANAGE_DEFAULT_APPS_SETTINGS`, then `ACTION_SETTINGS`. No disabled-component "chooser trick". | Proposed | DOC-005, DOC-007, DOC-008 |
 | P-3 | Widgets are hosted with platform `AppWidgetHost`/`AppWidgetHostView`, embedded through Compose `AndroidView`. Binding uses `bindAppWidgetIdIfAllowed`, then `ACTION_APPWIDGET_BIND`. `BIND_APPWIDGET` is **not** declared. | Proposed (Verified facts) | DOC-030, DOC-031, DOC-035, DOC-071 |
-| P-4 | Optional features run only after the user grants them, and each degrades gracefully: notification badges (`NotificationListenerService`), screen lock (`AccessibilityService` with `GLOBAL_ACTION_LOCK_SCREEN`, API 28+), usage stats (`PACKAGE_USAGE_STATS`). | Proposed | DOC-036, DOC-039, DOC-038 |
+| P-4 | Optional features run only after the user grants them, and each degrades gracefully: notification badges (`NotificationListenerService`, v1), screen lock (`AccessibilityService` with `GLOBAL_ACTION_LOCK_SCREEN`, API 28+; `full` flavour, v1.x), usage stats (`PACKAGE_USAGE_STATS`; not declared in v1, possible later). | Proposed | DOC-036, DOC-039, DOC-038 |
 | P-5 | Private space (API 35+) is supported. Declare `ACCESS_HIDDEN_PROFILES` and meet every UX duty in DOC-014/DOC-015. | Proposed | DOC-014, DOC-015, DOC-010 |
 | P-6 | Edge-to-edge always. Predictive back via AndroidX `OnBackPressedDispatcher`/Compose `BackHandler`/`PredictiveBackHandler`. `enableOnBackInvokedCallback="true"`. | Proposed (forced by target 36) | DOC-051, DOC-052, DOC-058 |
-| P-7 | The wallpaper is shown with `windowShowWallpaper` (`FLAG_SHOW_WALLPAPER`). We never read the wallpaper bitmap (it throws on API 34+). Text and colour adaptation uses `WallpaperColors`. | Proposed (Verified facts) | DOC-045, DOC-046, DOC-047 |
+| P-7 | The wallpaper is shown with `windowShowWallpaper` (`FLAG_SHOW_WALLPAPER`). We never read the wallpaper bitmap (it throws on API 34+). Text and colour adaptation uses `WallpaperColors`. A theme's wallpaper image is handed to the system with `WallpaperManager.getCropAndSetWallpaperIntent(contentUri)`, so Strata never holds `SET_WALLPAPER` (D-009). | Proposed (Verified facts) | DOC-045, DOC-046, DOC-047, DOC-001 |
 | P-8 | No `INTERNET`, no analytics, no ad ID (D-007). No non-SDK interfaces such as status-bar expansion by reflection. | Proposed | DOC-068, D-007 |
 
 ---
@@ -47,7 +47,7 @@ are cited only to show which capability areas exist (feature inventory).
 | API | `<activity>` with an intent filter for `Intent.ACTION_MAIN` + `Intent.CATEGORY_HOME` + `Intent.CATEGORY_DEFAULT`. `CATEGORY_HOME` = "the first activity that is displayed when the device boots". |
 | Min API | 1 (all attributes used are ≤ 21) |
 | Manifest | The HOME role requires an activity that matches `MAIN`+`HOME` (AOSP `roles.xml`). Proposed attributes, following the AOSP Launcher3 reference manifest: `launchMode="singleTask"`, `clearTaskOnLaunch="true"`, `stateNotNeeded="true"`, `resumeWhilePausing="true"`, `taskAffinity=""`, `exported="true"`, `resizeableActivity="true"`, `screenOrientation="unspecified"`, `windowSoftInputMode="adjustResize|stateAlwaysHidden"`, `configChanges` covering `orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|mcc|mnc|density|uiMode|fontScale|locale|layoutDirection`, see §15. |
-| Implementation | • `singleTask` + `taskAffinity=""`: one home task, separate from our settings task. Pressing Home while home is in front arrives as `onNewIntent(ACTION_MAIN/CATEGORY_HOME)`. Proposed: collapse open sheets/search and scroll the list to the top. • `stateNotNeeded="true"`: `onSaveInstanceState` "might not be called, and onCreate() is passed null". Home UI state must therefore be rebuildable from persisted data (§21). • `resumeWhilePausing`: home resumes without waiting for the previous app's pause, so it must not take exclusive resources (camera, audio) during launch. • Proposed: **a separate `SettingsActivity` holds `MAIN`+`LAUNCHER`** (plus `APPLICATION_PREFERENCES`). The app then appears in the previous launcher's list for onboarding, and the home activity is not listed as an app. • Do **not** use the APK-004 pattern (a disabled second HOME activity toggled to force a chooser). Its purpose is only Inferred, it is fragile, and the role API supersedes it. |
+| Implementation | • `singleTask` + `taskAffinity=""`: one home task, separate from our settings task. Pressing Home while home is in front arrives as `onNewIntent(ACTION_MAIN/CATEGORY_HOME)`. Proposed: collapse open sheets/search and scroll the list to the top. • `stateNotNeeded="true"`: `onSaveInstanceState` "might not be called, and onCreate() is passed null". Home UI state must therefore be rebuildable from persisted data (§21). • `resumeWhilePausing`: home resumes without waiting for the previous app's pause, so it must not take exclusive resources (camera, audio) during launch. • Proposed (D-008): **a separate `SettingsActivity` holds `MAIN`+`LAUNCHER`** (plus `APPLICATION_PREFERENCES`), and the home activity is not listed as an app. When started by `MAIN`+`LAUNCHER` (the icon in another launcher), `SettingsActivity` acts as the entry router: if `onboarding_done` is false it hosts onboarding; otherwise it starts `HomeActivity` with an **explicit** intent (`FLAG_ACTIVITY_NEW_TASK`; `HomeActivity` is exported for the HOME filter, so no LAUNCHER filter is needed) and finishes. The home activity then runs in APP_MODE if the role is not held. When started by `APPLICATION_PREFERENCES` it opens settings directly. `HomeActivity.onCreate` also checks `onboarding_done` and shows onboarding as its first layer when the system starts it before the user ever opened the icon. Strata's own `LAUNCHER` entry is left out of its own app list (the list-end "Settings" row replaces it). • Do **not** use the APK-004 pattern (a disabled second HOME activity toggled to force a chooser). Its purpose is only Inferred, it is fragile, and the role API supersedes it. |
 | Failure | If our activity is not the preferred home, Home opens the other launcher. Detect this with `RoleManager.isRoleHeld(ROLE_HOME)` (29+). On API 26–28, resolve `MAIN/HOME` with `PackageManager.resolveActivity(…, MATCH_DEFAULT_ONLY)` and compare the package. |
 | Confidence | Verified (attributes and their semantics); Proposed (choice of values) |
 | DOC | DOC-001, DOC-002, DOC-003, DOC-004, DOC-006 |
@@ -81,7 +81,7 @@ are cited only to show which capability areas exist (feature inventory).
 ### 3.2 Profiles: work profile
 | Field | Content |
 |---|---|
-| API | `LauncherApps.getProfiles()` / `UserManager.getUserProfiles()`. `UserManager.isQuietModeEnabled(user)` (API 24). `UserManager.requestQuietModeEnabled(enable, user)` (API 28; the caller "must either be the foreground default launcher or have MANAGE_USERS/MODIFY_QUIET_MODE"; it may show a credential screen). Runtime-registered broadcasts `ACTION_MANAGED_PROFILE_ADDED/REMOVED/AVAILABLE/UNAVAILABLE` (API 21/24), and on API 35+ the generic `ACTION_PROFILE_ADDED/AVAILABLE/UNAVAILABLE`. These are **only sent to registered receivers, not manifest receivers**. `LauncherApps.getLauncherUserInfo(user).getUserType()` (API 35) to distinguish managed, clone and private profiles. |
+| API | `LauncherApps.getProfiles()` / `UserManager.getUserProfiles()`. `UserManager.isQuietModeEnabled(user)` (API 24). `UserManager.requestQuietModeEnabled(enable, user)` (API 28; the caller "must either be the foreground default launcher or have MANAGE_USERS/MODIFY_QUIET_MODE"; it may show a credential screen). Runtime-registered broadcasts `ACTION_MANAGED_PROFILE_ADDED/REMOVED/AVAILABLE/UNAVAILABLE` (API 21/24), plus the generic `ACTION_PROFILE_ADDED` (API 34) and `ACTION_PROFILE_AVAILABLE/UNAVAILABLE` (API 35). These are **only sent to registered receivers, not manifest receivers**. `LauncherApps.getLauncherUserInfo(user).getUserType()` (API 35) to distinguish managed, clone and private profiles. |
 | Implementation | Badge work apps with the system-badged icon (`LauncherActivityInfo.getBadgedIcon`). Proposed UI: a "Work" filter/section with a pause/resume toggle. Do not assume that every non-main profile is a work profile (Android 15 note). |
 | Failure | `requestQuietModeEnabled` throws `SecurityException` if we are not the foreground default launcher. It returns `false` when the credential is needed (the system then shows the prompt). |
 | Confidence | Verified |
@@ -115,7 +115,7 @@ are cited only to show which capability areas exist (feature inventory).
 |---|---|
 | API | `LauncherApps.startMainActivity(component, user, sourceBounds: Rect, opts: Bundle)` (API 21). It works across profiles. For private space it needs the §3.3 requirements. Options come from `ActivityOptions.makeClipRevealAnimation(view, x, y, w, h)` (23) or `makeScaleUpAnimation` (16; fills `Intent.setSourceBounds` automatically). Proposed: `ActivityOptions.setSplashScreenStyle(SPLASH_SCREEN_STYLE_ICON)` (33) to keep the system icon splash. App info: `LauncherApps.startAppDetailsActivity(component, user, bounds, opts)` (21). Shortcuts: `LauncherApps.startShortcut(…)` (25), §6. |
 | Implementation | Compose cannot produce a `View` origin per item. Compute `sourceBounds` from `Modifier.onGloballyPositioned { it.boundsInWindow() }` plus the window's location on screen, and pass `LocalView.current` as the `source` view. Launch only from a user gesture. A home that is in front can start activities. Background-launch rules matter only for `PendingIntent`s we send: for widget/shortcut `PendingIntent`s, API 34+ exposes `ActivityOptions.setPendingIntentBackgroundActivityStartMode` (`MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE`; `MODE_…_ALLOWED` was deprecated in 36). |
-| Failure | `ActivityNotFoundException` / `SecurityException` (activity removed, not exported, disabled, profile paused). Show an "app isn't available" message and trigger a reconcile. A paused work profile should offer "resume work apps" (§3.2). |
+| Failure | `ActivityNotFoundException` / `SecurityException` (activity removed, not exported, disabled, profile paused). Show a "can't open this app right now" message and trigger a reconcile. A paused work profile should offer "resume work apps" (§3.2). |
 | Confidence | Verified (APIs); Inferred (bounds computation in Compose) |
 | DOC | DOC-010, DOC-023, DOC-024 |
 
@@ -198,7 +198,7 @@ are cited only to show which capability areas exist (feature inventory).
 | Field | Content |
 |---|---|
 | API | `AdaptiveIconDrawable` (26): `getForeground()`, `getBackground()`, `getIconMask()` (`config_icon_mask` before bounds are set), `getExtraInsetFraction()`. Layers are 108×108 dp, the inner 72 dp is visible and the outer 18 dp is reserved for effects. `getMonochrome()` (**33**, may be `null`). `LauncherActivityInfo.getIcon(density)` / `getBadgedIcon(density)`. |
-| Implementation | Custom shapes (APK-023 inventory) are drawn by clipping the layers ourselves with our own path, because the system mask is the OEM's. Legacy (non-adaptive) icons: optionally place them on a background plate at a scale (Proposed "reshape legacy"). Themed icons: on 33+ tint `getMonochrome()` with theme colours; when it is `null`, fall back to the full-colour icon (or a desaturated one, per THEME_SYSTEM). Since **Android 16 QPR2 the system "automatically themes app icons for apps that don't provide their own"**. Whether that reaches third-party launchers through public APIs is **Unknown** (U-018). There is **no public API to read the user's system "themed icons" toggle** (Unknown/none found), so the toggle is our own setting. Cache rendered bitmaps per `(component, user, iconConfigHash)`. Invalidate on `onPackageChanged` and on configuration/density changes. |
+| Implementation | Custom shapes (APK-023 inventory) are drawn by clipping the layers ourselves with our own path, because the system mask is the OEM's. Legacy (non-adaptive) icons: optionally place them on a background plate at a scale (Proposed; theme field `icons.legacyIconPlate`). Themed icons: on 33+ tint `getMonochrome()` with theme colours; when it is `null`, fall back to the full-colour icon (or a desaturated one, per THEME_SYSTEM). Since **Android 16 QPR2 the system "automatically themes app icons for apps that don't provide their own"**. Whether that reaches third-party launchers through public APIs is **Unknown** (U-018). There is **no public API to read the user's system "themed icons" toggle** (Unknown/none found), so the toggle is our own setting. Cache rendered bitmaps per `(component, user, iconConfigHash)`. Invalidate on `onPackageChanged` and on configuration/density changes. |
 | Failure | `getMonochrome()` is `null` for many apps. Very large drawables are capped by the platform. |
 | Confidence | Verified (APIs); Unknown (QPR2 auto-theming reach) |
 | DOC | DOC-043, DOC-044, DOC-010 |
@@ -208,7 +208,7 @@ are cited only to show which capability areas exist (feature inventory).
 |---|---|
 | Convention | Icon packs declare an activity with intent action **`org.adw.ActivityStarter.THEMES`** (other launcher-specific actions exist, e.g. `com.novalauncher.THEME`). They ship `appfilter.xml` (in `res/xml/`, `res/raw/` or `assets/`) mapping `<item component="ComponentInfo{pkg/cls}" drawable="name"/>`, optional `<iconback>/<iconmask>/<iconupon>/<scale>` for unmapped icons, `<calendar component prefix="calendar_">` (31 day drawables), and `res/xml/drawable.xml` for a manual picker. |
 | Implementation | Discover packs with `<queries><intent><action android:name="org.adw.ActivityStarter.THEMES"/></intent></queries>` + `PackageManager.queryIntentActivities`. Read resources with `PackageManager.getResourcesForApplication(pkg)` and parse with `XmlPullParser`, untrusted: bounded size and depth, no code loading, no `createPackageContext(CONTEXT_INCLUDE_CODE)`. Support only `item`, `calendar` and the four fallback tags; treat anything else as unsupported. Reading a pack's own resources needs no permission once the pack is visible. "Apply" intents from packs (APK-011 inventory) are vendor-specific and **out of scope for v1** (Proposed). |
-| Confidence | **Corroborated at best, Secondary only.** This is a de-facto convention documented by third-party launcher projects (SEC-006), not by Android. Treat as **Inferred** for compatibility claims; test against real packs. |
+| Confidence | **Inferred (secondary source only, SEC-006).** This is a de-facto convention documented by third-party launcher projects, not by Android. Test against real packs. |
 | DOC | DOC-020 (queries mechanism), SEC-006 |
 
 ## 12. Wallpaper and colour
@@ -217,7 +217,7 @@ are cited only to show which capability areas exist (feature inventory).
 |---|---|
 | API | Show the wallpaper: theme attribute `android:windowShowWallpaper=true` (`WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER`, API 5) and a translucent window background. `WallpaperManager.getWallpaperColors(FLAG_SYSTEM)` (27): may return `null` while colours are processed or for live wallpapers, and it is IPC, so **not on the UI thread**. `addOnColorsChangedListener` (27). `WallpaperColors.getPrimary/Secondary/TertiaryColor`. `getColorHints()` with `HINT_SUPPORTS_DARK_TEXT` / `HINT_SUPPORTS_DARK_THEME` (**31**; "a launcher may set its text color to black if this flag is specified"). `setWallpaperOffsets(windowToken, x, y)` (5) and `sendWallpaperCommand(token, COMMAND_TAP, x, y, 0, null)` (7) for live wallpapers. Dynamic colour: Compose Material 3 `dynamicLightColorScheme` / `dynamicDarkColorScheme(context)` (31+). Blur: `Window.setBackgroundBlurRadius` / `LayoutParams.setBlurBehindRadius` (31) and `WindowManager.isCrossWindowBlurEnabled()` (31), which may be off because of the GPU, battery saver or tunnelling. |
 | Do not | `WallpaperManager.getDrawable()`: up to Android 12 it needs storage permission. On 13 it returns the default wallpaper or throws, and **from Android 14 it always throws `SecurityException`** unless the app holds `MANAGE_EXTERNAL_STORAGE`. **Rejected.** Dim and contrast are drawn as a scrim in our window; we never sample the bitmap. |
-| Changing wallpaper | Open the system picker with `Intent.ACTION_SET_WALLPAPER` (no permission). `SET_WALLPAPER` is needed only if Strata itself sets a bitmap (theme bundles, THEME_SYSTEM). It is normal-level and optional, behind a flag. |
+| Changing wallpaper | Home menu "Wallpaper": open the system picker with `Intent.ACTION_SET_WALLPAPER` (API 1; "Show settings for choosing wallpaper"; no permission). Theme wallpaper images (FR-THEME-34, D-009): copy the stored image to `cacheDir/share/`, expose it through our `FileProvider` (MIME `image/webp`), and start `WallpaperManager.getCropAndSetWallpaperIntent(uri)` (API 19; "launch an activity that crops the given image and sets the device's wallpaper"; throws `IllegalArgumentException` unless the URI is `content:` with an `image/*` type) with `FLAG_GRANT_READ_URI_PERMISSION`. The system activity performs the change, so Strata needs **no `SET_WALLPAPER`** (which `setStream` requires). The doc says a default HOME activity that supports cropping is preferred; Strata declares no `CROP_AND_SET_WALLPAPER` filter, so the system handler is used. If no activity resolves (`ActivityNotFoundException`), fall back to an `ACTION_ATTACH_DATA` chooser (API 1) with the same URI and `image/*`; if that also fails, show "No app on this device can set wallpapers". The result (`RESULT_OK`/canceled) is informational only. |
 | Failure | `null` colours: fall back to theme default text colour (THEME_SYSTEM §5.1). Blur unavailable: fall back to a solid scrim (listen with `addCrossWindowBlurEnabledListener`). |
 | Confidence | Verified |
 | DOC | DOC-045, DOC-046, DOC-047, DOC-048, DOC-049, DOC-050 |
@@ -258,7 +258,7 @@ are cited only to show which capability areas exist (feature inventory).
 | Field | Content |
 |---|---|
 | API | Jetpack DataStore (Preferences, or Proto/typed for settings and the theme index), Room (SQLite) for app records, favourites, launch log, widget placements and pinned shortcuts. `AtomicFile` for theme JSON (THEME_SYSTEM). Import/export via the Storage Access Framework: `ActivityResultContracts.CreateDocument(mime)` / `OpenDocument(arrayOf(mime))` (`ACTION_CREATE_DOCUMENT` / `ACTION_OPEN_DOCUMENT`, API 19). No storage permission is needed. |
-| Implementation | Keys use `ComponentName.flattenToString()` + `UserManager.getSerialNumberForUser(user)`. Serial numbers stay stable across reboot; `UserHandle` IDs are not portable across devices. On import, re-match by package/component and drop unknown entries with a report. Exports **exclude** private-space and work-profile data unless the user opts in, and never contain notification content (Proposed). File types follow D-006 (`.strata-theme.json`; backup format is defined by T-04/T-06). Optional "open with" filter for our own MIME/extension, never the original app's formats (D-006). |
+| Implementation | Keys use `ComponentName.flattenToString()` + `UserManager.getSerialNumberForUser(user)`. Serial numbers stay stable across reboot; `UserHandle` IDs are not portable across devices. On import, re-match by package/component and drop unknown entries with a report. Exports **exclude** private-space and work-profile data unless the user opts in, and never contain notification content (Proposed). File types follow D-006 (`.strata-theme.json`, THEME_SYSTEM §3; backup format `.strata-backup.json`, ARCHITECTURE §12). The canonical list of accepted import MIME types is THEME_SYSTEM §3.1. Never the original app's formats (D-006). |
 | Failure | Provider revoked or file deleted: show an error and keep current state (THEME_SYSTEM handles validation). |
 | Confidence | Verified (APIs); Proposed (keys/rules) |
 | DOC | DOC-061, DOC-062, DOC-063, DOC-012 |
@@ -268,8 +268,9 @@ are cited only to show which capability areas exist (feature inventory).
 | Field | Content |
 |---|---|
 | API | `android:allowBackup="true"`. `android:dataExtractionRules="@xml/data_extraction_rules"` (API 31+: `<cloud-backup [disableIfNoEncryptionCapabilities]>` and `<device-transfer>`). `android:fullBackupContent="@xml/backup_rules"` for API ≤ 30; the guide says both must be supplied. Quota: **25 MB per app user**. Backups are end-to-end encrypted on Android 9+ with the lock-screen credential. `no_backup` and cache directories are always excluded. |
-| Proposed rules | Include: settings DataStore, Room DB (favourites, hidden/renamed apps, layout), themes. **Exclude:** icon/bitmap caches, the launch log (privacy; optional), anything keyed to private-space users, and widget host-view caches. Use `disableIfNoEncryptionCapabilities="true"` for cloud. Device transfer may include everything except caches. After restore, a first-run reconcile re-matches components (some apps are not yet installed) and remaps widget IDs (§7 restore). |
-| Failure | Restored items for missing apps are shown as "not installed" or dropped (T-05 decides). Users who turned off Google backup get nothing; the manual export (§16) is the user-controlled path. |
+| Proposed rules | Include: settings DataStore, Room `strata.db` (favourites, hidden/renamed apps, layout), themes (THEME_SYSTEM §11.4). **Exclude:** icon/bitmap caches, anything keyed to private-space users (never written, P-5), widget host-view caches, and the launch log. The launch log lives in its own Room database `noBackupFilesDir/launch_log.db` (ARCHITECTURE §4.1, D-010); `no_backup` is always excluded by the platform, and the rule files also exclude it explicitly so a later move cannot leak it. Use `disableIfNoEncryptionCapabilities="true"` for cloud. Device transfer carries the same set except that theme images are included (THEME_SYSTEM §11.4). After restore, the first start detects the restore (ARCHITECTURE §12.3 step 6), reconciles components (some apps are not yet installed) and remaps widget IDs (§7 restore). |
+| Rule files | `res/xml/data_extraction_rules.xml` (API 31+), `<cloud-backup disableIfNoEncryptionCapabilities="true">`: include `domain="file" path="datastore/"`, `domain="file" path="themes/user/"`, `domain="file" path="themes/fonts/"`, `domain="file" path="themes/lkg.strata-theme.json"`, `domain="database" path="strata.db"` (plus its `-wal`/`-shm` files); exclude `domain="file" path="themes/images/"`, `domain="file" path="restore/"`, `domain="database" path="launch_log.db"` (defence in depth; the file lives in `no_backup`). `<device-transfer>`: the same rules, plus include `domain="file" path="themes/images/"`. `res/xml/backup_rules.xml` (API ≤ 30, `<full-backup-content>`): the cloud set. Caches and `no_backup` need no rule (always excluded, DOC-064). |
+| Failure | Restored items for missing apps are kept as pending for 30 days and listed (FR-BACKUP-03, FR-LIFE-03). Users who turned off Google backup get nothing; the manual export (§16) is the user-controlled path. |
 | Confidence | Verified (mechanism); Proposed (rules); Unknown (widget-state inclusion with full backup, U-017) |
 | DOC | DOC-064, DOC-031 |
 
@@ -296,8 +297,8 @@ are cited only to show which capability areas exist (feature inventory).
 | Topic | Finding | Label | Source |
 |---|---|---|---|
 | Default-home dialog | AOSP PermissionController behaviour (§2) is the baseline; OEMs ship their own PermissionController/Settings builds. | Inferred | DOC-007 |
-| Xiaomi HyperOS/MIUI | Several secondary sources report that system **full-screen gesture navigation is tied to the stock launcher**: third-party homes force 3-button navigation, or need workarounds such as a "second space" trick or overlay apps. A launcher vendor help page reports that **HyperOS 2.0+ blocks** selecting a third-party default launcher until "reset to default" in Settings, and gives an `adb shell pm set-home-activity` workaround. | Corroborated (secondary only; not official) | SEC-007, SEC-008 (T-02 to register the vendor help page as PUB) |
-| Samsung One UI | One UI 2.5 enabled gesture navigation for third-party launchers. User reports say some OEM gesture/animation tuning (Good Lock "Home Up") does not apply to third-party launchers. | Corroborated (secondary) | SEC-009 |
+| Xiaomi HyperOS/MIUI | Several secondary sources report that system **full-screen gesture navigation is tied to the stock launcher**: third-party homes force 3-button navigation, or need workarounds such as a "second space" trick or overlay apps. A launcher vendor help page reports that **HyperOS 2.0+ blocks** selecting a third-party default launcher until "reset to default" in Settings, and gives an `adb shell pm set-home-activity` workaround. | Inferred (secondary sources only; not official) | SEC-007, SEC-008, PUB-076 |
+| Samsung One UI | One UI 2.5 enabled gesture navigation for third-party launchers. User reports say some OEM gesture/animation tuning (Good Lock "Home Up") does not apply to third-party launchers. | Inferred (secondary only) | SEC-009 |
 | Recents/quick-switch animations | On AOSP-derived builds, gesture-nav recents and home-transition animations come from the system ("quickstep") launcher. A third-party home gets generic window animations. No public API exists to provide them. | Inferred (no official doc fetched) | — |
 | Battery managers | Aggressive OEM task killers may kill the notification-listener or accessibility service processes. | Unknown (no official source) | U-020 |
 
@@ -319,7 +320,7 @@ are cited only to show which capability areas exist (feature inventory).
 | Backup/restore and widget-ID remap | Manifest and broadcast | Backup XML, `APPWIDGET_HOST_RESTORED` receiver |
 | Icon rendering | Platform drawables | `AdaptiveIconDrawable` → `Bitmap` → `ImageBitmap` |
 
-Compose does provide insets, IME control, `systemGestureExclusion`, predictive-back handlers, semantics and dynamic colour schemes. D-005 stands: framework code sits behind interfaces (`AppRepository`, `WidgetHostController`, `ShortcutRepository`, `RoleController`, `NotificationBadgeSource`).
+Compose does provide insets, IME control, `systemGestureExclusion`, predictive-back handlers, semantics and dynamic colour schemes. D-005 stands: framework code sits behind the interfaces of ARCHITECTURE §3 (`AppCatalogSource`, `WidgetHostController`, `ShortcutSource`, `RoleController`, `BadgeSource`, …).
 
 ---
 
@@ -340,8 +341,7 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
     <!-- Strip AD_ID if any transitive dependency merges it in (NFR-PRIV-02) -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
     <!-- PACKAGE_USAGE_STATS: not declared in v1 (no v1 requirement uses it; ARCHITECTURE §17) -->
-    <!-- Optional: only if Strata applies a theme-bundle wallpaper itself (THEME_SYSTEM) -->
-    <!-- <uses-permission android:name="android.permission.SET_WALLPAPER" /> -->
+    <!-- SET_WALLPAPER: not declared; theme wallpapers are handed to the system (§12, D-009) -->
 
     <!-- Package visibility (instead of QUERY_ALL_PACKAGES) -->
     <queries>
@@ -399,7 +399,8 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
             </intent-filter>
         </activity>
 
-        <!-- Settings + onboarding entry visible in other launchers -->
+        <!-- Entry activity (D-008): the app icon in other launchers. MAIN/LAUNCHER → onboarding if
+             not done, else explicit intent to HomeActivity; APPLICATION_PREFERENCES → settings. -->
         <activity
             android:name=".settings.SettingsActivity"
             android:exported="true"
@@ -469,17 +470,28 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
         </service>
         <!-- NOTE: v1 ships the store build variant WITHOUT the lock service above (U-014, ROADMAP). -->
 
-        <!-- Theme import: opens .strata-theme.json / .strata-theme.zip from SAF / share (FR-THEME-21) -->
+        <!-- Theme import from other apps (FR-THEME-21). MIME list = THEME_SYSTEM §3.1 (canonical).
+             VIEW carries the URI in getData, so the filter pins scheme="content".
+             SEND carries it in EXTRA_STREAM (no data URI), so its filter has no scheme;
+             the activity rejects any EXTRA_STREAM that is not content: (ARCHITECTURE §13). -->
         <activity
             android:name=".theme.ThemeImportActivity"
             android:exported="true"
             android:excludeFromRecents="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/json" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
 
@@ -494,7 +506,7 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
             </intent-filter>
         </activity>
 
-        <!-- Share exported themes/backups via content:// URIs (FR-THEME-23) -->
+        <!-- Share exported themes/logs and hand theme wallpapers to the system via content:// URIs (FR-THEME-23, FR-THEME-34) -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
@@ -502,7 +514,7 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" /> <!-- only cache/export/ -->
+                android:resource="@xml/file_paths" /> <!-- only <cache-path path="share/"/> -->
         </provider>
     </application>
 </manifest>
@@ -521,7 +533,7 @@ Notes: no `INTERNET`, no `QUERY_ALL_PACKAGES`, no `BIND_APPWIDGET`, no `EXPAND_S
 | Notification-listener access | **Optional**, user grant | special access | Badges/previews; unavailable on low-RAM ≤ Q | DOC-036 |
 | Accessibility service enablement | **Optional**, user grant + Play declaration | special | Lock screen (28+) | DOC-039, DOC-041 |
 | `PACKAGE_USAGE_STATS` | **Deferred** (not declared in v1; ARCHITECTURE §17) | appop | Screen-time / external-launch usage; default uses our own log | DOC-038, DOC-016 |
-| `SET_WALLPAPER` | Optional (flagged) | normal | Only if themes apply wallpapers directly | DOC-045 |
+| `SET_WALLPAPER` | **Rejected** | normal | Not needed: theme wallpapers go through `getCropAndSetWallpaperIntent` / `ACTION_ATTACH_DATA`, where the system app sets the wallpaper (D-009, FR-THEME-34) | DOC-045, DOC-001 |
 | `QUERY_ALL_PACKAGES` | **Rejected** | normal + Play restricted | Not needed (intent `<queries>`); launcher not a named Play permitted use | DOC-019, DOC-021 |
 | `BIND_APPWIDGET` | **Rejected** | signature\|privileged | Never granted to Play apps; user-consent bind path instead | DOC-031, DOC-071 |
 | `EXPAND_STATUS_BAR` | **Rejected** | normal | Only useful with non-SDK reflection; use `GLOBAL_ACTION_NOTIFICATIONS` | DOC-068, DOC-039 |
@@ -552,13 +564,13 @@ Notes: no `INTERNET`, no `QUERY_ALL_PACKAGES`, no `BIND_APPWIDGET`, no `EXPAND_S
 | Window blur | — | — | — | — | ✓ (if enabled) | ✓ | ✓ | ✓ | ✓ |
 | Gesture exclusion | n/a | n/a | ✓ (home exempt from 200 dp) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Edge-to-edge | via `enableEdgeToEdge` | same | same | same | same | same | same | enforced (opt-out possible) | enforced, no opt-out |
-| Predictive back | — | — | — | — | — | opt-in (dev setting) | ✓ | ✓ | default; no `onBackPressed` |
+| Predictive back | — | — | — | — | — | opt-in (dev setting)¹ | ✓¹ | ✓¹ | default; no `onBackPressed` (DOC-052) |
 | Splash style option | — | — | — | — | — | ✓ | ✓ | ✓ | ✓ |
 | 200 % nonlinear font | — | — | — | — | — | — | ✓ | ✓ | ✓ |
 | Large-screen orientation ignored | — | — | — | — | — | — | — | — | ✓ (target 36; opt-out removed at 37) |
 | Auto Backup rules | fullBackupContent | same | same | same | dataExtractionRules | same | same | same | same |
 
-Sources: API levels from the DOC pages cited in §1–§19.
+Sources: API levels from the DOC pages cited in §1–§19. ¹ The predictive-back cells for API 33–35 are **Inferred** (DOC-058 does not state the behaviour per level); only the API 36 cell is Verified (DOC-052).
 
 ---
 

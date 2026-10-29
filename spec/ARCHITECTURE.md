@@ -43,15 +43,17 @@ no account, no analytics, no billing (D-004, D-007, NFR-PRIV-01/02). The theme f
 ## 2. Module layout
 
 ```
-:app                         Application, HomeActivity, SettingsActivity, ThemeImportActivity,
-                             PinRequestActivity, receivers, manifest, AppGraph (manual DI), nav host
+:app                         Application, HomeActivity, SettingsActivity (also the D-008 entry
+                             router), ThemeImportActivity, PermissionUsageActivity, PinRequestActivity,
+                             receivers, manifest, AppGraph (manual DI), nav host
 :core:common                 dispatchers, Clock, Logger, Outcome<T,E>, IDs, Flow utils (pure Kotlin)
 :core:model                  AppKey, AppEntry, ProfileKind, AppOverride, Favorite, Settings,
                              WidgetPlacement, BadgeState… (pure Kotlin, no Android)
 :core:platform-api           interfaces for every platform service + their models (pure Kotlin)
 :core:json                   strict bounded RFC 8259 parser/writer with ordered tree (pure Kotlin)
-:core:theme                  theme document model, validator, migrations, resolver, contrast,
-                             HCT tone math, Strata Default constant (pure Kotlin; uses :core:json)
+:core:theme                  ResolvedTheme types + compiled Strata Default (from M1); theme document
+                             model, validator, migrations, resolver, contrast, HCT tone math (M4)
+                             (pure Kotlin; uses :core:json from M4)
 :core:search                 normaliser, index, ranker (pure Kotlin; ICU behind TextFolding iface)
 :core:data                   repositories, Room DB, DataStore(s), AtomicFile theme store,
                              reconciler, purge jobs (Android library)
@@ -167,7 +169,8 @@ interface ContactsSource { suspend fun search(q: String, limit: Int): List<Conta
 interface LockService { val enabled: StateFlow<Boolean>; fun lock(): Boolean }
 interface Haptics { fun tick(kind: HapticKind) }   // no-op when master off (FR-SET-05)
 interface TextFolding { fun fold(s: String): String; fun transliterate(s: String): String? }
-interface Collation { fun comparator(locales: List<String>): Comparator<String>; fun buckets(locales: List<String>): SectionIndexer }
+interface Collation { fun comparator(locales: List<String>): Comparator<String>; fun sections(locales: List<String>): SectionModel }
+data class SectionModel(val labels: List<String>, val bucketOf: (String) -> Int)  // pure Kotlin; no android.widget.SectionIndexer
 interface SystemIntents { fun showAlarms(); fun openCalendarToday(); fun storeSearch(q: String); fun storeDetails(pkg: String); fun homeSettings() } // each returns LaunchResult
 interface Clock { fun now(): Instant; val ticks: Flow<Instant> }  // minute ticks for the header
 interface BackupService { suspend fun export(to: DocumentRef, opts: ExportOptions): Outcome<ExportReport, BackupError>
@@ -189,16 +192,16 @@ interface DocumentIO { fun openRead(ref: DocumentRef, maxBytes: Long): BoundedSo
 
 | Datum | Source of truth | Owner (writer) | Storage | Exposed as | Notes |
 |---|---|---|---|---|---|
-| App catalog (launchable activities, labels, flags) | Platform `LauncherApps` | `AppCatalogRepository` (only writer of the snapshot) | Room `app_snapshot` = **cache** for cold start (FR-LIFE-01) | `StateFlow<Catalog>` | Snapshot never wins over the platform; reconcile on start, `onStart` and every `PackageChange` (FR-LIST-04, FR-LIFE-03). Private-space rows are never written to the snapshot (P-5). |
+| App catalog (launchable activities, labels, flags) | Platform `LauncherApps` | `AppCatalogRepository` (only writer of the snapshot) | Room `app_snapshot` = **cache** for cold start (FR-LIFE-01); columns in §4.1 | `StateFlow<Catalog>` | Snapshot never wins over the platform; reconcile on start, `onStart` and every `PackageChange` (FR-LIST-04, FR-LIFE-03). Private-space rows are never written to the snapshot (P-5). |
 | Profiles and quiet mode | Platform `UserManager` | `ProfileSource` | none | `StateFlow<List<Profile>>` | Runtime receivers only (ANDROID_PLATFORM §3.2). |
 | User overrides (hidden, custom label, icon override) | Strata | `OverridesRepository` | Room `app_override` | `Flow<Map<AppKey, AppOverride>>` | Rows survive app removal for 30 days (`missing_since`) then purge (FR-LIFE-03). Writes for a PRIVATE profile are rejected (guard). |
 | Favourites order | Strata | `FavoritesRepository` | Room `favorite(position, component, user_serial)` | `Flow<List<AppKey>>` | Cap 12 enforced in the repository (FR-FAV-01). Reorder = one transaction. |
-| Settings (global) | Strata | `SettingsRepository` | Proto DataStore `settings.pb` | `StateFlow<Settings>` | Includes the global theme overrides of THEME_SYSTEM §6, haptics master, search options, gesture options, banners' dismissed-until timestamps. |
+| Settings (global) | Strata | `SettingsRepository` | Proto DataStore `settings.pb` | `StateFlow<Settings>` | Every key is listed in the settings catalogue (§4.2); nothing else is stored there. |
 | Theme library and active theme | Theme files on disk (THEME_SYSTEM §11) | `ThemeRepository` | AtomicFile JSON + Proto DataStore `theme_index.pb` (a cache over files) | `StateFlow<ResolvedTheme>` | Boot and recovery per THEME_SYSTEM §12. The resolver is pure; the repository feeds it platform inputs. |
 | Editor draft | Editor session | `ThemeEditorViewModel` | `themes/drafts/<id>.json` every 2 s | VM state | Offered after process death (FR-THEME-29). |
 | Widget placements | Strata | `WidgetRepository` | Room `widget_placement(app_widget_id, provider, user_serial, height_step, replace_clock, state)` | `Flow<WidgetPlacement?>` | The platform owns the bound ID's existence. Remapped on HOST_RESTORED (FR-WIDGET-04). |
 | Badge counts | Platform notifications | `BadgeSource` impl | **memory only** | `StateFlow<Map<BadgeKey,Int>>` | Never persisted, logged or backed up (FR-NOTIF-03, NFR-PRIV-04). |
-| Launch log | Strata | `LaunchLogRepository` | Room `launch_event(component, user_serial, at)` | queries (counts, recents) | 30-day rolling, pausable, clearable, no PRIVATE rows, excluded from cloud backup (NFR-PRIV-05). |
+| Launch log | Strata | `LaunchLogRepository` | separate Room DB `launch_log.db` (`LaunchLogDatabase`) at `noBackupFilesDir/launch_log.db`, table `launch_event(component, user_serial, at)` | queries (counts, recents) | 30-day rolling, pausable, clearable, no PRIVATE rows. Never part of Auto Backup or device transfer, because `no_backup` is always excluded (NFR-PRIV-05, D-010). Only the manual export can carry it, as day buckets, on opt-in (§12.1). |
 | Wallpaper colours | Platform | `WallpaperColorsSource` | none | `StateFlow` | Read off main (IPC), API 27+ (ANDROID_PLATFORM §12). |
 | Default-home status | Platform role | `RoleController` | none | checked in `onResume` | Banner dismissal timestamp lives in Settings. |
 | Pre-restore snapshot | `:backup` | `BackupService` | `filesDir/restore/undo.strata-backup.json` | — | Deleted on next process start (FR-BACKUP-02). |
@@ -215,7 +218,7 @@ divergent copies.
 ### 4.1 Persistence choice
 | Store | Used for | Why |
 |---|---|---|
-| **Room (SQLite)** | catalog snapshot, overrides, favourites, launch log, widget placements | Relational keyed collections need transactions (atomic reorder, restore-replace, purge). They need indexed queries (log counts per key, 30-day purge) and schema migrations with tests (`MigrationTestHelper`). NFR-REL-02 asks for Room transactions. |
+| **Room (SQLite)** | `strata.db`: catalog snapshot, overrides, favourites, widget placements. `launch_log.db` (separate `RoomDatabase` in `noBackupFilesDir`): launch log only | Relational keyed collections need transactions (atomic reorder, restore-replace, purge). They need indexed queries (log counts per key, 30-day purge) and schema migrations with tests (`MigrationTestHelper`). NFR-REL-02 asks for Room transactions. |
 | **Proto DataStore** (protobuf-lite) | global settings, theme index | Typed, atomic whole-file writes, `Flow` API, `ReplaceFileCorruptionHandler` for FR-LIFE-04. Schema evolution through protobuf field numbers. Preferences DataStore was rejected: untyped keys and no nested messages for the theme index (THEME_SYSTEM §11.2). |
 | **AtomicFile JSON** | theme documents, drafts, restore undo snapshot | Human-editable source of truth (D-006). Unknown keys preserved byte-for-byte (FR-THEME-19). |
 | Disk cache (no backup) | rendered icons `cacheDir/icons/` | Disposable. Rebuilt on demand. |
@@ -227,7 +230,97 @@ Serial numbers are stable across reboots but not across devices, so the backup f
 
 Room DB `strata.db`, version 1. Each schema change ships a `Migration` plus a test. Destructive
 fallback is **not** used. Instead, an open/migration failure triggers the FR-LIFE-04 rebuild path
-(§10) with a banner.
+(§10) with a banner. `launch_log.db` (version 1) is opened by absolute path under
+`noBackupFilesDir`; on corruption it is deleted and recreated empty (the log is disposable),
+without a banner.
+
+**`app_snapshot` columns** (cache only; rebuilt from `LauncherApps` at any time):
+`component TEXT`, `user_serial INTEGER` (primary key = both), `system_label TEXT`,
+`package_name TEXT`, `profile_kind INTEGER` (MAIN/WORK/OTHER; PRIVATE never stored),
+`flags INTEGER` (bit set: system, updated-system, suspended, archived, synthesized-details),
+`first_seen_at INTEGER` (epoch ms; drives the v1.x "new" marker), `last_update_time INTEGER`
+(package `lastUpdateTime`, icon cache key), `section_key TEXT` (collation bucket at write time).
+`app_override` adds `hidden`, `custom_label`, `icon_kind`/`icon_pack`/`icon_drawable` and
+`missing_since` (nullable epoch ms) on the same key.
+
+### 4.2 Settings catalogue (single source for every global setting)
+All global settings live in Proto DataStore `settings.pb` as one `Settings` message. Per-theme
+values are **not** here; they are theme-file fields (THEME_SYSTEM §4, §6). Every field is proto3
+`optional`: an absent field means the catalogue default, so defaults can change without a
+migration and `true` defaults are possible. Field numbers are never reused (deprecated fields
+are `reserved`). "Export" = included in the manual `.strata-backup.json` `settings` object under
+the same snake_case name; "Auto Backup" = carried by the system backup (the whole `settings.pb`
+file is included, ANDROID_PLATFORM §17). Values outside the range are clamped or replaced by
+the default on read and on restore.
+
+| # | Field (`settings.proto`) | Type | Default | Range / values | Requirement | Export | Auto Backup |
+|---|---|---|---|---|---|---|---|
+| 1 | `catalogue_version` | int32 | 1 | ≥ 1 | — (internal) | no | yes |
+| 2 | `install_id` | string | "" (set on first start) | UUID v4 | restore detection §12.3 step 6 | no | yes |
+| 3 | `onboarding_done` | bool | false | — | FR-ONBOARD-01, D-008 | no | yes |
+| 4 | `list_two_column` | bool | true | — | FR-LIST-07 | yes | yes |
+| 5 | `haptics_enabled` | bool | true | — (master; false wins over every theme) | FR-SET-05, FR-THEME-17 | yes | yes |
+| 6 | `show_hidden_in_search` | bool | true | — | FR-SEARCH-03 | yes | yes |
+| 7 | `recents_enabled` | bool | true | — | FR-SEARCH-05 | yes | yes |
+| 8 | `launch_log_paused` | bool | false | — | FR-SET-05, NFR-PRIV-05 | yes | yes |
+| 9 | `home_press_opens_search` | bool | false | — | FR-HOME-05 | yes | yes |
+| 10 | `allow_rotation` | bool | false | applies only below sw 600 dp | FR-HOME-08 | yes | yes |
+| 11 | `hide_status_bar` | bool | false | — | FR-HOME-04 | yes | yes |
+| 12 | `keep_back_gesture_on_index_side` | bool | false | — | FR-GEST-05 (INTERACTION_SPEC §4.2) | yes | yes |
+| 13 | `badges_enabled` | bool | false | effective only while listener access is granted | FR-NOTIF-01 | yes | yes |
+| 14 | `badge_style` | enum `BadgeStyle` | `DOT` | `DOT`, `COUNT` | FR-NOTIF-02 | yes | yes |
+| 15 | `contacts_search_enabled` | bool | false | effective only while `READ_CONTACTS` is granted | FR-SEARCH-06 | yes (permission is not restored) | yes |
+| 16 | `contacts_hint_shown` | bool | false | — | INTERACTION_SPEC §8 (one-time hint) | no | yes |
+| 17 | `appearance_override` | enum `AppearanceOverride` | `FOLLOW_THEME` | `FOLLOW_THEME`, `SYSTEM`, `LIGHT`, `DARK` | FR-THEME-04 (THEME_SYSTEM §6) | yes | yes |
+| 18 | `enforce_contrast` | bool | true | — | FR-THEME-20 | yes | yes |
+| 19 | `default_home_banner_dismissed_until` | int64 | 0 | epoch ms, ≥ 0 | FR-ONBOARD-02, FR-ONBOARD-04 | no | yes |
+| 20 | `private_space_container_hidden` | bool | false | — (a UI preference, no private-space data) | FR-APPS-10 | no | yes |
+| 21 | `list_sort_by_usage` | bool | false | v1.x | FR-LIST-05 | yes | yes |
+| 22 | `swipe_down_action` | enum `SwipeDownAction` | `NONE` | `NONE`, `NOTIFICATIONS`; v1.x | FR-GEST-04 | yes | yes |
+| 23 | `lock_gesture_enabled` | bool | false | v1.x, `full` flavour only | FR-GEST-03 | yes | yes |
+
+Not settings (owned elsewhere): theme pointers and LKG (`theme_index.pb`, THEME_SYSTEM §11.2);
+widget `replace_clock` and height (`widget_placement`); favourites, hidden, renames, icon
+overrides (Room); per-element visibility of clock, date and alphabet index (theme fields
+`clock.visible`, `clock.date.visible`, `alphabetIndex.visibility`, per FR-HOME-04 / FR-THEME-31).
+
+```proto
+syntax = "proto3";
+package strata.settings;
+option java_package = "app.strata.launcher.core.data.settings";
+enum BadgeStyle { BADGE_STYLE_DOT = 0; BADGE_STYLE_COUNT = 1; }
+enum AppearanceOverride { APPEARANCE_FOLLOW_THEME = 0; APPEARANCE_SYSTEM = 1; APPEARANCE_LIGHT = 2; APPEARANCE_DARK = 3; }
+enum SwipeDownAction { SWIPE_DOWN_NONE = 0; SWIPE_DOWN_NOTIFICATIONS = 1; }
+message Settings {
+  optional int32 catalogue_version = 1;
+  optional string install_id = 2;
+  optional bool onboarding_done = 3;
+  optional bool list_two_column = 4;
+  optional bool haptics_enabled = 5;
+  optional bool show_hidden_in_search = 6;
+  optional bool recents_enabled = 7;
+  optional bool launch_log_paused = 8;
+  optional bool home_press_opens_search = 9;
+  optional bool allow_rotation = 10;
+  optional bool hide_status_bar = 11;
+  optional bool keep_back_gesture_on_index_side = 12;
+  optional bool badges_enabled = 13;
+  optional BadgeStyle badge_style = 14;
+  optional bool contacts_search_enabled = 15;
+  optional bool contacts_hint_shown = 16;
+  optional AppearanceOverride appearance_override = 17;
+  optional bool enforce_contrast = 18;
+  optional int64 default_home_banner_dismissed_until = 19;
+  optional bool private_space_container_hidden = 20;
+  optional bool list_sort_by_usage = 21;
+  optional SwipeDownAction swipe_down_action = 22;
+  optional bool lock_gesture_enabled = 23;
+}
+```
+The Kotlin `Settings` model in `:core:model` mirrors this table with the defaults applied;
+`SettingsRepository` is the only code that reads the proto. A new setting = one row here, one
+proto field, one default; PRODUCT_SPEC and THEME_SYSTEM refer to this table instead of
+restating keys.
 
 ---
 
@@ -327,9 +420,12 @@ SearchEntry(key, displayLabel, systemLabel, folded: [display, system], words: [s
 | T4 initials | `q` (≥ 2 chars) is a prefix of `initials` ("gm" → Google Maps) | 300 |
 | T5 substring | label contains `q` | 200 |
 | T6 fuzzy | `q.length ≥ 4` and optimal-string-alignment distance ≤ 1 to a label prefix of length `q.length` ±1 ("mpas" → maps) | 100 |
-Within a tier: + match on display label (+20) over system label only. A custom-label match
-outranks a system-label match. Then `launchCount30d` (clamped to 0–50, a local-only usage boost,
-off when the launch log is paused or cleared). Then the collation order. Transliterated forms
+Within a tier the score is **additive**: `score = tierBase + (20 if the match is on the display
+label, else 0) + min(launchCount30d, 50)`. The boost is local-only and is 0 while the launch log
+is paused or after it is cleared. The largest addition (20 + 50 = 70) is below the 100-point gap
+between tiers, so usage never lifts a result into a higher tier; a custom-label match outranks a
+system-label match of the same tier unless usage differs by more than 20. Equal scores are
+ordered by collation. Transliterated forms
 score one tier lower than the same match on the native form. Hidden apps are included
 only if `settings.showHiddenInSearch` (FR-SEARCH-03). PRIVATE-profile entries exist only while the
 space is unlocked and are removed from the index on lock.
@@ -407,7 +503,7 @@ death mid-restore leaves the old state (§12.4).
 | Room | `SQLiteException`/`SQLiteDatabaseCorruptException` on open or migration; `PRAGMA quick_check` once per app update | Move the DB to `filesDir/quarantine/`, create a new DB, rebuild the snapshot from LauncherApps, show the banner "Some settings were reset" |
 | Settings DataStore | `CorruptionException` | `ReplaceFileCorruptionHandler` → defaults + banner |
 | Theme index / files | THEME_SYSTEM §11.2, §12 | Rebuild index from files; LKG → Strata Default |
-| Crash loop | `boot_attempts` counter in `no_backup/boot.state` (plain file), incremented at start and cleared 10 s after the first frame | 2 failed starts within 5 min → safe mode: Strata Default theme, widgets not inflated, banner with "Report" (local log export) |
+| Crash loop | `boot_attempts` counter in `noBackupFilesDir/boot.state` (plain file), incremented at start and cleared 10 s after the first frame. Checked **before** the theme guard of THEME_SYSTEM §12 step 4; that guard only marks the offending theme | 2 failed starts within 5 min → safe mode: Strata Default theme, widgets not inflated, banner with "Report" (local log export) |
 
 ---
 
@@ -420,7 +516,7 @@ death mid-restore leaves the old state (§12.4).
 - The UI maps errors to the localised messages of INTERACTION_SPEC §8. A launch failure triggers
   a reconcile (FR-APPS-02).
 - **Logging:** `Logger` interface → `RingLogger`. It keeps a 2 000-entry in-memory ring plus
-  `filesDir/no_backup/logs/strata-<n>.log` (2 × 256 KiB, rotated). Debug builds also write logcat.
+  `noBackupFilesDir/logs/strata-<n>.log` (2 × 256 KiB, rotated). Debug builds also write logcat.
   Release builds write logcat at WARN+ with no identifiers. There is no remote sink, crash reporter or
   analytics (D-007). The user can export the log via SAF from About → "Save diagnostic log"
   (with a preview of contents).
@@ -449,8 +545,9 @@ theme). At most 200 embedded themes.
     "workProfile": false,               // FR-BACKUP-01 opt-in
     "launchLog": false                  // opt-in; off by default
   },
-  "settings": { /* global Settings as JSON: stable snake_case keys mirroring settings.proto field
-                   names; unknown keys ignored; each value validated with the same clamps as the UI */ },
+  "settings": { /* the §4.2 catalogue rows with Export = yes, as JSON: snake_case keys equal to the
+                   settings.proto field names; enums as their value names; unknown keys ignored
+                   and counted; each value validated with the catalogue range */ },
   "apps": [                             // overrides; one entry per (component, profile)
     { "component": "com.example.maps/.MainActivity", "profile": "main",
       "hidden": false, "label": "Nav",                      // label 1–60 chars or absent
@@ -493,7 +590,9 @@ snackbar shows the counts.
 1. **Validate** (off main, bounded read): sniff `{`, parse, check `format`. A `formatVersion` > 1
    is rejected with "Made with a newer version of Strata Launcher". A wrong `format`, a parse error or
    an oversize file gets its own message (FR-BACKUP-02). Embedded themes go through the THEME_SYSTEM §8 pipeline. An
-   invalid theme is excluded and listed. It does not fail the whole restore.
+   invalid theme is excluded and listed. A theme with a newer `schemaVersion` is not invalid: it is
+   restored to disk untouched with `needsAppUpdate = true` and listed as "Needs app update"
+   (THEME_SYSTEM §10.5). Neither case fails the whole restore.
 2. **Preview** (`RestorePreview`): counts of settings, favourites, hidden apps, renames, icon overrides
    and themes. It lists apps not installed (shown with their package name) and widgets to re-add, plus
    "N newer settings will be ignored" for unknown keys of a newer minor. Buttons: **Replace current setup**
@@ -507,12 +606,17 @@ snackbar shows the counts.
 4. **Unknown (not installed) apps are kept as pending.** Override and favourite rows for components not
    present are inserted with `missing_since = now`. These rows are invisible, and they use the same 30-day
    retention as FR-LIFE-03. When the app appears (package added or reconcile) the row becomes active
-   automatically. This is the same mechanism as reinstalling after uninstall. See the contradiction note on
-   FR-BACKUP-03 in `research/handoffs/T-06.md`.
+   automatically. This is the same mechanism as reinstalling after uninstall (FR-BACKUP-03, FR-LIFE-03).
 5. **Undo restore** stays available until the next process start. Then the snapshot is deleted.
 6. Auto Backup / device transfer (FR-BACKUP-04) is a separate path: XML rules per ANDROID_PLATFORM §17 and
-   THEME_SYSTEM §11.4. The `strata.db` is included, `launch_event` is cleared by a first-start-after-restore
-   hook (Room cannot be excluded per table), and the reconcile + widget remap run on the first start after restore.
+   THEME_SYSTEM §11.4. `strata.db` is included; the launch log is in `noBackupFilesDir/launch_log.db` and
+   is therefore never in the backup set (no clearing hook needed). **Restore detection:** on its first
+   start the app writes a random UUID both to `noBackupFilesDir/install_marker` (never backed up) and
+   to `settings.install_id` (backed up). At every start, `AppGraph` compares them before the first
+   reconcile: a non-empty `install_id` with a missing or different marker means the data came from a
+   restore or transfer. The app then runs the post-restore steps once (full reconcile with pending
+   rows, widget-ID remap check, theme re-validation per THEME_SYSTEM §11.4) and rewrites both values
+   with a new UUID. Auto Backup needs no `BackupAgent` for this.
 
 ---
 
@@ -520,17 +624,17 @@ snackbar shows the counts.
 | Surface | Control |
 |---|---|
 | `HomeActivity` (exported, MAIN/HOME) | Reads only action and category. Extras are ignored. `onNewIntent` → HomePressed only for `ACTION_MAIN`+`CATEGORY_HOME`. |
-| `SettingsActivity` (exported, LAUNCHER + `APPLICATION_PREFERENCES`) | No extras honoured, except an internal deep-link enum from our own `PendingIntent`s (none in v1). |
-| Permission-usage page (FR-SET-03) | An activity-alias for `android.intent.action.VIEW_PERMISSION_USAGE` guarded by `android:permission="android.permission.START_VIEW_PERMISSION_USAGE"` (only the system can start it). |
-| `ThemeImportActivity` (exported, `VIEW`/`SEND` for json/zip/octet-stream) | Accepts the `content:` scheme only (rejects `file:`, `http:`). Takes one URI. Reads through `DocumentIO.openRead` with the size cap, and copies into `cacheDir/import/<random>/` before parsing. Nothing is applied without confirmation (FR-THEME-21). `excludeFromRecents`, its own task. |
+| `SettingsActivity` (exported, LAUNCHER + `APPLICATION_PREFERENCES`) | No extras honoured, except an internal deep-link enum from our own `PendingIntent`s (none in v1). Entry routing (D-008) looks only at action and category: `MAIN`+`LAUNCHER` → onboarding if `onboarding_done` is false, else an explicit intent to `HomeActivity` and `finish()`; `APPLICATION_PREFERENCES` → settings root. |
+| `PermissionUsageActivity` (FR-SET-03) | A dedicated exported activity for `android.intent.action.VIEW_PERMISSION_USAGE`, guarded by `android:permission="android.permission.START_VIEW_PERMISSION_USAGE"` (only the system can start it); ANDROID_PLATFORM §22. |
+| `ThemeImportActivity` (exported, `VIEW`/`SEND`; MIME types per THEME_SYSTEM §3.1) | The VIEW filter matches `scheme="content"` only; for SEND, the code rejects any `EXTRA_STREAM` that is not `content:` (`file:`, `http:` refused). Takes one URI. Reads through `DocumentIO.openRead` with the size cap, and copies into `cacheDir/import/<random>/` before parsing. Nothing is applied without confirmation (FR-THEME-21). `excludeFromRecents`, its own task. |
 | `PinRequestActivity` (exported, CONFIRM_PIN_*) | Proceeds only if `LauncherApps.getPinItemRequest(intent)` is non-null and `isValid`. Otherwise it finishes. v1 shows "not supported yet" for shortcut pins (v1.x feature) and declines. |
 | `WidgetHostRestoredReceiver` | Checks the action. The extras are int arrays only, length-matched and bounded (≤ 64). |
 | Bound services (NLS, a11y) | `exported="false"`, guarded by the system bind permissions (ANDROID_PLATFORM §22, U-019). The a11y config retrieves no window content. |
-| `FileProvider` (share theme / log) | `exported="false"`, `grantUriPermissions`, paths limited to `cacheDir/share/`. Copies are purged after 24 h (FR-THEME-23). |
+| `FileProvider` (share theme / log; theme wallpaper hand-off) | `exported="false"`, `grantUriPermissions`, paths limited to `cacheDir/share/`. Copies are purged after 24 h (FR-THEME-23). Wallpaper hand-off (FR-THEME-34, D-009) grants read access to one image URI for the system wallpaper activity only. |
 | Outgoing intents | Explicit where possible. Store intents are built from a validated package-name regex. The query is `Uri.encode`d. Apps are launched only via `LauncherApps`, never from intents stored in files. Backups/themes can never carry an intent. |
 | File import sandbox | `:core:json` limits during parse. Zip rules of THEME_SYSTEM §10.3 (allow-list names, hash-derived paths, ratio caps, no ZIP64). Fonts and images validated before platform loaders see them. Temp dirs are deleted in `finally`. |
 | Network | No `INTERNET` permission. A CI dependency allow-list blocks network libraries. A `NetworkPolicyTest` runs with StrictMode `detectNetwork` (§16). |
-| Data at rest | App-private storage. `no_backup/` holds logs and boot state. Nothing is written to shared storage except user-chosen SAF documents. |
+| Data at rest | App-private storage. `noBackupFilesDir` holds logs, boot state, the install marker and `launch_log.db`. Nothing is written to shared storage except user-chosen SAF documents. |
 
 ---
 
@@ -579,10 +683,13 @@ API 26, 34, 36 phones. Nightly runs the full matrix.
 | material3-adaptive / window-size-class | breakpoints | VISUAL_SPEC §8 |
 | navigation-compose | settings/theme stacks | Type-safe routes; no deep-link exposure |
 | Room (runtime, ktx, compiler via KSP) | §4.1 | Transactions, migrations |
-| DataStore (core) + protobuf-javalite (+ protobuf Gradle plugin) | settings, theme index | §4.1 |
+| DataStore (core) + protobuf-javalite (+ protobuf Gradle plugin) | settings, theme index | §4.1, §4.2 |
 | androidx.core (AtomicFile), androidx.documentfile | theme files, SAF | THEME_SYSTEM §11.3 |
 | androidx.profileinstaller | apply the Baseline Profile | NFR-PERF-01 |
 | androidx.tracing-ktx | `trace {}` sections for benchmarks | perf diagnosis (local) |
+No colour library at runtime: HCT and the tonal-spot palette (THEME_SYSTEM §5.2) are implemented in
+`:core:theme`. If code is ported from Apache-2.0 `material-color-utilities`, its licence/NOTICE is added
+to `licences.json` (T-CI-05); it is source, not a dependency, so the allow-list is unchanged.
 **Test only:** JUnit 4, kotlin-test, Truth, Turbine, kotest-property (property tests and fuzzing), ICU4J
 (JVM collation/transliteration fake), Robolectric, Compose ui-test-junit4 (+ accessibility checks),
 AndroidX test runner/rules/orchestrator, Espresso, UiAutomator, Room testing, Roborazzi (screenshots),
@@ -614,17 +721,18 @@ appears at runtime.
 Fixtures: a synthetic app set of 500 tiny APKs (`:testing:fixtures:apps`, generated at build time with
 labels from the locale fixture lists: Latin, accented, CJK, Cyrillic, Arabic, digits, duplicates).
 The JVM fake `FakeAppCatalogSource` reads the same label list. Each test case in TEST_PLAN names its
-level and the requirement IDs it covers. The traceability matrix is TEST_PLAN §14.
+level and the requirement IDs it covers. The requirement → test map is TEST_PLAN §22; the full matrix is `spec/REQUIREMENTS_TRACEABILITY.md`.
 
 ---
 
 ## 17. Build configuration notes
 - `applicationId = "app.strata.launcher"`, `minSdk = 26`, `targetSdk = 36`, `compileSdk = 36`. Java/Kotlin
-  target 17. R8 full mode with optimisation. `resConfigs` limited to shipped locales. Fonts subset per VISUAL_SPEC §4.2.
+  target 17. R8 full mode with optimisation. `resConfigs` limited to the v1 locale set (PRODUCT_SPEC §5). Fonts subset per VISUAL_SPEC §4.2.
 - Build types: `debug` (StrictMode death, LeakCanary), `release`, `benchmark` (release-like, debuggable=false,
   profileable). Flavour dimension `lock`: `full` (lock service, FR-GEST-03) / `nolock` (no a11y service in the
   manifest) pending U-014. v1 ships `nolock` unless U-014 resolves.
 - Manifest additions beyond ANDROID_PLATFORM §22 (see handoff): `READ_CONTACTS` (optional runtime),
-  `ThemeImportActivity`, `FileProvider`, the VIEW_PERMISSION_USAGE alias, `AD_ID` `tools:node="remove"`.
+  `ThemeImportActivity`, `FileProvider`, `PermissionUsageActivity` (VIEW_PERMISSION_USAGE), `AD_ID` `tools:node="remove"`.
+  No `SET_WALLPAPER` (D-009).
   `PACKAGE_USAGE_STATS` is **not** declared in v1, because no v1 requirement uses it (least privilege,
   NFR-PRIV-03).

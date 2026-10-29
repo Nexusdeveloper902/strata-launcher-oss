@@ -25,3 +25,5 @@
 | U-021 | Platform | Meaning of `ACCESS_LAUNCHER_DATA` (36.1) for home apps. | Possible future manifest requirement. | Track API docs. | open |
 | U-022 | Product | v1 scope for contacts/calendar/location features. | Permissions. | Decided in PRODUCT_SPEC (T-05). | resolved — PRODUCT_SPEC §1.5 (deferred calendar/weather/location; contacts opt-in P1) |
 | U-023 | Platform | APK-013 note corrected: LauncherApps results are package-visibility filtered (DOC evidence, ANDROID_PLATFORM). | — | — | resolved |
+| U-024 | Product/platform | How is Strata's home reached when Strata is not the default, and where does first run start? (T-07 R-01) | FR-HOME-01 and M0 were not buildable. | — | resolved — D-008 |
+| U-025 | Architecture | No single catalogue of global settings (key, type, default, range, backup). (T-07 R-07) | M1–M3 settings undefined. | — | resolved — ARCHITECTURE §4.2 |

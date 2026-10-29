@@ -177,9 +177,9 @@ The "All apps ›" row ends the block.
   count, clamped to 14–28 dp. If there are too many buckets for 14 dp, middle letters fold
   into "•" separators.
 - Active (touch down): the column widens to 32 dp on a `surface` rounded track
-  (`radius.full`, 90 % α). The letter under the finger turns `accent` and scales 1.3×, and its
-  neighbours scale 1.15×.
-- Bubble (`showBubble`): a 64 × 64 dp rounded-square tile (`radius.l` 20 dp) that tracks the finger's
+  (`radius.full`, 90 % α). The letter under the finger turns `accent` and scales 1.3×. Neighbouring
+  letters do not change size (no magnification wave).
+- Bubble (`showBubble`): a 64 × 64 dp rounded-square tile (`radius.m`, 12 dp) that tracks the finger's
   y and sits 24 dp inward from the track, never under the finger.
 - Empty buckets: 35 % α, not focusable.
 - The touch area is 48 dp wide (extending inward) over the full track height, minus the
@@ -222,7 +222,7 @@ at 10 % of the screen dimension so a 0.5 scale stays calm.
 The original's documented look: a start-aligned favourites list under a top clock/date,
 with empty space above to lower content (PUB-008); an edge alphabet strip, including an
 invisible strip on the opposite edge (PUB-011); inline notification text previews
-instead of dots (PUB-020); swipe-right pop-ups (PUB-008); an optional floating button at
+instead of dots (PUB-020); horizontal row swipes that open a quick-action panel (PUB-008); an optional floating button at
 the bottom end (PUB-005); vendor icon families, a dot icon pack, curated themes and
 wallpapers (PUB-039/040/043/045). We share the generic list-launcher idea (not protectable),
 but differ in every specific:
@@ -232,8 +232,8 @@ but differ in every specific:
 | Home composition | Favourites anchored **at the bottom** above an always-visible **search pill**. The header floats at the top with flexible space between them. |
 | Search entry | A visible pill plus the gesture (the original relies on the gesture). |
 | Notifications | **Dot / count badges** by default; text preview only as an opt-in. |
-| Per-app actions | Long-press sheet only; no horizontal row gestures or pop-ups. |
-| Alphabet index | One visible index on a chosen side; an active track with a **rounded-square bubble offset inward**; dot glyph option; no invisible opposite strip. |
+| Per-app actions | Long-press sheet only; no horizontal row gestures or floating panels. |
+| Alphabet index | One visible index on a chosen side; an active track with a **rounded-square bubble offset inward**; only the touched letter grows (no neighbour magnification); dot glyph option; no invisible opposite strip. |
 | Clock | Our four styles (§9.4), including the stacked hours/minutes "strata" style. No copied clock designs. |
 | Section headers | Explicit letter headings in the list, with an optional hairline. |
 | Floating button | None. |

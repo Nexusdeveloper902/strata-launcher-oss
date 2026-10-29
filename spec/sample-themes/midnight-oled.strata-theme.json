@@ -33,7 +33,7 @@
     "smallTextUsesSystemFont": true
   },
   "list": { "density": "spacious", "horizontalPaddingDp": 28, "sectionHeaders": false },
-  "icons": { "visible": true, "sizeDp": 24, "shape": "circle", "tint": "monochrome", "reshapeLegacy": true, "labelsVisible": true },
+  "icons": { "visible": true, "sizeDp": 24, "shape": "circle", "tint": "monochrome", "legacyIconPlate": true, "labelsVisible": true },
   "clock": {
     "visible": true, "style": "numericStacked", "hourFormat": "system", "sizeSp": 96, "alignment": "start",
     "date": { "visible": true, "skeleton": "EEEEd", "sizeSp": 14 }

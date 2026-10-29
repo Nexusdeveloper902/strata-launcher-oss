@@ -14,16 +14,20 @@ All milestones, orderings and budgets are `Proposed`. Requirement IDs are from P
   regression against the last milestone blocks merges earlier.
 - Each milestone ends with a short demo build (debug APK, sideloaded) and a handoff note listing
   changed requirement status.
-- Scope cuts of P1 items need a recorded decision (D-nnn by the orchestrator), per PRODUCT_SPEC §0.
+- Scope cuts of P1 items need a recorded decision (D-nnn by the orchestrator), per the "Priority" rule in the PRODUCT_SPEC header.
+- **Dependency rule for DoDs:** a milestone's DoD lists only tests whose features are built in that
+  milestone or in a milestone it depends on. Compose-level tests (C/S) in M1–M3 that need a
+  non-default look inject a `ResolvedTheme` built in code with the minimal `:core:theme` of M1;
+  theme *files* are used as fixtures only from M4.
 
 ## 1. Milestone overview
 | M | Name | Main modules | Depends on | Indicative size |
 |---|---|---|---|---|
-| **M0** | Skeleton, CI, manifest, default home | build-logic, `:app`, `:core:common`, `:core:model`, `:core:platform-api`, `:testing:fakes`, `:benchmark` | — | 1–1.5 wk |
-| M1 | App catalog and A–Z list | `:platform:apps`, `:core:data` (Room, snapshot, reconciler), `:core:ui`, `:feature:home` (list) | M0 | 2–3 wk |
-| M2 | Search | `:core:search`, `:platform:system` (TextFolding/Collation), `:feature:search` | M1 | 1.5–2 wk |
+| **M0** | Skeleton, CI, manifest, default home, entry routing | build-logic, `:app`, `:core:common`, `:core:model`, `:core:platform-api`, `:platform:system` (minimal RoleController), `:testing:fakes`, `:benchmark` | — | 1–1.5 wk |
+| M1 | App catalog and A–Z list | `:platform:apps`, `:platform:system` (+ Collation, Haptics), `:core:data` (Room, snapshot, reconciler, settings DataStore, launch log), `:core:theme` (minimal: ResolvedTheme + compiled Strata Default), `:core:ui`, `:feature:home` (list) | M0 | 2–3 wk |
+| M2 | Search | `:core:search`, `:platform:system` (+ TextFolding), `:feature:search` | M1 | 1.5–2 wk |
 | M3 | Home, favourites, gestures, app management | `:feature:home`, `:core:data` (overrides, favourites, settings, launch log), `:platform:icons` (system icons only) | M1, M2 | 2–3 wk |
-| M4 | Theme engine | `:core:json`, `:core:theme`, `ThemeRepository`, boot/recovery | M0 (parallel to M1–M3 after M0) | 2–3 wk |
+| M4 | Theme engine | `:core:json`, `:core:theme` (parser, validator, resolver), `ThemeRepository`, boot/recovery | M0 to start (engine DoD); M3 to close (integration DoD) | 2–3 wk |
 | M5 | Theme UI, import/export, icons and icon packs | `:feature:theme`, `:platform:icons` (packs, shapes, monochrome), FileProvider, ThemeImportActivity | M3, M4 | 2–3 wk |
 | M6 | Onboarding, profiles, shortcuts | `:feature:onboarding`, RoleController, work profile, private space, ShortcutSource | M3 | 2 wk |
 | M7 | Widgets, notification badges, contacts | `:platform:widgets`, `:feature:widgets`, `:platform:notifications`, ContactsSource | M3, M6 | 2–3 wk |
@@ -32,6 +36,7 @@ All milestones, orderings and budgets are `Proposed`. Requirement IDs are from P
 | v1.x | Point releases | per §3 | v1 | — |
 
 Parallel tracks: M4 (pure Kotlin) can start right after M0, alongside M1–M3, by a second developer.
+Its engine DoD needs only M0; its integration DoD (tests that render home or list) closes after M3.
 M6 can overlap with M5.
 
 ## 2. Milestones
@@ -49,12 +54,17 @@ assumption early: a Compose activity holding ROLE_HOME with Launcher3-style attr
 - Manifest per ANDROID_PLATFORM §22, with the T-06 deltas (ARCHITECTURE §17): HOME activity, settings
   activity, `AD_ID` removed, backup rules files (stubs), `localeConfig`, `enableOnBackInvokedCallback`.
 - `HomeActivity`: edge-to-edge, `windowShowWallpaper`, a placeholder Compose screen, `onNewIntent` → HomePressed,
-  minimal RoleController (role request on 29+, settings fallback on 26–28) behind a debug "Set default" button.
+  minimal RoleController (role request on 29+, settings fallback on 26–28) behind a debug "Set default" button,
+  APP_MODE banner stub when the role is not held.
+- `SettingsActivity` as the D-008 entry router: `MAIN`+`LAUNCHER` → a stub onboarding screen ("Continue" sets
+  `onboarding_done`) if not done, else an explicit intent to `HomeActivity`; `HomeActivity` shows the same stub
+  as its first layer when `onboarding_done` is false. `onboarding_done` is kept in a temporary DataStore key
+  until M1 adds `settings.pb` (field 3 of ARCHITECTURE §4.2; M1 migrates it). The real flow arrives in M6.
 - `AppGraph` manual DI, `Logger` (ring + file), StrictMode in debug, app-scope exception handler.
 - `:benchmark` module with an empty startup benchmark wired to RD-1/emulator, so the measurement pipeline exists from day one.
-**Requirements:** FR-HOME-01 (shell), NFR-PRIV-01, NFR-PRIV-02, NFR-PRIV-03, NFR-I18N-01 (lint gate),
+**Requirements:** FR-HOME-01 (shell and entry routing), NFR-PRIV-01, NFR-PRIV-02, NFR-PRIV-03, NFR-I18N-01 (lint gate),
 NFR-COMPAT-01 (CI matrix exists), NFR-REL-01 (StrictMode infrastructure).
-**DoD:** T-CI-01, T-CI-02, T-CI-03, T-CI-04, T-CI-08, T-HOME-01, T-HOME-02 (banner stub), T-SEC-03,
+**DoD:** T-CI-01, T-CI-02, T-CI-03, T-CI-04, T-CI-08, T-HOME-01 (placeholder shown), T-HOME-02 (banner stub), T-HOME-13, T-SEC-03,
 T-PRIV-02, T-PRIV-03. The smoke job is green on API 26, 34 and 36. The startup benchmark runs and reports
 a number (no budget yet).
 **Risks:** OEM role dialogs differ (U-016), mitigated by testing M0 on RD-1 and RD-3 early. CI emulator
@@ -65,24 +75,31 @@ flakiness, mitigated by ATD images and Orchestrator with retries for infra failu
 
 ### M1 — App catalog and A–Z list
 **Scope:** `AppCatalogSource` (LauncherApps + callbacks on a HandlerThread), `ProfileSource` (main + work
-discovery only), Room `strata.db` v1 (app_snapshot, app_override, favorite, launch_event, widget_placement
-tables created), `AppCatalogRepository` + reconciler + 30-day purge, `AppListAssembler`, ICU sections,
-the list screen with an edge index (scrub + haptics via `Haptics`), launch with source bounds, the
+discovery only), Room `strata.db` v1 (app_snapshot, app_override, favorite, widget_placement tables created),
+the separate `launch_log.db` in `noBackupFilesDir` with `LaunchLogRepository` (write on launch, recents and
+30-day count queries, pause/clear operations; the UI controls come in M3), Proto `settings.pb` with the full
+ARCHITECTURE §4.2 catalogue and `SettingsRepository` (values only; settings screens come in M3/M8),
+`AppCatalogRepository` + reconciler + 30-day purge, `AppListAssembler`, the `Collation` and `Haptics` adapters in
+`:platform:system`, ICU sections, the minimal `:core:theme` (ResolvedTheme types and the compiled Strata Default
+constant, no parser) feeding `:core:ui`, the list screen with an edge index (scrub + haptics via `Haptics`),
+**monogram icon tiles only** (system icons arrive with `:platform:icons` in M3), launch with source bounds, the
 launch-failure path, list-end rows (Settings / Hidden apps stubs), corruption rebuild, synthetic `APPS500` fixture set.
 **Requirements:** FR-LIST-01, -02, -03 (base row), -04, -06, -07; FR-APPS-01, -02, -11; FR-LIFE-01, -03, -04;
 NFR-I18N-03 (sections); NFR-PERF-01/-02 tracked.
-**DoD:** T-LIST-01…06, T-LIST-08…11, T-APPS-01, T-APPS-02, T-APPS-03, T-APPS-17, T-LIFE-01, T-LIFE-04,
-T-LIFE-05, T-LIFE-06, T-LIFE-07, T-LIFE-11, T-LIFE-12, T-LIFE-14, T-LIFE-15, T-PERF-10. T-PERF-01/03/04 run nightly (report only).
+**DoD:** T-LIST-01…06, T-LIST-08…11, T-APPS-01, T-APPS-02, T-APPS-03, T-APPS-17, T-LIFE-01, T-LIFE-11,
+T-LIFE-12, T-LIFE-14, T-LIFE-15, T-PERF-10. T-PERF-01/03/04 run nightly (report only).
+(T-LIFE-04…07 need overrides, the sheet or renames and move to M3.)
 **Risks:** visibility filtering (U-015). T-APPS-01 on API 30/33/35/36 is the first task of M1, because a
 failure would reopen P-1. Compose list performance with 500 rows, mitigated by stable keys, precomputed
 `VisibleApp` and early fling benchmarks.
 
 ### M2 — Search
-**Scope:** `:core:search` (fold, index, tiers, fuzzy, usage boost), `TextFolding`/`Collation` adapters,
-the search layer with IME handling and the keyboard model of INTERACTION_SPEC §5, hidden-app handling,
-recents from the launch log, store hand-off.
+**Scope:** `:core:search` (fold, index, tiers, fuzzy, usage boost), the `TextFolding` adapter,
+the search layer with IME handling and the keyboard model of INTERACTION_SPEC §5, opened in M2 from the
+list's search field and from a printable key on home/list (swipe-up and the pill arrive in M3), hidden-app
+handling, recents from the M1 launch log, store hand-off.
 **Requirements:** FR-SEARCH-01, -02, -03 (hidden part), -04, -05, -07; FR-A11Y-04 (search part); NFR-PERF-03; NFR-I18N-03.
-**DoD:** T-SEARCH-01…07, T-SEARCH-09, T-SEARCH-10, T-SEARCH-11, T-SEARCH-15, T-PERF-05 (blocking for
+**DoD:** T-SEARCH-02, T-SEARCH-04…07, T-SEARCH-09, T-SEARCH-10, T-SEARCH-11, T-SEARCH-15, T-PERF-05 (blocking for
 the JVM microbenchmark: ≤ 8 ms median on the CI reference runner, scaled; device report only).
 **Risks:** IME show timing on OEM keyboards (ANDROID_PLATFORM §14), mitigated by the retry-once rule
 and a test on RD-1/RD-3. Transliteration cost on API 29+, mitigated by computing it at index build, not per keystroke.
@@ -94,9 +111,10 @@ Home-press reset, swipe-up/long-press/home menu, gesture exclusion for the index
 (hide, rename, uninstall, app info), the hidden-apps settings page, settings DataStore (home and
 gesture options, haptics master, launch-log controls), rotation setting, system icons with the monogram placeholder and the L1/L2 cache.
 **Requirements:** FR-HOME-02, -03, -04, -05, -08; FR-FAV-01, -02, -03; FR-GEST-01, -02, -05, -06;
-FR-APPS-03, -04, -05, -07; FR-SET-05; FR-A11Y-01, -02, -03; FR-LIFE-02; NFR-PRIV-05; NFR-PERF-04 tracked.
+FR-APPS-03, -04, -05, -07; FR-LIST-08; FR-SET-05; FR-A11Y-01, -02, -03; FR-LIFE-02; NFR-PRIV-05; NFR-PERF-04 tracked.
 **DoD:** T-HOME-03, T-HOME-05…T-HOME-12, T-FAV-01…05, T-GEST-01, T-GEST-03, T-GEST-05…09,
-T-APPS-04…09, T-APPS-11, T-SET-06, T-SET-07, T-A11Y-01…05, T-LIFE-02, T-LIFE-03, T-PRIV-05, T-COMPAT-02 (subset).
+T-APPS-04…09, T-APPS-11, T-SET-06, T-SET-07, T-A11Y-01…05, T-LIFE-02…07, T-SEARCH-01, T-SEARCH-03,
+T-SEARCH-16, T-PRIV-05, T-COMPAT-02 (subset).
 **Risks:** gesture conflicts with system back (FR-GEST-05) on OEM builds, covered by T-GEST-05 on RD-1
 in this milestone. Widget-free header now, so the M7 widget insertion must not regress the layout.
 Mitigated by a fixed header slot API from M3 on.
@@ -109,8 +127,11 @@ dynamic sources), contrast checks (static + runtime) and enforcement; built-in p
 crash-loop guard, quarantine); theme → `:core:ui` CompositionLocals.
 **Requirements:** FR-THEME-02…20, FR-THEME-28, FR-THEME-31, FR-THEME-32; NFR-THEME-01, -02, -03, -05,
 -07, -09, -10; NFR-A11Y-04.
-**DoD:** T-CI-06, T-CI-09, T-THEME-02…26, T-THEME-36, T-THEME-39, T-THEME-40, T-THEME-43, T-THEME-44,
-T-THEME-45, T-THEME-46, T-THEME-49, T-THEME-50, T-A11Y-11, T-LIFE-13.
+**DoD — engine (needs M0 only):** T-CI-06, T-CI-09, T-THEME-02, T-THEME-03, T-THEME-04, T-THEME-06, T-THEME-07,
+T-THEME-19…23, T-THEME-25, T-THEME-40, T-THEME-43, T-THEME-44, T-THEME-45, T-THEME-46, T-THEME-49, T-A11Y-11.
+**DoD — integration (closes after M3):** T-THEME-05, T-THEME-08, T-THEME-09, T-THEME-10, T-THEME-13…18,
+T-THEME-36, T-THEME-39, T-THEME-50, T-LIFE-13.
+(T-THEME-11/12 need icon rendering and are M5 only; T-THEME-24/26 need the editor and import summary, M5.)
 **Risks:** HCT/tone math correctness, mitigated by golden tests against THEME_SYSTEM §14.1. Parser
 performance at the 256 KiB limit, mitigated by benchmarking in M4, not M9.
 
@@ -121,8 +142,9 @@ VIEW/SEND via ThemeImportActivity, sniffing, summary, conflicts), bundle import/
 export and share via FileProvider, the wallpaper apply confirmation, icon shapes/legacy plate/monochrome,
 icon-pack discovery and the bounded appfilter parser, the per-app icon chooser, the missing-pack notice.
 **Requirements:** FR-THEME-01, -10, -11, -21…27, -29, -30, -34; FR-APPS-06; NFR-THEME-04, -06, -08, -11; NFR-COMPAT-04.
-**DoD:** T-HOME-04, T-THEME-01, T-THEME-11, T-THEME-12, T-THEME-27…35, T-THEME-37, T-THEME-38, T-THEME-42,
-T-THEME-47, T-THEME-48, T-THEME-51, T-APPS-10, T-COMPAT-08, T-SEC-01, T-SEC-05, T-SEC-06, T-THEME-53.
+**DoD:** T-HOME-04, T-THEME-01, T-THEME-11, T-THEME-12, T-THEME-24, T-THEME-26, T-THEME-27…35, T-THEME-37,
+T-THEME-38, T-THEME-42, T-THEME-48, T-THEME-51, T-APPS-10, T-COMPAT-08, T-SEC-01, T-SEC-05, T-SEC-06, T-THEME-53.
+(T-THEME-47 reuses the M8 accessibility suite and moves to M8.)
 **Risks:** icon-pack ecosystem variance (SEC-006, Inferred), mitigated by our own `PACK_OK`/`PACK_BAD`
 fixtures plus 5 real packs in a manual pass. Font validation edge cases, mitigated by fuzzed font headers in T-THEME-29.
 
@@ -132,7 +154,7 @@ logic, the lost-default banner, the work-profile section with pause/resume, the 
 (API 35+) with never-persist guards, app shortcuts in the sheet, the PinRequestActivity shell (declines
 shortcut pins in v1), settings "Default home" and "Uninstall Strata" rows.
 **Requirements:** FR-ONBOARD-01…04; FR-APPS-08 (v1 part), -09, -10; FR-SEARCH-03 (private part); FR-SET-02; FR-HOME-01 (complete).
-**DoD:** T-ONBOARD-01…08, T-APPS-12, T-APPS-14, T-APPS-15, T-APPS-16, T-SEARCH-08, T-LIFE-08, T-LIFE-09,
+**DoD:** T-ONBOARD-01…09, T-APPS-12, T-APPS-14, T-APPS-15, T-APPS-16, T-SEARCH-08, T-LIFE-08, T-LIFE-09,
 T-LIFE-10, T-SET-03, T-SEC-02, T-COMPAT-04 (onboarding part, RD-3).
 **Risks:** HyperOS default-home blocking (U-016). It cannot be fixed, only explained, and the help card is
 the deliverable. Private-space test setup on emulators, mitigated by scripted `pm create-user` profiles,
@@ -144,23 +166,24 @@ receiver and remap), the widget picker with previews, the header widget slot wit
 steps and remove, placeholders; NotificationListenerService badges (opt-in disclosure, access detection,
 dot/count, low-RAM hiding, memory-only state); contact search (opt-in, runtime permission, ≤ 5 results).
 **Requirements:** FR-WIDGET-01…04; FR-NOTIF-01…03; FR-SEARCH-06; NFR-PERF-03 (contacts part); NFR-PRIV-04.
-**DoD:** T-WIDGET-01…09, T-WIDGET-11 (record the U-017 outcome), T-GEST-02, T-NOTIF-01…07, T-SEARCH-12,
-T-SEARCH-13, T-SEARCH-14, T-PERF-06, T-PERF-09, T-PRIV-04.
+**DoD:** T-WIDGET-01…09, T-GEST-02, T-NOTIF-01…07, T-SEARCH-12, T-SEARCH-13, T-SEARCH-14, T-PERF-06, T-PERF-09.
+(T-WIDGET-11 needs the final Auto Backup rules and T-PRIV-04 scans the backup export; both move to M8.)
 **Risks:** configure activities that misbehave, covered by T-WIDGET-05. U-017 (widget state in full backup)
 may leave only the placeholder path, which is acceptable by FR-WIDGET-04. OEM killing of the NLS (U-020),
 mitigated by `requestRebind` on resume. This is a field risk, not a release blocker.
 
 ### M8 — Settings complete, backup/restore, a11y and i18n hardening
 **Scope:** complete settings graph and entry points (incl. `APPLICATION_PREFERENCES`,
-VIEW_PERMISSION_USAGE alias), Privacy & permissions page, per-app language, About/licences/diagnostic log
+`PermissionUsageActivity` for VIEW_PERMISSION_USAGE), Privacy & permissions page, per-app language, About/licences/diagnostic log
 export; `:backup` codec per ARCHITECTURE §12 (+ write `spec/backup.schema.json` as an implementation
 artifact), export with the privacy warning, validate → preview → replace with undo, pending entries, Auto
-Backup XML rules and the first-start-after-restore hook; accessibility pass on every screen, keyboard/switch
+Backup XML rules (ANDROID_PLATFORM §17) and restore detection via the install marker (ARCHITECTURE §12.3 step 6); accessibility pass on every screen, keyboard/switch
 navigation, reduced motion; pseudo-locales, RTL, plurals, date/time.
 **Requirements:** FR-SET-01, -03, -04, -06; FR-BACKUP-01…04; FR-THEME-33; FR-A11Y-04; NFR-A11Y-01…05;
 NFR-I18N-01…04; NFR-REL-02.
-**DoD:** T-SET-01, T-SET-02, T-SET-04, T-SET-05, T-SET-08, T-CI-05, T-BACKUP-01…13, T-WIDGET-10,
-T-THEME-41, T-A11Y-06…10, T-A11Y-12, T-I18N-01…05, T-PRIV-06, T-SEC-04, T-REL-03.
+**DoD:** T-SET-01, T-SET-02, T-SET-04, T-SET-05, T-SET-08, T-CI-05, T-BACKUP-01…13, T-WIDGET-10, T-WIDGET-11
+(record the U-017 outcome), T-THEME-41, T-THEME-47, T-A11Y-06…10, T-A11Y-12, T-I18N-01…05, T-PRIV-04, T-PRIV-06,
+T-SEC-04, T-REL-03.
 **Risks:** restore atomicity across Room + DataStore + theme files, mitigated by the undo-snapshot design and
 T-BACKUP-10 kill tests. TalkBack issues found late, mitigated by `enableAccessibilityChecks()` running from M1.
 
@@ -196,4 +219,4 @@ non-critical startup work → reduce icon size/prefetch. A budget change needs a
 | U-016 OEM default-home | users cannot set Strata as home on HyperOS 2+ | help card, documentation, no workarounds in product | M6 |
 | U-014 accessibility lock policy | Play rejection | `nolock` flavour default for v1 | M9 |
 | U-017 widget state in backups | widgets not restored | placeholder path is the guaranteed behaviour | M7 |
-| Scope (13 areas for one release) | schedule slip | the M4 parallel track. Pre-identified P1 cut candidates if needed (each needs a D-record): FR-SEARCH-06 contacts, FR-LIST-07 two-column, FR-THEME-30 create-from-image | M5–M8 |
+| Scope (13 areas for one release) | schedule slip | the M4 parallel track. Pre-identified P1 cut candidates if needed (each needs a D-record): FR-SEARCH-06 contacts, FR-LIST-07 two-column. (FR-THEME-* rows are all P0, THEME_SYSTEM §15, so none is a cut candidate.) | M5–M8 |

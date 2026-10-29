@@ -29,7 +29,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 ## 1. Build and static checks (CI)
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
-| T-CI-01 | Merged-manifest permission diff | release variant built | Run `checkPermissions`: parse the merged manifest and diff `uses-permission` against `config/approved-permissions.txt` (REQUEST_DELETE_PACKAGES, ACCESS_HIDDEN_PROFILES, READ_CONTACTS) | Exact match. `INTERNET`, `QUERY_ALL_PACKAGES`, `BIND_APPWIDGET`, `EXPAND_STATUS_BAR`, `AD_ID`, storage perms, `POST_NOTIFICATIONS`, `PACKAGE_USAGE_STATS` absent. Build fails otherwise | CI | NFR-PRIV-01, NFR-PRIV-03, FR-APPS-01 |
+| T-CI-01 | Merged-manifest permission diff | release variant built | Run `checkPermissions`: parse the merged manifest and diff `uses-permission` against `config/approved-permissions.txt` (REQUEST_DELETE_PACKAGES, ACCESS_HIDDEN_PROFILES, READ_CONTACTS) | Exact match. `INTERNET`, `QUERY_ALL_PACKAGES`, `BIND_APPWIDGET`, `EXPAND_STATUS_BAR`, `AD_ID`, storage perms, `POST_NOTIFICATIONS`, `PACKAGE_USAGE_STATS`, `SET_WALLPAPER` absent. Build fails otherwise | CI | NFR-PRIV-01, NFR-PRIV-03, FR-APPS-01, FR-THEME-34 |
 | T-CI-02 | Dependency allow-list | — | Run `checkDependencies` on `releaseRuntimeClasspath` against the allow-list and the forbidden list (ARCHITECTURE §15) | 0 forbidden artifacts (network, Firebase, Play services, billing, analytics, crash upload). Build fails on any new unlisted artifact | CI | NFR-PRIV-01, NFR-PRIV-02, FR-THEME-01, NFR-THEME-11 |
 | T-CI-03 | Module graph rules | — | Run `checkModuleGraph` | No edge violating ARCHITECTURE §2.1 (e.g. `:feature:*` → `:platform:*`, `:core:theme` → Android) | CI | ARCH §2.1 (supports NFR-THEME-09) |
 | T-CI-04 | Externalised strings | — | Lint with `HardcodedText`, `SetTextI18n`, a custom `StringConcatInUi` rule and `PluralsCandidate` as errors | 0 findings | CI | NFR-I18N-01 |
@@ -42,10 +42,10 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 ## 2. HOME
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
-| T-HOME-01 | Home key shows Strata | home default; another app in front | Press Home | HomeActivity resumed in its own task. Favourites visible | I | FR-HOME-01 |
-| T-HOME-02 | Works when not default | Strata installed, other launcher default | Open Strata from the other launcher (Settings entry), open home via the "Open home" action | Home renders (APP_MODE) with the "Set as default" banner. Home key still goes to the other launcher | I | FR-HOME-01, FR-ONBOARD-02 |
+| T-HOME-01 | Home key shows Strata | home default; another app in front | Press Home | HomeActivity resumed in its own task. Home content visible (M0: the placeholder screen; from M3: header and favourites region) | I | FR-HOME-01 |
+| T-HOME-02 | Works when not default | Strata installed, other launcher default, `onboarding_done` = true | Tap the Strata icon in the other launcher | The entry activity starts HomeActivity by explicit intent and finishes (D-008). Home renders (APP_MODE) with the "Set as default" banner. Home key still goes to the other launcher | I | FR-HOME-01, FR-ONBOARD-02 |
 | T-HOME-03 | Region layout | default theme, 6.1" phone profile (1080×2340, 420 dpi) | Screenshot home. Read the bounds of the clock, favourites and pill from semantics | Clock top within the top 30 % of the height. Favourites and pill within the bottom 45 %. Order top→bottom: status inset, header, space, favourites, pill, nav inset | S + C | FR-HOME-02 |
-| T-HOME-04 | Header positions follow theme | theme with `clock.position`/favourites/search fields changed (sample `harbor`) | Apply the theme, screenshot | Positions match the fields per FR-THEME-12/13/14 | S | FR-HOME-02, FR-THEME-12, FR-THEME-13, FR-THEME-14 |
+| T-HOME-04 | Header positions follow theme | sample `midnight-oled` (`search.position` = top) and sample `dusk` (`favorites.verticalPosition` = center); plus a fixture with `clock.alignment` = end | Apply each theme, screenshot | Search pill under the header; favourites centred; clock end-aligned (mirrored in RTL). Positions match the fields per FR-THEME-12/13/14 | S | FR-HOME-02, FR-THEME-12, FR-THEME-13, FR-THEME-14 |
 | T-HOME-05 | Clock and date taps | a clock and a calendar app installed (AOSP images) | Tap clock, Back. Tap date | `ACTION_SHOW_ALARMS` resolves and opens the clock app. Date opens the calendar via the `ACTION_VIEW` time URI | I | FR-HOME-03 |
 | T-HOME-06 | No handler | `FakeSystemIntents` returns NotFound | Tap clock | Toast "No app can open this". No crash | R | FR-HOME-03 |
 | T-HOME-07 | Hide status bar | setting on | Show home. Swipe down from the top edge. Open another app | Status bar hidden on home, shown transiently on swipe, visible in the other app | I | FR-HOME-04 |
@@ -53,6 +53,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-HOME-09 | Home press reset order | home default; states: sheet open / search "ma" / list at "M" / favourites scrolled | Press Home once in each state | Sheet closes, then search closes and is cleared with the IME hidden, then list closes, then favourites scroll to start. One step per press, in the order of INTERACTION_SPEC §6 | I | FR-HOME-05 |
 | T-HOME-10 | Home press opens search | setting "Home press opens search" on, home at rest | Press Home | Search opens with focus and IME. With the setting off, nothing happens | I | FR-HOME-05 |
 | T-HOME-11 | Phone rotation lock | phone (< 600 dp), "Allow rotation" off then on | Rotate the device | Off: stays portrait. On: layout rotates. The search query survives | I | FR-HOME-08 |
+| T-HOME-13 | Launcher-icon routing | fresh install, another launcher default; then `onboarding_done` = true; then Strata default | Tap the Strata icon in the other launcher in each state. Separately, start `SettingsActivity` with `APPLICATION_PREFERENCES` | Not onboarded: onboarding opens. Onboarded, not default: HomeActivity in APP_MODE (explicit intent, the entry activity finishes). Default: HomeActivity. `APPLICATION_PREFERENCES`: settings root, no routing. Strata's own icon is absent from its app list | I | FR-HOME-01, FR-ONBOARD-01 |
 | T-HOME-12 | Tablet always rotates | API 36 tablet, sw ≥ 600 dp, setting off | Rotate | Layout re-flows to two-column per VISUAL_SPEC §8. No letterboxing | I | FR-HOME-08, NFR-COMPAT-03 |
 
 ## 3. LIST
@@ -75,7 +76,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
 | T-SEARCH-01 | Swipe up opens search | home at rest, API 34 | UiAutomator swipe up 64 dp at 300 dp/s. Measure from release until the IME is visible (`WindowInsets.ime` > 0) | Field focused. IME visible ≤ 300 ms | I | FR-SEARCH-01, FR-GEST-01 |
-| T-SEARCH-02 | Hardware key starts search | hardware keyboard (emulator); home at rest | Type "m" | Search opens with query "m" and results | C + I | FR-SEARCH-01, FR-A11Y-04 |
+| T-SEARCH-02 | Hardware key starts search | hardware keyboard (emulator); home or list at rest | Type "m" | Search opens with query "m" and results | C + I | FR-SEARCH-01, FR-A11Y-04 |
 | T-SEARCH-03 | Pill and accessibility entry | TalkBack semantics | Tap the pill. Back. Invoke the home-root custom action "Search" | Search opens both times | C | FR-SEARCH-01, FR-GEST-06 |
 | T-SEARCH-04 | Ranking table | `FakeTextFolding` (ICU4J), fixture of 60 labels incl. Maps, Google Maps, Gmail, Café, Camera, Calendar, Calculator | Run the table `fixtures/search/ranking.csv` (query → expected top-k) | "map" → Maps first. "gm" → Google Maps in top 3. "cafe" → Café. "mpas" → Maps. "ca" → exact/prefix tiers before substring. Ties broken by launch count then collation | U | FR-SEARCH-02 |
 | T-SEARCH-05 | Transliteration | API 29 and API 26 Robolectric; label "テレビ" | Query "テレ", then "tere" | API 29+: both find テレビ. API 26: "テレ" finds it, "tere" does not, no crash | R | FR-SEARCH-02, NFR-I18N-03 |
@@ -84,10 +85,11 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-SEARCH-08 | Locked private space excluded | API 35 emulator with a private space and app P installed in it; space locked | Query P's label. Unlock the space, query again. Lock again, query | Locked: 0 results. Unlocked: P shown in the private container style. Re-locked: gone immediately | I | FR-SEARCH-03, FR-APPS-10 |
 | T-SEARCH-09 | Keyboard operation | results for "cal" (3 items) | Press Down twice, Enter. Reopen, type "cal", press IME Go. Press Esc | Enter launches the 3rd item. Go launches the top item and search resets. Esc closes search. The selection ring is visible | C | FR-SEARCH-04, FR-A11Y-04 |
 | T-SEARCH-10 | Back semantics | query "ma", IME shown | Back. Back. Open, empty query, Back | First Back hides the IME. Second closes search. Empty query: one Back closes. Predictive-back cancel restores the state | I | FR-SEARCH-04 |
-| T-SEARCH-11 | Recent apps | log with 10 launches; recents enabled | Open search with an empty query. Clear history. Disable recents | ≤ 8 recent apps, most recent first. After clear: none. Disabled: only the hint | C | FR-SEARCH-05, FR-SET-05 |
+| T-SEARCH-11 | Recent apps | log with 10 launches; recents enabled | Open search with an empty query | ≤ 8 recent apps, most recent first | C | FR-SEARCH-05 |
 | T-SEARCH-12 | Contacts off by default | fresh install | Use search for 20 queries. Inspect the permission dialogs (UiAutomator) | No `READ_CONTACTS` prompt ever. No contact rows | I | FR-SEARCH-06, NFR-REL-03 |
 | T-SEARCH-13 | Contacts granted | `CONTACTS2000` seeded; enable in search settings, grant | Query "ann". Tap the first contact | ≤ 5 contact rows below the apps, with name and photo. The tap opens `ContactsContract` lookup URI in the contacts app | I | FR-SEARCH-06 |
 | T-SEARCH-14 | Contacts denied | enable, deny | Return to settings | Toggle back to off, "Permission needed" note. Search works as before | I | FR-SEARCH-06, NFR-REL-03 |
+| T-SEARCH-16 | Clear and disable recents | log with 10 launches | Settings: "Clear history", open search. Then disable recents, open search | After clear: no recent apps. Disabled: only the hint | C | FR-SEARCH-05, FR-SET-05 |
 | T-SEARCH-15 | Store hand-off | query "zzq" (no results); `FakeSystemIntents` with and without a `market:` handler | Render results. Tap the row | With handler: "Search apps in store" row. Tap fires `market://search?q=zzq`. Without: row absent. No socket opened (StrictMode network detect) | R | FR-SEARCH-07, NFR-PRIV-01 |
 
 ## 5. APPS
@@ -95,7 +97,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 |---|---|---|---|---|---|---|
 | T-APPS-01 | Inventory equals LauncherApps | API 30, 33, 35, 36; `APPS120` installed | Compare the list count and keys with `getActivityList(null, user)` for each profile (instrumented helper with the same `<queries>`) | Equal sets, including synthesized "app details" entries. Proves visibility via `<queries>` (U-015) | I | FR-APPS-01, NFR-COMPAT-01 |
 | T-APPS-02 | Launch with source bounds | home default; row "Zz Test" | Tap the row. Capture the launched activity's `intent.sourceBounds` (fixture app reports it) | Fixture app starts. Bounds equal the row bounds in screen coordinates ±2 px | I | FR-APPS-02 |
-| T-APPS-03 | Launch failure | fixture activity disabled via `pm disable` after the list rendered (callback suppressed by a test hook) | Tap the row | Snackbar "App isn't available" (or "Couldn't open …" + App info). Reconcile removes the row. No crash | I | FR-APPS-02, FR-LIFE-03 |
+| T-APPS-03 | Launch failure | fixture activity disabled via `pm disable` after the list rendered (callback suppressed by a test hook) | Tap the row | Snackbar "Can't open this app right now" (or "Couldn't open …" + App info). Reconcile removes the row. No crash | I | FR-APPS-02, FR-LIFE-03 |
 | T-APPS-04 | Sheet variants | system app, updated system app, user app (fake catalog flags) | Long-press each | System: no Uninstall. Updated system: "Uninstall updates". User: Uninstall. All: header, Favourite, Change icon, Hide, App info | C | FR-APPS-03 |
 | T-APPS-05 | Sheet from every surface | — | Long-press in the list, on a favourite, on a search result | Same sheet each time | C | FR-APPS-03, FR-GEST-02 |
 | T-APPS-06 | Hide and unhide | app X favourite | Hide X. Check list, favourites, search (setting off). Unhide from Settings → Hidden apps | Hidden: absent from list and favourites. Favourite slot kept for restore. Unhidden: back in its section and favourite position | C | FR-APPS-04 |
@@ -108,7 +110,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-APPS-13 | Pin shortcut request (v1.x) | fixture app calls `requestPinShortcut` | Accept in the confirmation sheet | Favourite entry added. `accept()` called. Returns false → nothing pinned | I | FR-APPS-08 |
 | T-APPS-14 | Work profile | API 34 with a managed profile (`pm create-user --managed` via TestDPC fixture) | Show the list. Pause work. Tap a work app. Accept resume | Work apps badged in a "Work" section/filter. Paused: dimmed + "Paused" tag. Tap → "Turn on work apps?" → resumes. Apps become active without restart | I | FR-APPS-09 |
 | T-APPS-15 | Private space container | API 35 private space with 2 apps | Unlock, show/hide the container, lock | Separate container at the list end. Hide removes it. Lock leaves no rows and shows the "Unlock" entry (not shown when entry-hidden on 36) | I | FR-APPS-10 |
-| T-APPS-16 | Private space never persisted | API 35; private apps launched, renamed attempt, backup exported | Inspect `strata.db` (all tables), DataStore, logs, the export file | No private-profile serial or component anywhere. The rename action is disabled with an explanation | I | FR-APPS-10, NFR-PRIV-04 |
+| T-APPS-16 | Private space never persisted | API 35; private apps launched, renamed attempt | Inspect `strata.db` and `launch_log.db` (all tables), DataStore, logs (the backup file is checked by T-BACKUP-01) | No private-profile serial or component anywhere. The rename action is disabled with an explanation | I | FR-APPS-10, NFR-PRIV-04 |
 | T-APPS-17 | Duplicate labels | two activities labelled "Camera" (one package), and the same app in main + work | Render the list. TalkBack reads both | Each row has a distinct secondary line (activity short name / profile). Spoken text differs | C | FR-APPS-11, FR-A11Y-03 |
 
 ## 6. FAV
@@ -142,7 +144,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-NOTIF-04 | Count filter | `FakeBadgeSource`/real NLS with 2 alerting + 1 ongoing + 1 silent from X | Count style | Badge "2" on the row and on the favourite | R + I | FR-NOTIF-02 |
 | T-NOTIF-05 | Dot style default | same | Default style | Dot shown. Spoken "2 notifications" | C | FR-NOTIF-02, FR-A11Y-03 |
 | T-NOTIF-06 | Low-RAM hiding | API 29 emulator with `ro.config.low_ram=true` (RD-4 manual) | Open Settings → Notifications | Feature absent with an explanation. No listener declared as enabled | I/MAN | FR-NOTIF-03 |
-| T-NOTIF-07 | Content never on disk | granted; post a message notification with text "SECRET-123" and an OTP-style notification | Export a backup. Dump the DB, DataStore, `filesDir`, logs | "SECRET-123" and the OTP string found nowhere | I | FR-NOTIF-03, NFR-PRIV-04 |
+| T-NOTIF-07 | Content never on disk | granted; post a message notification with text "SECRET-123" and an OTP-style notification | Dump both databases, DataStore, `filesDir`, `noBackupFilesDir`, logs (the backup file is checked by T-BACKUP-01) | "SECRET-123" and the OTP string found nowhere | I | FR-NOTIF-03, NFR-PRIV-04 |
 
 ## 9. WIDGET
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -184,7 +186,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-BACKUP-08 | Missing apps kept pending | backup referencing app Y (renamed, favourite) not installed | Restore. Then install Y. Then a second case: wait 31 days (`FakeClock`) before installing | Preview lists Y as not installed. After install: rename and favourite applied without user action. After 31 days: purged, not applied | I + R | FR-BACKUP-03, FR-LIFE-03 |
 | T-BACKUP-09 | Invalid embedded theme | backup with one valid and one malformed embedded theme | Restore | Valid theme in the library. Malformed one listed as excluded. Restore succeeds | U | FR-BACKUP-02, FR-THEME-33 |
 | T-BACKUP-10 | Kill during restore | large valid backup | Kill the process at random points during Replace (100 runs) | After relaunch: state is either all-old or all-new, never mixed. The undo snapshot is consistent | I | FR-BACKUP-02, NFR-REL-02 |
-| T-BACKUP-11 | Auto Backup / transfer | API 31 emulator; `bmgr` | Set favourites, launch apps → `bmgr backupnow` → clear data → `bmgr restore` | Favourites, overrides, settings, themes restored. Icon cache and launch log absent. Reconcile ran (banner none) | I | FR-BACKUP-04, FR-THEME-33 |
+| T-BACKUP-11 | Auto Backup / transfer | API 31 emulator; `bmgr` | Set favourites, launch apps → `bmgr backupnow` → list the backup set (`bmgr` transport dump) → clear data → `bmgr restore` → start | The backup set contains no `launch_log.db` and nothing from `no_backup/` or caches. Favourites, overrides, settings, themes restored; launch log empty. Restore detected (install marker differs from `install_id`), post-restore reconcile ran once (no banner) | I | FR-BACKUP-04, FR-THEME-33, NFR-PRIV-05 |
 | T-BACKUP-12 | Fuzz | 10 000 mutated backup files from the valid fixtures | Run the validator | 0 crashes. Each result is Rejected (typed error) or a Preview. Time ≤ 200 ms per file | U | FR-BACKUP-02, NFR-REL-01 |
 | T-BACKUP-13 | Cross-install round trip | export on emulator A (API 34), restore on clean emulator B (API 36) | Restore | Main-profile overrides map to B's main serial. Themes and settings equal | I | FR-BACKUP-01, FR-BACKUP-02 |
 
@@ -198,18 +200,19 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-ONBOARD-05 | Don't ask again | API 34; deny twice with "don't ask again" | Tap "Try again" | Settings opens directly. No silent loop (`RESULT_CANCELED` within 2 s without UI detected) | I | FR-ONBOARD-02 |
 | T-ONBOARD-06 | Not now | denied | Choose "Not now" | Strata usable as an app. Dismissible banner shown on home | C | FR-ONBOARD-02 |
 | T-ONBOARD-07 | OEM failure help | `FakeRoleController` returns OK but not held; and settings return with no change | Return to onboarding | OEM help card once per attempt with "Retry". HyperOS note shown when the fake reports a HyperOS 2 build fingerprint | R | FR-ONBOARD-03 |
+| T-ONBOARD-09 | First run starting at home | fresh install, never opened; API 34 | Make Strata the default home from system settings (`cmd role add-role-holder`), press Home | HomeActivity shows onboarding as its first layer. The set-default step shows "Strata is your home app" with no action needed. Done → home; `onboarding_done` = true; the launcher icon later routes to home (T-HOME-13) | I | FR-ONBOARD-01, FR-HOME-01 |
 | T-ONBOARD-08 | Lost default banner | Strata default; switch default to another home via `cmd role` | Open Strata. Dismiss the banner. Reopen within 24 h, and after 24 h (`FakeClock`) | Banner shown. Hidden for 24 h after dismiss. Shown again after | I + R | FR-ONBOARD-04 |
 
 ## 13. LIFE (lifecycle and integrity)
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
-| T-LIFE-01 | Snapshot render before reconcile | `FakeAppCatalogSource.loadAll` delayed 2 s; snapshot holds 120 apps | Cold start | List and favourites render from the snapshot before `loadAll` returns. Then a diff is applied without flicker | R | FR-LIFE-01 |
+| T-LIFE-01 | Snapshot render before reconcile | `FakeAppCatalogSource.loadAll` delayed 2 s; snapshot holds 120 apps | Cold start | List (and, from M3, favourites) render from the snapshot before `loadAll` returns. Then a diff is applied without flicker | R | FR-LIFE-01 |
 | T-LIFE-02 | Process death | search open with "ma", sheet open | `adb shell am kill` while in the background (after pressing Home in another app) → return | Home renders. Transient state restored if the bundle was delivered, else HOME_REST. No crash, no stale modal | I | FR-LIFE-01, FR-LIFE-02 |
 | T-LIFE-03 | Config changes keep state | query "ma", widget shown, sheet open | Rotate. Toggle dark mode. Change font scale 1.0→1.3. Fold/unfold (foldable emulator) | Query and sheet retained. Widget host view instance identity unchanged (not re-bound). No activity recreation (`onCreate` count = 1) | I | FR-LIFE-02 |
 | T-LIFE-04 | Reinstall keeps overrides | renamed + hidden app uninstalled | Reinstall at day 10 (`FakeClock` in a Robolectric repository test) and in the real flow. Then uninstall and reinstall at day 31 | Day 10: custom name and hidden state return. Day 31: purged, defaults | R + I | FR-LIFE-03 |
 | T-LIFE-05 | Package removed while on screen | sheet open for app X | `adb uninstall X` | Sheet closes with a snackbar. Row animates out. No crash | I | FR-LIFE-03, FR-LIST-04 |
 | T-LIFE-06 | Package updated while on screen | list showing X; v2 of the fixture changes its label and icon | `adb install -r X-v2` | Label/icon refresh ≤ 1 s. A custom name stays. The icon cache entry is invalidated | I | FR-LIST-04, FR-APPS-05 |
-| T-LIFE-07 | Disabled and suspended | list visible | `pm disable-user X`, `pm enable X`. `pm suspend X`, `pm unsuspend X` | Disable: row removed. Enable: row returns with overrides. Suspended: greyed with a tag, tap shows the system dialog. Unsuspend: normal | I | FR-LIST-04 |
+| T-LIFE-07 | Disabled and suspended | list visible | `pm disable-user X`, `pm enable X`. `pm suspend X`, `pm unsuspend X` | Disable: row removed. Enable: row returns with overrides. Suspended: greyed with the "Suspended" tag, tap shows the system dialog. Unsuspend: normal | I | FR-LIST-04, FR-LIST-08 |
 | T-LIFE-08 | Work profile paused on screen | list visible with work apps | Pause the work profile from quick settings | Rows dim with "Paused" ≤ 1 s, no restart. Resume: active | I | FR-LIST-04, FR-APPS-09 |
 | T-LIFE-09 | Private space locks on screen | API 35; search showing a private app | Lock the space from system UI | Results and container rows vanish immediately. In-memory caches cleared (debug probe) | I | FR-APPS-10, FR-SEARCH-03 |
 | T-LIFE-10 | Default-launcher loss while running | Strata in front | Change the default home via `cmd role` / Settings, return | Banner on resume (FR-ONBOARD-04). Home key now goes to the other launcher. Shortcut section hidden | I | FR-ONBOARD-04, FR-APPS-08 |
@@ -239,16 +242,16 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
 | T-THEME-01 | Unlimited, ungated | — | Generate and save 500 themes. Import 50. Apply each of 20 at random | All succeed. No entitlement prompt. See T-CI-02/08 for code checks | R | FR-THEME-01, FR-THEME-27 |
-| T-THEME-02 | Minimal file | `{schemaVersion:1,id,name}` | Import and apply | Renders identically to Strata Default (screenshot equal) | U + S | FR-THEME-02 |
+| T-THEME-02 | Minimal file | `{schemaVersion:1,id,name}` | Parse, resolve and render the `:core:ui` role probe | Renders identically to Strata Default (screenshot equal) | U + S | FR-THEME-02 |
 | T-THEME-03 | Writer output valid | all samples | Write each through our writer. Validate with `theme.schema.json` | Valid. Format: 2-space indent, LF, trailing newline, schema key order | U | FR-THEME-02, FR-THEME-23 |
-| T-THEME-04 | Colour roles | theme omitting each role in turn | Resolve. Screenshot the preview with each role set to magenta | The omitted role equals the built-in variant value. Each role changes its documented element (VISUAL_SPEC §6) | U + S | FR-THEME-03 |
+| T-THEME-04 | Colour roles | theme omitting each role in turn | Resolve. Screenshot the `:core:ui` role-probe screen with each role set to magenta | The omitted role equals the built-in variant value. Each role changes its documented element (VISUAL_SPEC §6) | U + S | FR-THEME-03 |
 | T-THEME-05 | Appearance modes | API 26, 29, 31 emulators | Toggle system dark with `system` themes. Apply `wallpaper` mode with light and dark test wallpapers | `system` flips without restart. `wallpaper` follows THEME_SYSTEM §5.1 per API band. The global override wins | I | FR-THEME-04 |
 | T-THEME-06 | Pure black | dark variant | Enable `pureBlack`. Then switch to light | Dark: background and scrim `#000000`. Light: unaffected | U + S | FR-THEME-05 |
 | T-THEME-07 | Colour sources | `dynamic` theme on API 26/30/33 (Robolectric inputs); `seed`; locked roles | Resolve. Change the wallpaper colours input | API 30: wallpaper colours. API 26: fixed palettes. API 31+: dynamic scheme. Locked roles unchanged. All derived palettes pass P1–P8 after enforcement | U | FR-THEME-06 |
 | T-THEME-08 | Effective background | solid test wallpaper `#3366CC`; dim 0.4; opacity 0.2 | Screenshot home and sample a background pixel | Equals the §7.2 formula ±1/255 per channel | I + S | FR-THEME-07 |
 | T-THEME-09 | Typography | system/bundled/user font; scale 0.8, 1.5; weights; letter spacing; case | Render a text probe for each | Measured width/height changes per field. A missing user font falls back with a warning. System 2.0 × theme 1.5 renders without clipping | S + U | FR-THEME-08 |
 | T-THEME-10 | System font for small text | option on | Render | Text < 14 sp uses `FontFamily.Default`. The rest uses the theme font | C | FR-THEME-09 |
-| T-THEME-11 | Icons | shapes circle/squircle/square; `reshapeLegacy` on/off; `PACK_OK` with `pack.fallback` | Render adaptive and legacy icons. Uninstall the pack | Shapes applied to adaptive icons. Legacy plate when on. The uninstall switches to the fallback without restart, with a one-time notice and a store button | I + S | FR-THEME-10 |
+| T-THEME-11 | Icons | shapes circle/squircle/square; `legacyIconPlate` on/off; `PACK_OK` with `pack.fallback` | Render adaptive and legacy icons. Uninstall the pack | Shapes applied to adaptive icons. Legacy plate when on. The uninstall switches to the fallback without restart, with a one-time notice and a store button | I + S | FR-THEME-10 |
 | T-THEME-12 | Monochrome tint | API 33 app with a monochrome layer; app without; API 26 | Enable the tint | API 33 uses `getMonochrome()`. Otherwise a desaturated tinted icon | I + S | FR-THEME-11 |
 | T-THEME-13 | Clock and date | locales en-US, de, ja, ar, hi; skeletons | Render the date | Text equals `getBestDateTimePattern(locale, skeleton)` output. Alignment mirrors in ar. 12/24 h follows the system unless overridden | R | FR-THEME-12, NFR-I18N-04 |
 | T-THEME-14 | Favourites presentation | icons off + labels off | Apply | Labels forced on. Changing the theme never changes the favourite set (compare keys) | U + C | FR-THEME-13, FR-THEME-31 |
@@ -257,15 +260,15 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-THEME-17 | Animation scaling | `durationScale` 0.5/2.0; system scale 0, 1, 2 | Measure the transition duration in a Compose test clock | Effective = base × theme × system. System 0 → no animation for any theme scale | C | FR-THEME-16 |
 | T-THEME-18 | Haptics modes | `followSystem` / `off`; master off | Scrub the index | Calls only for followSystem with master on | C | FR-THEME-17 |
 | T-THEME-19 | Fuzz corpus | ≥ 10 000 mutations of samples (type flips, out of range, unknown enums, truncation, deletion) | Parse/validate/resolve each | 0 crashes or uncaught exceptions. Each mutation yields its documented policy (C/D/G/T/R) and an `Issue` | U | FR-THEME-18, NFR-THEME-01 |
-| T-THEME-20 | Policy table | one fixture per §4 field "On invalid" row | Validate | Exact policy and Issue code per row | U | FR-THEME-18 |
+| T-THEME-20 | Policy table | one fixture per §4 field "On invalid" row, plus `name` fixtures: 64 emoji with skin-tone modifiers (64 graphemes, > 64 code points), 65 graphemes of combining text, and a name containing U+0007 | Validate | Exact policy and Issue code per row. The 64-grapheme name is accepted although JSON Schema would count more code points; 65 graphemes → T; the control character is removed with a `fixed` issue (THEME_SYSTEM §4.1) | U | FR-THEME-18 |
 | T-THEME-21 | Unknown key round trip | fixture with nested unknowns, `x-` keys, a future enum value | `parse(write(parse(f)))` | JSON-equal to `parse(f)`. Order of unknowns preserved | U | FR-THEME-19 |
 | T-THEME-22 | Property-based round trip | generator of valid documents with random unknown members | 5 000 cases | JSON equality every time | U | NFR-THEME-07 |
 | T-THEME-23 | Contrast math | THEME_SYSTEM §14.1 table | Compute the ratios | Equal to 2 decimals | U | FR-THEME-20 |
 | T-THEME-24 | Contrast UI and fix | palette failing P2 and P5 | Open the editor. Read chips and banner. Tap "Fix". Undo | Chips show ratio + text/icon status. Banner lists both pairs in words. Fix → all pass in one undo step. Undo restores. TalkBack announces politely once | C | FR-THEME-20 |
 | T-THEME-25 | Enforcement | enforcement on; a failing theme; static and runtime inputs | Resolve | Output passes P1–P8 (runtime when wallpaper colours exist, else static). The file is unchanged on disk | U | FR-THEME-20, FR-THEME-06 |
 | T-THEME-26 | Static vs runtime badges | theme passing runtime but not static | Import summary | "Readable on current wallpaper", not "any wallpaper" | C | FR-THEME-20 |
-| T-THEME-27 | Import entry points | JSON file served as `application/octet-stream`, `text/plain`, `application/json` | Import via SAF, `ACTION_VIEW`, `ACTION_SEND` | All sniffed and imported. A summary is shown first. Nothing applied until confirmation | I | FR-THEME-21 |
-| T-THEME-28 | Bundle round trip | theme with a user font and a wallpaper | Export `.zip`. Clean install. Import | Fonts and image byte-identical by hash. The theme renders the same | I | FR-THEME-22 |
+| T-THEME-27 | Import entry points | JSON file served as `application/json`, `application/octet-stream`, `text/plain`; a zip as `application/zip` | Import via SAF (all four). Via `ACTION_VIEW` and `ACTION_SEND` (json, octet-stream, zip). Resolve `ACTION_VIEW` for `text/plain` with `PackageManager` | Every accepted path sniffs and imports, with a summary first and nothing applied until confirmation. `text/plain` VIEW/SEND does not resolve to Strata (types per THEME_SYSTEM §3.1) | I | FR-THEME-21 |
+| T-THEME-28 | Bundle round trip | theme with a user font and a wallpaper (imported once from a JPEG, so stored as stripped WebP) | Export `.zip`. Clean install. Import | Fonts byte-identical. The image is stored byte-for-byte on re-import (already stripped WebP within limits, THEME_SYSTEM §10.3.3), so its hash and the theme reference are unchanged. The theme renders the same | I | FR-THEME-22 |
 | T-THEME-29 | Hostile bundles | corpus: zip bomb (ratio > 200), zip-slip names, unlisted entry, hash mismatch, encrypted entry, ZIP64, 25 MiB archive, WOFF2 font, font with bad tables, 9000 px image, 50 MP image | Import each | Each rejected with the documented message. No file left in stores or cache (directory listing) | U + R | FR-THEME-22, NFR-THEME-04 |
 | T-THEME-30 | Export and share | user theme | Export via SAF. Share to a fixture receiver app. Advance the clock 25 h and restart | The file validates. The receiver reads the `content:` URI. Temp copies purged | I | FR-THEME-23 |
 | T-THEME-31 | Newer major | `schemaVersion: 2` | Import | "This theme was made with a newer version…" No write | U + C | FR-THEME-24 |
@@ -279,7 +282,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-THEME-39 | Global vs per-theme | favourites, hidden, renames, icon overrides, search options, gestures set | Switch between 5 themes | None of them change (canonical dump of those stores equal) | R | FR-THEME-31 |
 | T-THEME-40 | Migration framework | synthetic v0→v1 migrator and frozen fixtures | Run the migrations. Load a migrated file. Boot twice | Fixture outputs equal. A `.bak` exists until the first successful boot after the rewrite, then removed | U + R | FR-THEME-32 |
 | T-THEME-41 | Auto Backup of themes | `bmgr` restore with one valid and one corrupted theme file | Restore | The valid one is in the library. The invalid one is in `themes/quarantine/` | I | FR-THEME-33 |
-| T-THEME-42 | Wallpaper confirmation | theme with `wallpaper.image` | Apply. Decline. Apply. Accept | `WallpaperManager` never called on decline (spy). Called once on accept | R | FR-THEME-34 |
+| T-THEME-42 | Wallpaper confirmation and hand-off | theme with `wallpaper.image`; `FakeSystemIntents` | Apply. Decline. Apply. Accept. Repeat with no handler for the crop intent | Decline: no wallpaper intent started. Accept: exactly one `getCropAndSetWallpaperIntent` intent with a `content:` `image/*` URI from our FileProvider and a read grant; no `WallpaperManager.set*` call. No handler: `ACTION_ATTACH_DATA` chooser instead; neither: message, no crash. `SET_WALLPAPER` absent (T-CI-01) | R | FR-THEME-34 |
 | T-THEME-43 | Malformed JSON corpus | files: 256 KiB+1, depth 17, 129 keys, 257 items, 2049 values, 4097-unit string, 33-char number, duplicate key, comments, trailing comma, NaN, invalid UTF-8, BOM | Import each | Per THEME_SYSTEM §8.1: reject with the right message (line/col where applicable). BOM tolerated. Messages never echo > 64 chars | U | NFR-THEME-04, FR-THEME-18 |
 | T-THEME-44 | Parse/resolve speed | RD-1; typical 8 KiB and 256 KiB themes | Microbenchmark (in a Macrobenchmark-hosted trace) | Typical ≤ 5 ms. 256 KiB ≤ 30 ms. Theme work adds ≤ 150 ms to cold start (trace section) | M | NFR-THEME-02 |
 | T-THEME-45 | Atomic persistence | — | 1 000 save/import cycles with a random kill (instrumented process kill) | Each theme old or new. Index reconcilable at next start | I | NFR-THEME-03 |
@@ -288,7 +291,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-THEME-48 | Preview responsiveness | RD-1, editor open | Toggle discrete controls. Drag a hue slider for 5 s (FrameTimingMetric) | Discrete change visible in the next frame. Drag ≥ 55 fps | M | NFR-THEME-08 |
 | T-THEME-49 | Deterministic resolve | fixed inputs | Resolve 100× across 2 processes | Identical `ResolvedTheme` (snapshot equality) | U | NFR-THEME-09 |
 | T-THEME-50 | Layout robustness matrix | densities 320/420/560; `rowHeightDp` min/max; theme scale 0.8/1.5; font 1.0/2.0 | Screenshot list and home | No clipped text (automated overflow detection) | S | NFR-THEME-10 |
-| T-THEME-51 | No network | StrictMode `detectNetwork` penalty-death; the theme module dependency graph | Run all theme flows (T-THEME-27…42) | No violation. No network dependency (T-CI-02) | I + CI | NFR-THEME-11 |
+| T-THEME-51 | No network | StrictMode `detectNetwork` penalty-death; the theme module dependency graph | Run all theme flows (T-THEME-27…40 and T-THEME-42; T-THEME-41 joins at M8) | No violation. No network dependency (T-CI-02) | I + CI | NFR-THEME-11 |
 | T-THEME-52 | Clean-room review | — | T-07 reviews the schema keys, values, file types and assets | Signed off. No item derived from the original | MAN | NFR-THEME-12 |
 | T-THEME-53 | Apply latency | RD-1 | Apply a theme. Measure from tap to the first resolved frame | ≤ 300 ms | M | NFR-PERF-06 |
 
@@ -315,7 +318,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-PRIV-02 | No ad ID or trackers | — | T-CI-01 (AD_ID removed) + T-CI-02 + APK class scan for known SDK packages | None | CI | NFR-PRIV-02 |
 | T-PRIV-03 | Permission set | — | T-CI-01 + `aapt dump permissions` on the release APK | Equals ANDROID_PLATFORM §23 Required + Optional set | CI | NFR-PRIV-03 |
 | T-PRIV-04 | Sensitive data scan | after T-NOTIF-07, T-APPS-16 and a search session with query "zz-secret" | Grep the whole app data dir and the export for the notification text, OTP, private components, "zz-secret" | Not found | I | NFR-PRIV-04 |
-| T-PRIV-05 | Launch-log retention | `FakeClock`; rows at day −31, −29 | Start the app. Pause. Clear. Inspect the backup rules | Day −31 deleted, −29 kept. Pause stops logging. Clear empties. `launch_event` absent after cloud restore (T-BACKUP-11) | R | NFR-PRIV-05 |
+| T-PRIV-05 | Launch-log retention and location | `FakeClock`; rows at day −31, −29 | Start the app. Pause. Clear. Read the DB path and parse both backup rule XML files | Day −31 deleted, −29 kept. Pause stops logging. Clear empties. The log DB path is under `noBackupFilesDir`; neither rule file includes it, and both exclude `launch_log.db` (the cloud-restore check is T-BACKUP-11) | R | NFR-PRIV-05 |
 | T-PRIV-06 | Log hygiene | release build; flows with labels, queries, contacts | Export the diagnostic log | No labels, queries, contact names or private components. Package names hashed | I | NFR-PRIV-04 |
 
 ## 18. REL
@@ -365,7 +368,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 Every P0/P1 requirement maps to at least one test. P2 items are not covered until scheduled.
 | Requirement | Tests |
 |---|---|
-| FR-HOME-01 | T-HOME-01, T-HOME-02, T-SEC-03 |
+| FR-HOME-01 | T-HOME-01, T-HOME-02, T-HOME-13, T-ONBOARD-09, T-SEC-03 |
 | FR-HOME-02 | T-HOME-03, T-HOME-04 |
 | FR-HOME-03 | T-HOME-05, T-HOME-06 |
 | FR-HOME-04 | T-HOME-07, T-HOME-08 |
@@ -378,11 +381,12 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-LIST-05 (v1.x) | T-LIST-12 |
 | FR-LIST-06 | T-LIST-09 |
 | FR-LIST-07 | T-LIST-10, T-LIST-11 |
+| FR-LIST-08 | T-LIFE-07 |
 | FR-SEARCH-01 | T-SEARCH-01, T-SEARCH-02, T-SEARCH-03 |
 | FR-SEARCH-02 | T-SEARCH-04, T-SEARCH-05, T-SEARCH-06 |
 | FR-SEARCH-03 | T-SEARCH-07, T-SEARCH-08, T-LIFE-09 |
 | FR-SEARCH-04 | T-SEARCH-09, T-SEARCH-10, T-COMPAT-09 |
-| FR-SEARCH-05 | T-SEARCH-11 |
+| FR-SEARCH-05 | T-SEARCH-11, T-SEARCH-16 |
 | FR-SEARCH-06 | T-SEARCH-12, T-SEARCH-13, T-SEARCH-14 |
 | FR-SEARCH-07 | T-SEARCH-15 |
 | FR-APPS-01 | T-APPS-01, T-CI-01 |
@@ -415,13 +419,13 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-SET-02 | T-SET-03 |
 | FR-SET-03 | T-SET-04, T-SEC-04 |
 | FR-SET-04 | T-SET-05 |
-| FR-SET-05 | T-SET-06, T-SET-07, T-LIST-04, T-SEARCH-11 |
+| FR-SET-05 | T-SET-06, T-SET-07, T-LIST-04, T-SEARCH-16 |
 | FR-SET-06 | T-SET-08, T-CI-05 |
 | FR-BACKUP-01 | T-BACKUP-01, T-BACKUP-02, T-BACKUP-03, T-BACKUP-13 |
-| FR-BACKUP-02 | T-BACKUP-04 … T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-WIDGET-10 |
+| FR-BACKUP-02 | T-BACKUP-04 … T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-WIDGET-10 |
 | FR-BACKUP-03 | T-BACKUP-08 |
 | FR-BACKUP-04 | T-BACKUP-11, T-WIDGET-11 |
-| FR-ONBOARD-01 | T-ONBOARD-01, T-ONBOARD-02, T-NOTIF-01 |
+| FR-ONBOARD-01 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-NOTIF-01 |
 | FR-ONBOARD-02 | T-ONBOARD-03, T-ONBOARD-04, T-ONBOARD-05, T-ONBOARD-06, T-HOME-02 |
 | FR-ONBOARD-03 | T-ONBOARD-07, T-COMPAT-04 |
 | FR-ONBOARD-04 | T-ONBOARD-08, T-LIFE-10 |
@@ -466,7 +470,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-THEME-31 | T-THEME-39, T-THEME-14, T-APPS-10 |
 | FR-THEME-32 | T-THEME-40 |
 | FR-THEME-33 | T-THEME-41, T-BACKUP-09, T-BACKUP-11 |
-| FR-THEME-34 | T-THEME-42 |
+| FR-THEME-34 | T-THEME-42, T-CI-01 |
 | NFR-THEME-01 | T-THEME-19, T-THEME-36 |
 | NFR-THEME-02 | T-THEME-44 |
 | NFR-THEME-03 | T-THEME-45 |
@@ -475,7 +479,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | NFR-THEME-06 | T-THEME-47 |
 | NFR-THEME-07 | T-THEME-22 |
 | NFR-THEME-08 | T-THEME-48 |
-| NFR-THEME-09 | T-THEME-49 |
+| NFR-THEME-09 | T-THEME-49, T-CI-03 |
 | NFR-THEME-10 | T-THEME-50, T-A11Y-09 |
 | NFR-THEME-11 | T-THEME-51, T-CI-02 |
 | NFR-THEME-12 | T-THEME-52 |
@@ -495,7 +499,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | NFR-PRIV-02 | T-PRIV-02, T-CI-02 |
 | NFR-PRIV-03 | T-PRIV-03, T-CI-01 |
 | NFR-PRIV-04 | T-PRIV-04, T-PRIV-06, T-NOTIF-07, T-APPS-16, T-BACKUP-01 |
-| NFR-PRIV-05 | T-PRIV-05, T-SET-07 |
+| NFR-PRIV-05 | T-PRIV-05, T-SET-07, T-BACKUP-11 |
 | NFR-REL-01 | T-REL-01, T-REL-02, T-BACKUP-12, T-LIFE-15 |
 | NFR-REL-02 | T-REL-03, T-LIFE-14, T-BACKUP-10 |
 | NFR-REL-03 | T-REL-04, T-SEARCH-12, T-SEARCH-14 |
