@@ -614,7 +614,7 @@ All accessed **2026-10-29**. Class: `DOC` = official Android/AOSP/Play documenta
 
 ## Proposed U-entries
 
-Temporary IDs `PU-03-nn`. The registry owner assigns the next free `U-nnn` (U-014 onward at the time of writing).
+Registered in `research/UNRESOLVED.md` as U-014…U-022.
 
 | Temp ID | Type | Question | Impact | Needed to resolve |
 |---|---|---|---|---|
