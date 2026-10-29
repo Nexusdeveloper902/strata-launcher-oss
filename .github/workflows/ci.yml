@@ -1,0 +1,188 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g
+
+jobs:
+  build:
+    name: Build (debug APK, androidTest APK, benchmark)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          # Default installs the removed legacy 'tools' package and fails.
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Assemble
+        run: ./gradlew assembleDebug assembleDebugAndroidTest :app:assembleBenchmark :benchmark:assemble --stacktrace
+      - name: Upload debug APK (sideload)
+        uses: actions/upload-artifact@v7
+        with:
+          name: strata-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  unit:
+    name: Unit and Robolectric tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          # Default installs the removed legacy 'tools' package and fails.
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Unit tests (JVM, Robolectric, lint rules) and build-logic gate tests
+        run: ./gradlew testDebugUnitTest :build-logic:convention:test --stacktrace
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
+
+  lint:
+    name: Android Lint (T-CI-04)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          # Default installs the removed legacy 'tools' package and fails.
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew lintDebug --stacktrace
+      - name: Upload lint reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lint-reports
+          path: "**/build/reports/lint-results-debug.*"
+          retention-days: 7
+
+  ktlint:
+    name: ktlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          # Default installs the removed legacy 'tools' package and fails.
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew ktlintCheck --stacktrace
+
+  static-gates:
+    name: Static gates (permissions, dependencies, module graph, entitlements)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          # Default installs the removed legacy 'tools' package and fails.
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: T-CI-01 checkPermissions, T-CI-02 checkDependencies, T-CI-03 checkModuleGraph, T-CI-08 checkEntitlements
+        run: ./gradlew checkPermissions checkDependencies checkModuleGraph checkEntitlements --stacktrace
+
+  gmd-smoke:
+    name: GMD smoke (API ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            task: api26DebugAndroidTest
+          - api: 34
+            task: api34DebugAndroidTest
+          - api: 36
+            task: api36DebugAndroidTest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Free disk space (the hosted runner has ~14 GB free; AGP needs the system image, its snapshot and a 6 GB userdata image)
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/share/powershell /usr/local/.ghcup /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/android/sdk/ndk \
+            /usr/local/graalvm /usr/local/share/chromium /usr/lib/google-cloud-sdk /usr/lib/jvm/temurin-8-jdk-amd64
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+      - name: KVM preflight (the emulator needs /dev/kvm; fail here, not 5 minutes into Gradle)
+        run: |
+          ls -l /dev/kvm
+          test -w /dev/kvm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          # Default installs the removed legacy 'tools' package and fails.
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Cache emulator system images
+        uses: actions/cache@v6
+        with:
+          path: ~/.android/avd/gradle-managed
+          key: gmd-${{ runner.os }}-${{ matrix.api }}-${{ hashFiles('build-logic/convention/src/main/kotlin/AndroidConfig.kt') }}
+      - name: Smoke test on the managed device (retries only infrastructure failures)
+        run: tools/ci/run-gmd.sh ${{ matrix.task }}
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gmd-reports-api${{ matrix.api }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 7

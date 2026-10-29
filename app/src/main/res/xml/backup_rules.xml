@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API ≤ 30 Auto Backup: the cloud set of data_extraction_rules.xml (ANDROID_PLATFORM §17). -->
+<full-backup-content>
+    <include domain="file" path="datastore/" />
+    <include domain="file" path="themes/user/" />
+    <include domain="file" path="themes/fonts/" />
+    <include domain="file" path="themes/lkg.strata-theme.json" />
+    <include domain="database" path="strata.db" />
+    <include domain="database" path="strata.db-wal" />
+    <include domain="database" path="strata.db-shm" />
+</full-backup-content>

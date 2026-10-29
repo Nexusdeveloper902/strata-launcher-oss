@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_welcome_title">Welcome to Strata</string>
+    <string name="onboarding_welcome_body">A quiet home screen for your apps. No internet, no account.</string>
+    <string name="onboarding_continue">Continue</string>
+</resources>

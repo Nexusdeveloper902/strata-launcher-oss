@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Strata" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Home: transparent window over the system wallpaper (ANDROID_PLATFORM §12, §22). -->
+    <style name="Theme.Strata.Home">
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+    </style>
+</resources>

@@ -12,8 +12,9 @@ specification phase is **finished**; the next step is implementation, starting a
   (Kotlin + Compose, platform APIs behind interfaces), D-007 (offline, no analytics),
   D-011 (personal sideloaded project; primary test phone **Samsung Galaxy A56**; the
   double-tap lock *is* included), D-012 (name/IDs: `app.strata.launcher`).
-- Commit straight to `main` (owner preference; no PRs unless asked). Commit at each
-  milestone step, with test IDs (`T-…`) named in the message when they pass.
+- Workflow (see `CONTRIBUTING.md`): work on a branch, open a PR into `main`, squash-merge
+  once CI is green (`main` is protected, linear history, no required human approvals).
+  Commit at each milestone step, with test IDs (`T-…`) named in the message when they pass.
 - Choose subagent models per task: `opus` for design, architecture and review,
   `sonnet` for mechanical or bulk work, `haiku` for trivial edits.
 
@@ -25,10 +26,11 @@ specification phase is **finished**; the next step is implementation, starting a
 5. `spec/PRODUCT_SPEC.md` for the referenced FR/NFR IDs
 
 ## Environment notes (cloud sessions)
-- JDK and Gradle 8.14 are present; **no Android SDK** is installed and `ANDROID_HOME` is
+- A JDK is present and the build uses the committed Gradle wrapper (`./gradlew`); **no Android SDK** is installed and `ANDROID_HOME` is
   unset. Install the command-line tools + `platforms;android-36` + `build-tools` first
   (needs network access to `dl.google.com`; if blocked, change the environment's network
-  policy). No emulator is available here: device tests run on the owner's phone.
+  policy). Set `ANDROID_HOME` to wherever you install it; this is per session, nothing
+  persists. Maven Central may rate-limit cloud sessions, so retry or use a mirror. No emulator is available here: device tests run on the owner's phone.
 - Theme samples: `pip install jsonschema && python3 tools/check_themes.py spec/theme.schema.json spec/sample-themes/*.json`
 - Traceability matrix: `python3 tools/trace/build.py` regenerates `spec/REQUIREMENTS_TRACEABILITY.md`.
   Re-run it after any edit to requirement or test IDs.
