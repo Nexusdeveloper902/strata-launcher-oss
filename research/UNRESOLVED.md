@@ -6,7 +6,7 @@
 | U-002 | Environment blocker | No authorized device/emulator to run the original app. | All timing, animation, layout measurements Unknown. | User-provided screen recordings or a lawful test device. | open |
 | U-003 | Legal | The original app's current Terms of Service / EULA were not reviewed. | Contract may restrict analysis already done. | Retrieve and review terms. | open |
 | U-004 | Legal/process | Multi-agent separation is not a legally sufficient clean room. | Release risk. | Personnel separation for build phase + counsel sign-off. | open |
-| U-005 | Provenance | User did not state where the APK was downloaded; no reference hash to compare. | Artifact authenticity unverified. | User states source; compare with an official channel. | open |
+| U-005 | Provenance | User did not state where the APK was downloaded; no reference hash to compare. | Artifact authenticity unverified. | User states source; compare with an official channel. | resolved — owner states it came from Google Play, pulled off the device with a third-party APK extractor (2026-10-29); no reference hash compared |
 | U-006 | Product | Final independent product name and repo rename. | Branding. | Owner decision (D-002). | open |
 | U-007 | Research gap | How does the original's search match queries (prefix/substring/fuzzy/transliteration/ranking)? | Our matching is Proposed, not mirrored. | Runtime observation. | open — spec proceeds with own design |
 | U-008 | Research gap | Exact free-tier theme retention limit (APK-025, PUB-043). | None for our product (all free). | Runtime observation. | open — low priority |
@@ -15,9 +15,9 @@
 | U-011 | Research gap | Per-app icon changes free or paid in original (PUB-018 vs SEC-002). | None (ours free). | Observation. | open — low priority |
 | U-012 | Contradiction | Widget backup: PUB-047 (newer) says widgets backed up; APK-031 strings say widgets may fail to restore. | Consistent reading: widgets restored when the provider still exists, else reported. Our spec adopts that. | — | resolved (interpretation) |
 | U-013 | Contradiction | Search gesture: SEC-002 says swipe down; PUB-014 says swipe down = notification shade, swipe up = search; APK-028 swipe-up. | Majority + APK → swipe up = search. | — | resolved |
-| U-014 | Policy | Will Play accept a screen-lock-only AccessibilityService on a launcher? | Quick-lock may need a build flag. | Play review. | open — feature ships behind flag |
+| U-014 | Policy | Will Play accept a screen-lock-only AccessibilityService on a launcher? | Quick-lock may need a build flag. | Play review. | resolved for personal use — app is sideloaded, not published on Play (D-011); lock service allowed in the personal build. Revisit if ever published |
 | U-015 | Platform | Confirm LauncherApps visibility filtering + intent `<queries>` completeness on API 30+. | App list correctness. | Device test (T-PLAT tests). | open |
-| U-016 | Platform/OEM | ROLE_HOME dialog behaviour on OEM builds; HyperOS 2+ blocking third-party homes (PUB-076). | Onboarding fallback. | Device matrix. | open |
+| U-016 | Platform/OEM | ROLE_HOME dialog behaviour on OEM builds; HyperOS 2+ blocking third-party homes (PUB-076). | Onboarding fallback. | Device matrix. | partly resolved — owner reports their Samsung Galaxy A56 accepted a third-party default launcher; Xiaomi/others still untested |
 | U-017 | Platform | Does Auto Backup carry widget-host state so `APPWIDGET_HOST_RESTORED` fires? | Widget restore promise. | Restore test. | open |
 | U-018 | Platform | Android 16 QPR2 auto-themed icons availability to third-party launchers. | Themed-icon coverage. | Device test. | open |
 | U-019 | Platform | `exported` value for listener/accessibility services across OEMs. | Binding reliability. | Device test. | open |
