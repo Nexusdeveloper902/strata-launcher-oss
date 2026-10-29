@@ -7,7 +7,7 @@ Companions: `spec/INTERACTION_SPEC.md` (flows, gestures, states), `spec/VISUAL_S
 
 **Clean room.** Written from `research/` summaries and public Android docs only. The original
 app is referred to as "the original". Its names, copy, artwork, file formats and themes are
-not reused (AGENTS.md rule 1, D-006). "Strata Launcher" is a placeholder name (D-002, U-006).
+not reused (AGENTS.md rule 1, D-006). The product name is "Strata Launcher" (D-012).
 
 **Labels used on every requirement** follow `research/RESEARCH_METHOD.md` §1 and AGENTS.md;
 they describe the evidence that the *original* has the capability. How we specify it is

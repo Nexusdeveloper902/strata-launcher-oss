@@ -10,7 +10,7 @@ app's internals and does not use them as a template. Every choice here is our ow
 **Label: everything in this file is `Proposed`** unless it cites a DOC-ID (platform fact,
 taken from ANDROID_PLATFORM) or a decision (D-nnn).
 
-Fixed constraints: product placeholder "Strata Launcher" (D-002), application ID
+Fixed constraints: product name "Strata Launcher" (D-012), application ID
 `app.strata.launcher`, Kotlin + Jetpack Compose with framework code behind interfaces (D-005),
 minSdk 26 / targetSdk 36 (NFR-COMPAT-01). It is offline, with no `INTERNET` permission, no backend,
 no account, no analytics, no billing (D-004, D-007, NFR-PRIV-01/02). The theme format is

@@ -7,7 +7,7 @@
 | U-003 | Legal | The original app's current Terms of Service / EULA were not reviewed. | Contract may restrict analysis already done. | Retrieve and review terms. | open |
 | U-004 | Legal/process | Multi-agent separation is not a legally sufficient clean room. | Release risk. | Personnel separation for build phase + counsel sign-off. | open |
 | U-005 | Provenance | User did not state where the APK was downloaded; no reference hash to compare. | Artifact authenticity unverified. | User states source; compare with an official channel. | resolved — owner states it came from Google Play, pulled off the device with a third-party APK extractor (2026-10-29); no reference hash compared |
-| U-006 | Product | Final independent product name and repo rename. | Branding. | Owner decision (D-002). | open |
+| U-006 | Product | Final independent product name and repo rename. | Branding. | Owner decision (D-002). | resolved — name "Strata Launcher" (D-012); repo rename optional for a personal project |
 | U-007 | Research gap | How does the original's search match queries (prefix/substring/fuzzy/transliteration/ranking)? | Our matching is Proposed, not mirrored. | Runtime observation. | open — spec proceeds with own design |
 | U-008 | Research gap | Exact free-tier theme retention limit (APK-025, PUB-043). | None for our product (all free). | Runtime observation. | open — low priority |
 | U-009 | Contradiction | In-app font size: PUB-038 says none; APK-022 shows scale steps. | Likely PUB-038 stale. Our spec includes font scale regardless. | Runtime observation. | open — resolved for our spec |

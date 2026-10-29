@@ -845,4 +845,4 @@ by T-06.
   `ZipPathValidator` (API 34) is only a secondary defence (§9) and needs no DOC entry.
 - **TQ-3** Whether to add an optional label text-shadow/halo to improve legibility on busy
   wallpapers (affects §7.4 guarantees) — owner T-05.
-- **TQ-4** Final schema `$id` domain once the product name is chosen (U-006).
+- **TQ-4** Schema `$id` keeps the `.invalid` domain: the name is Strata (D-012) and, as a personal project, it has no product domain (D-011).

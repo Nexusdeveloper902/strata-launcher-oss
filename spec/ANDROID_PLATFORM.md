@@ -3,7 +3,7 @@
 Task T-03 · Owner: agent:platform · Updated 2026-10-29 · Status: review
 
 **Question.** Which public Android APIs should an independent Kotlin + Jetpack Compose,
-list-style home-screen launcher (working name "Strata Launcher", package placeholder
+list-style home-screen launcher ("Strata Launcher", D-012; package
 `app.strata.launcher`, proposed **minSdk 26**, **targetSdk 36**) use for each capability,
 and under what constraints?
 

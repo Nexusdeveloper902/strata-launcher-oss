@@ -228,7 +228,7 @@ wallpapers (PUB-039/040/043/045). We share the generic list-launcher idea (not p
 but differ in every specific:
 | Aspect | Strata |
 |---|---|
-| Name, launcher icon, store art | Own name (placeholder pending U-006). The icon is three offset horizontal bands (a "strata" motif), drawn from scratch. |
+| Name, launcher icon, store art | Own name: Strata Launcher (D-012). The icon is three offset horizontal bands (a "strata" motif), drawn from scratch. |
 | Home composition | Favourites anchored **at the bottom** above an always-visible **search pill**. The header floats at the top with flexible space between them. |
 | Search entry | A visible pill plus the gesture (the original relies on the gesture). |
 | Notifications | **Dot / count badges** by default; text preview only as an opt-in. |
