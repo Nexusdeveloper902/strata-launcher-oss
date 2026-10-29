@@ -5,3 +5,7 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.json)
 }
+
+dependencies {
+    testImplementation(projects.testing.fixtures)
+}
