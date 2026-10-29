@@ -26,7 +26,7 @@ specification phase is **finished**; the next step is implementation, starting a
 5. `spec/PRODUCT_SPEC.md` for the referenced FR/NFR IDs
 
 ## Environment notes (cloud sessions)
-- JDK and Gradle 8.14 are present; **no Android SDK** is installed and `ANDROID_HOME` is
+- A JDK is present and the build uses the committed Gradle wrapper (`./gradlew`); **no Android SDK** is installed and `ANDROID_HOME` is
   unset. Install the command-line tools + `platforms;android-36` + `build-tools` first
   (needs network access to `dl.google.com`; if blocked, change the environment's network
   policy). Set `ANDROID_HOME` to wherever you install it; this is per session, nothing
