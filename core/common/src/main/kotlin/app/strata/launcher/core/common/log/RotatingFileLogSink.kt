@@ -7,8 +7,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Appends entries to `strata-0.log` in [directory()] and rotates to `strata-1.log` when the
@@ -31,6 +33,12 @@ class RotatingFileLogSink(
     override fun write(entry: LogEntry) {
         val line = format(entry)
         executor.execute { runCatching { append(line) } }
+    }
+
+    override fun flush(timeoutMillis: Long) {
+        val done = CountDownLatch(1)
+        runCatching { executor.execute { done.countDown() } }.onFailure { return }
+        done.await(timeoutMillis, TimeUnit.MILLISECONDS)
     }
 
     private fun append(line: String) {

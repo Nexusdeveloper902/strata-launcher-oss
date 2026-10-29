@@ -23,9 +23,15 @@ interface Logger {
     fun w(tag: String, message: String, throwable: Throwable? = null) = log(LogLevel.WARN, tag, message, throwable)
 
     fun e(tag: String, message: String, throwable: Throwable? = null) = log(LogLevel.ERROR, tag, message, throwable)
+
+    /** Blocks up to [timeoutMillis] until accepted entries reach their destinations (used before the process dies). */
+    fun flush(timeoutMillis: Long) {}
 }
 
 /** A destination for entries accepted by [RingLogger]. Implementations must not block the caller. */
 fun interface LogSink {
     fun write(entry: LogEntry)
+
+    /** Waits up to [timeoutMillis] for entries already passed to [write] to be persisted. */
+    fun flush(timeoutMillis: Long) {}
 }

@@ -34,6 +34,14 @@ class RingLogger(
         }
     }
 
+    override fun flush(timeoutMillis: Long) {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+        for (sink in sinks) {
+            val left = (deadline - System.nanoTime()) / 1_000_000
+            runCatching { sink.flush(left.coerceAtLeast(0)) }
+        }
+    }
+
     /** Entries currently held, oldest first. */
     fun snapshot(): List<LogEntry> =
         synchronized(lock) {

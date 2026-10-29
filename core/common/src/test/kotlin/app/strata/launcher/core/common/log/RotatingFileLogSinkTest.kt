@@ -5,6 +5,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 
 class RotatingFileLogSinkTest {
     @get:Rule
@@ -30,5 +32,20 @@ class RotatingFileLogSinkTest {
         assertThat(names).containsExactly("strata-0.log", "strata-1.log")
         dir.listFiles()!!.forEach { assertThat(it.length()).isAtMost(100L) }
         assertThat(File(dir, "strata-0.log").readText()).contains("message number 19")
+    }
+
+    @Test
+    fun flushWaitsForQueuedAppends() {
+        val dir = tmp.root
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            val slow = Executor { task -> pool.execute { Thread.sleep(200).also { task.run() } } }
+            val sink = RotatingFileLogSink(directory = { dir }, executor = slow)
+            sink.write(entry("queued"))
+            sink.flush(5_000)
+            assertThat(File(dir, "strata-0.log").readText()).contains("queued")
+        } finally {
+            pool.shutdownNow()
+        }
     }
 }
