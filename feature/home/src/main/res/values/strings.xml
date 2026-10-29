@@ -3,4 +3,22 @@
     <string name="home_placeholder">Strata</string>
     <string name="home_banner_not_default">Strata is not your default home app. The Home key opens another launcher.</string>
     <string name="home_banner_set_default">Set as default</string>
+
+    <!-- Home → list (INTERACTION_SPEC §3; the favourites block arrives in M3) -->
+    <string name="home_all_apps">All apps ›</string>
+
+    <!-- List end rows (FR-LIST-06) -->
+    <string name="list_end_settings">Settings</string>
+    <string name="list_end_hidden_apps">Hidden apps (%1$d)</string>
+    <!-- Empty list (INTERACTION_SPEC §8) -->
+    <string name="list_all_hidden">All apps are hidden</string>
+    <string name="list_manage_hidden">Manage hidden apps</string>
+
+    <!-- Launch failure (FR-APPS-02, INTERACTION_SPEC §8) -->
+    <string name="launch_failed">Couldn\'t open %1$s</string>
+    <string name="launch_failed_app_info">App info</string>
+
+    <!-- Storage reset banner (FR-LIFE-04) -->
+    <string name="reset_banner">Some settings were reset</string>
+    <string name="reset_banner_dismiss">Dismiss</string>
 </resources>

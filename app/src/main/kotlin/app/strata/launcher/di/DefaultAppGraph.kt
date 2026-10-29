@@ -1,20 +1,42 @@
 package app.strata.launcher.di
 
 import android.content.Context
+import android.view.View
 import app.strata.launcher.BuildConfig
 import app.strata.launcher.core.common.AppDispatchers
+import app.strata.launcher.core.common.Clock
 import app.strata.launcher.core.common.log.LogLevel
 import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.common.log.RingLogger
 import app.strata.launcher.core.common.log.RotatingFileLogSink
-import app.strata.launcher.core.data.onboarding.DataStoreOnboardingStore
-import app.strata.launcher.core.platformapi.settings.OnboardingStore
+import app.strata.launcher.core.data.Databases
+import app.strata.launcher.core.data.LazyResource
+import app.strata.launcher.core.data.ResetNoticeBoard
+import app.strata.launcher.core.data.catalog.AppCatalogRepository
+import app.strata.launcher.core.data.launchlog.RoomLaunchLogRepository
+import app.strata.launcher.core.data.list.AssembledAppListSource
+import app.strata.launcher.core.data.list.overridesFlow
+import app.strata.launcher.core.data.settings.DataStoreSettingsRepository
+import app.strata.launcher.core.platformapi.apps.AppCatalog
+import app.strata.launcher.core.platformapi.apps.AppLauncher
+import app.strata.launcher.core.platformapi.apps.AppListSource
+import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
+import app.strata.launcher.core.platformapi.settings.ResetNotices
+import app.strata.launcher.core.platformapi.settings.SettingsRepository
+import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.diagnostics.LogcatSink
+import app.strata.launcher.platform.apps.AndroidProfileSource
+import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
+import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
 import app.strata.launcher.platform.system.AndroidRoleController
+import app.strata.launcher.platform.system.IcuCollation
+import app.strata.launcher.platform.system.ViewHaptics
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 
 /** Production bindings. Everything is lazy: building the graph does no I/O (ARCHITECTURE §10 step 1). */
@@ -22,6 +44,9 @@ class DefaultAppGraph(context: Context) : AppGraph {
     private val appContext = context.applicationContext
 
     override val dispatchers: AppDispatchers = AppDispatchers.standard()
+
+    /** Serialises catalog mutations (ARCHITECTURE §6). */
+    private val catalogDispatcher by lazy { dispatchers.io.limitedParallelism(1) }
 
     override val logger: Logger by lazy {
         RingLogger(
@@ -40,11 +65,88 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     override val roleController: RoleController by lazy { AndroidRoleController(appContext) }
 
-    override val onboardingStore: OnboardingStore by lazy {
-        DataStoreOnboardingStore.create(appContext, CoroutineScope(SupervisorJob() + dispatchers.io))
+    override val resetNotices: ResetNotices by lazy { ResetNoticeBoard() }
+
+    override val settingsRepository: SettingsRepository by lazy {
+        DataStoreSettingsRepository.create(
+            appContext,
+            CoroutineScope(SupervisorJob() + dispatchers.io),
+            resetNotices,
+        )
+    }
+
+    override val locales: MutableStateFlow<List<String>> = MutableStateFlow(localeTags(appContext))
+
+    private val collation by lazy { IcuCollation() }
+
+    private val strataDb by lazy {
+        LazyResource(dispatchers.io) { Databases.openStrata(appContext, logger, resetNotices) }
+    }
+
+    private val catalogRepository by lazy {
+        AppCatalogRepository(
+            database = strataDb,
+            source = LauncherAppsCatalogSource(appContext, dispatchers.io, logger),
+            clock = Clock.System,
+            scope = appScope,
+            catalogDispatcher = catalogDispatcher,
+            logger = logger,
+            sectionKeyOf = { label ->
+                val model = collation.sections(locales.value)
+                model.labels.getOrElse(model.bucketOf(label)) { "" }
+            },
+        )
+    }
+
+    override val appCatalog: AppCatalog get() = catalogRepository
+
+    override val appList: AppListSource by lazy {
+        AssembledAppListSource(
+            catalog = catalogRepository,
+            overrides = overridesFlow(strataDb),
+            locales = locales,
+            collation = collation,
+            defaultDispatcher = dispatchers.default,
+            scope = appScope,
+            snapshotLoaded = catalogRepository.snapshotLoaded,
+        )
+    }
+
+    override val appLauncher: AppLauncher by lazy { LauncherAppsAppLauncher(appContext, logger) }
+
+    private val roomLaunchLog by lazy {
+        RoomLaunchLogRepository(
+            database = LazyResource(dispatchers.io) { Databases.openLaunchLog(appContext, logger) },
+            settings = settingsRepository,
+            clock = Clock.System,
+        )
+    }
+
+    override val launchLog: LaunchLogRepository get() = roomLaunchLog
+
+    private val viewHaptics = ViewHaptics()
+
+    override val haptics: Haptics get() = viewHaptics
+
+    private val profileSource by lazy { AndroidProfileSource(appContext).also { it.start() } }
+
+    override fun startCatalog() {
+        profileSource
+        catalogRepository.start()
+        appScope.launch(dispatchers.io) { runCatching { roomLaunchLog.pruneExpired() } }
+    }
+
+    override fun attachWindow(view: View?) {
+        if (view == null) viewHaptics.detachAll() else viewHaptics.attach(view)
     }
 
     private companion object {
         const val TAG = "AppGraph"
     }
+}
+
+/** Locale tags of [context]'s configuration, primary first. */
+fun localeTags(context: Context): List<String> {
+    val list = context.resources.configuration.locales
+    return (0 until list.size()).map { list[it].toLanguageTag() }.ifEmpty { listOf("en") }
 }

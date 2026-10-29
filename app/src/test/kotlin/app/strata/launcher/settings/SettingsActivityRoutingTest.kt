@@ -10,9 +10,10 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.TestAppGraph
+import app.strata.launcher.core.model.Settings
 import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.home.HomeActivity
-import app.strata.launcher.testing.fakes.FakeOnboardingStore
+import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -41,7 +42,7 @@ class SettingsActivityRoutingTest {
 
     @Test
     fun tHome13_notOnboarded_showsOnboardingAndStays() {
-        TestAppGraph(onboardingStore = FakeOnboardingStore(initial = false)).install()
+        TestAppGraph(onboarded = false).install()
         val activity = start(launcherIntent())
         compose.onNodeWithTag(OnboardingTestTags.ROOT).assertExists()
         assertThat(activity.isFinishing).isFalse()
@@ -50,7 +51,7 @@ class SettingsActivityRoutingTest {
 
     @Test
     fun tHome13_tHome02_onboarded_startsHomeExplicitlyAndFinishes() {
-        TestAppGraph(onboardingStore = FakeOnboardingStore(initial = true)).install()
+        TestAppGraph(onboarded = true).install()
         val activity = start(launcherIntent())
         val started = shadowOf(activity).nextStartedActivity
         assertThat(started.component).isEqualTo(ComponentName(context, HomeActivity::class.java))
@@ -61,7 +62,7 @@ class SettingsActivityRoutingTest {
 
     @Test
     fun tHome13_applicationPreferences_opensSettingsRoot() {
-        TestAppGraph(onboardingStore = FakeOnboardingStore(initial = false)).install()
+        TestAppGraph(onboarded = false).install()
         val intent =
             Intent(Intent.ACTION_APPLICATION_PREFERENCES)
                 .setComponent(ComponentName(context, SettingsActivity::class.java))
@@ -74,12 +75,12 @@ class SettingsActivityRoutingTest {
 
     @Test
     fun onboardingContinue_setsFlagThenOpensHome() {
-        val store = FakeOnboardingStore(initial = false)
-        TestAppGraph(onboardingStore = store).install()
+        val store = FakeSettingsRepository(Settings(onboardingDone = false))
+        TestAppGraph(settingsRepository = store).install()
         val activity = start(launcherIntent())
         compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
         shadowOf(Looper.getMainLooper()).idle()
-        assertThat(store.value).isTrue()
+        assertThat(store.value.onboardingDone).isTrue()
         assertThat(shadowOf(activity).nextStartedActivity.component)
             .isEqualTo(ComponentName(context, HomeActivity::class.java))
         assertThat(activity.isFinishing).isTrue()

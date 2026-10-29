@@ -10,7 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import app.strata.launcher.appGraph
-import app.strata.launcher.core.ui.StrataPlaceholderTheme
+import app.strata.launcher.core.ui.StrataDefaultTheme
 import app.strata.launcher.feature.onboarding.OnboardingStubScreen
 import app.strata.launcher.home.HomeActivity
 import kotlinx.coroutines.flow.first
@@ -29,7 +29,7 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val kind = EntryRouter.classify(intent?.action, intent?.categories)
         setContent {
-            StrataPlaceholderTheme {
+            StrataDefaultTheme {
                 when (screen) {
                     EntryRoute.ONBOARDING -> OnboardingStubScreen(onContinue = ::completeOnboarding)
                     EntryRoute.SETTINGS_ROOT -> SettingsRootStub()
@@ -38,7 +38,16 @@ class SettingsActivity : ComponentActivity() {
             }
         }
         lifecycleScope.launch {
-            val done = if (kind == EntryKind.LAUNCHER_ICON) appGraph.onboardingStore.onboardingDone.first() else true
+            val done =
+                if (kind ==
+                    EntryKind.LAUNCHER_ICON
+                ) {
+                    appGraph.settingsRepository.settings
+                        .first()
+                        .onboardingDone
+                } else {
+                    true
+                }
             show(EntryRouter.route(kind, done))
         }
     }
@@ -50,7 +59,7 @@ class SettingsActivity : ComponentActivity() {
 
     private fun completeOnboarding() {
         lifecycleScope.launch {
-            appGraph.onboardingStore.setOnboardingDone(true)
+            appGraph.settingsRepository.update { it.copy(onboardingDone = true) }
             openHome()
         }
     }
@@ -60,7 +69,10 @@ class SettingsActivity : ComponentActivity() {
         finish()
     }
 
-    private companion object {
-        const val TAG = "Entry"
+    companion object {
+        private const val TAG = "Entry"
+
+        /** Explicit start from the list end (FR-LIST-06). The hidden-apps page arrives in M3; until then: settings root. */
+        const val ACTION_HIDDEN_APPS = "app.strata.launcher.action.HIDDEN_APPS"
     }
 }

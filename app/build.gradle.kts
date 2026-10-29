@@ -44,6 +44,7 @@ dependencies {
     implementation(projects.core.data)
     implementation(projects.core.ui)
     implementation(projects.platform.system)
+    implementation(projects.platform.apps)
     implementation(projects.feature.home)
     implementation(projects.feature.onboarding)
 
@@ -54,4 +55,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(projects.testing.fakes)
+    testImplementation(projects.testing.fixtures)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(projects.testing.fakes)
+    androidTestImplementation(libs.androidx.room.runtime)
 }

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Profile names used in duplicate-label lines and badges (FR-APPS-11, FR-LIST-03) -->
+    <string name="profile_main">Personal</string>
+    <string name="profile_work">Work</string>
+    <string name="profile_private">Private</string>
+    <string name="profile_other">Other profile</string>
+    <!-- Secondary row line: profile name, then activity or package detail -->
+    <string name="secondary_line_format">%1$s · %2$s</string>
+
+    <!-- Notification badge (FR-LIST-03, VISUAL_SPEC §7) -->
+    <plurals name="badge_description">
+        <item quantity="one">%1$d notification</item>
+        <item quantity="other">%1$d notifications</item>
+    </plurals>
+    <string name="badge_description_dot">New notifications</string>
+    <string name="badge_count">%1$d</string>
+    <string name="badge_count_overflow">99+</string>
+
+    <!-- Alphabet index (FR-LIST-02, INTERACTION_SPEC §9) -->
+    <string name="index_description">Alphabet index</string>
+    <plurals name="index_letter_description">
+        <item quantity="one">Jump to %1$s, %2$d app</item>
+        <item quantity="other">Jump to %1$s, %2$d apps</item>
+    </plurals>
+    <string name="index_fold">•</string>
+</resources>

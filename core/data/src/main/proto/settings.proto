@@ -1,0 +1,37 @@
+// Global settings (spec/ARCHITECTURE.md §4.2). One row of the catalogue = one field here.
+// Field numbers are never reused; deprecated fields become `reserved`.
+syntax = "proto3";
+package strata.settings;
+option java_package = "app.strata.launcher.core.data.settings";
+option java_multiple_files = true;
+option java_outer_classname = "SettingsProtos";
+
+enum BadgeStyle { BADGE_STYLE_DOT = 0; BADGE_STYLE_COUNT = 1; }
+enum AppearanceOverride { APPEARANCE_FOLLOW_THEME = 0; APPEARANCE_SYSTEM = 1; APPEARANCE_LIGHT = 2; APPEARANCE_DARK = 3; }
+enum SwipeDownAction { SWIPE_DOWN_NONE = 0; SWIPE_DOWN_NOTIFICATIONS = 1; }
+
+message Settings {
+  optional int32 catalogue_version = 1;
+  optional string install_id = 2;
+  optional bool onboarding_done = 3;
+  optional bool list_two_column = 4;
+  optional bool haptics_enabled = 5;
+  optional bool show_hidden_in_search = 6;
+  optional bool recents_enabled = 7;
+  optional bool launch_log_paused = 8;
+  optional bool home_press_opens_search = 9;
+  optional bool allow_rotation = 10;
+  optional bool hide_status_bar = 11;
+  optional bool keep_back_gesture_on_index_side = 12;
+  optional bool badges_enabled = 13;
+  optional BadgeStyle badge_style = 14;
+  optional bool contacts_search_enabled = 15;
+  optional bool contacts_hint_shown = 16;
+  optional AppearanceOverride appearance_override = 17;
+  optional bool enforce_contrast = 18;
+  optional int64 default_home_banner_dismissed_until = 19;
+  optional bool private_space_container_hidden = 20;
+  optional bool list_sort_by_usage = 21;
+  optional SwipeDownAction swipe_down_action = 22;
+  optional bool lock_gesture_enabled = 23;
+}

@@ -16,6 +16,8 @@ org.jetbrains.kotlinx:kotlinx-serialization-bom
 # Okio is a file/stream I/O library pulled by datastore-core (section 15). It has no network code; OkHttp is forbidden.
 com.squareup.okio:okio
 com.squareup.okio:okio-jvm
+# protobuf-javalite: Proto DataStore messages for settings.pb and theme_index.pb (section 15, section 4.1)
+com.google.protobuf:protobuf-javalite
 # Transitive helpers of AndroidX
 org.jspecify:jspecify
 com.google.guava:listenablefuture

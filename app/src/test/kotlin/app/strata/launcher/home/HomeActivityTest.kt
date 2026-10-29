@@ -11,10 +11,11 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.TestAppGraph
+import app.strata.launcher.core.model.Settings
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.onboarding.OnboardingTestTags
-import app.strata.launcher.testing.fakes.FakeOnboardingStore
 import app.strata.launcher.testing.fakes.FakeRoleController
+import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -46,7 +47,7 @@ class HomeActivityTest {
     fun tHome01_placeholderShown_noBannerWhenDefault() {
         TestAppGraph(
             roleController = FakeRoleController(defaultHome = true),
-            onboardingStore = FakeOnboardingStore(true),
+            onboarded = true,
         ).install()
         start()
         compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
@@ -58,7 +59,7 @@ class HomeActivityTest {
     fun tHome02_appModeBannerWhenNotDefault() {
         TestAppGraph(
             roleController = FakeRoleController(defaultHome = false),
-            onboardingStore = FakeOnboardingStore(true),
+            onboarded = true,
         ).install()
         start()
         compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
@@ -70,7 +71,7 @@ class HomeActivityTest {
     @Test
     fun bannerDisappearsAfterRoleGrantedOnResume() {
         val role = FakeRoleController(defaultHome = false)
-        TestAppGraph(roleController = role, onboardingStore = FakeOnboardingStore(true)).install()
+        TestAppGraph(roleController = role, onboarded = true).install()
         val controller = Robolectric.buildActivity(HomeActivity::class.java, homeIntent()).setup()
         shadowOf(Looper.getMainLooper()).idle()
         compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER).assertExists()
@@ -85,7 +86,7 @@ class HomeActivityTest {
     fun tSec03_extrasIgnored() {
         TestAppGraph(
             roleController = FakeRoleController(defaultHome = true),
-            onboardingStore = FakeOnboardingStore(true),
+            onboarded = true,
         ).install()
         val hostile =
             homeIntent()
@@ -101,13 +102,13 @@ class HomeActivityTest {
     /** D-008 / T-ONBOARD-09 (stub): onboarding is home's first layer until Continue. */
     @Test
     fun onboardingLayerShownUntilContinue() {
-        val store = FakeOnboardingStore(initial = false)
-        TestAppGraph(roleController = FakeRoleController(defaultHome = true), onboardingStore = store).install()
+        val store = FakeSettingsRepository(Settings(onboardingDone = false))
+        TestAppGraph(roleController = FakeRoleController(defaultHome = true), settingsRepository = store).install()
         start()
         compose.onNodeWithTag(OnboardingTestTags.ROOT).assertExists()
         compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
         compose.waitForIdle()
-        assertThat(store.value).isTrue()
+        assertThat(store.value.onboardingDone).isTrue()
         compose.onNodeWithTag(OnboardingTestTags.ROOT).assertDoesNotExist()
         compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
     }

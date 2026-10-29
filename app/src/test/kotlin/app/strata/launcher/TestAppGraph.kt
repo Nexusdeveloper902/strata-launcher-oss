@@ -2,20 +2,37 @@ package app.strata.launcher
 
 import androidx.test.core.app.ApplicationProvider
 import app.strata.launcher.core.common.AppDispatchers
+import app.strata.launcher.core.model.Settings
 import app.strata.launcher.di.AppGraph
-import app.strata.launcher.testing.fakes.FakeOnboardingStore
+import app.strata.launcher.testing.fakes.FakeAppCatalog
+import app.strata.launcher.testing.fakes.FakeAppLauncher
+import app.strata.launcher.testing.fakes.FakeAppListSource
+import app.strata.launcher.testing.fakes.FakeHaptics
+import app.strata.launcher.testing.fakes.FakeLaunchLogRepository
+import app.strata.launcher.testing.fakes.FakeResetNotices
 import app.strata.launcher.testing.fakes.FakeRoleController
+import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import app.strata.launcher.testing.fakes.RecordingLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /** [AppGraph] of fakes (ARCHITECTURE §7: tests swap the graph wholesale). */
 class TestAppGraph(
     override val roleController: FakeRoleController = FakeRoleController(),
-    override val onboardingStore: FakeOnboardingStore = FakeOnboardingStore(),
+    override val settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
     override val logger: RecordingLogger = RecordingLogger(),
+    override val appList: FakeAppListSource = FakeAppListSource(),
+    override val appCatalog: FakeAppCatalog = FakeAppCatalog(),
+    override val appLauncher: FakeAppLauncher = FakeAppLauncher(),
+    override val launchLog: FakeLaunchLogRepository = FakeLaunchLogRepository(),
+    override val haptics: FakeHaptics = FakeHaptics(),
+    override val resetNotices: FakeResetNotices = FakeResetNotices(),
 ) : AppGraph {
+    constructor(roleController: FakeRoleController = FakeRoleController(), onboarded: Boolean) :
+        this(roleController, FakeSettingsRepository(Settings(onboardingDone = onboarded)))
+
     override val dispatchers =
         AppDispatchers(
             main = Dispatchers.Main,
@@ -23,6 +40,13 @@ class TestAppGraph(
             default = Dispatchers.Unconfined,
         )
     override val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    override val locales = MutableStateFlow(listOf("en"))
+    var catalogStarts = 0
+        private set
+
+    override fun startCatalog() {
+        catalogStarts++
+    }
 
     /** Installs this graph into the Robolectric application before any activity starts. */
     fun install(): TestAppGraph =
