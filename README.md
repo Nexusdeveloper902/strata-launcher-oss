@@ -1,4 +1,4 @@
-# List-Launcher Clean-Room Specification
+# Strata Launcher
 
 Research and an implementation-ready specification for an **independent** Android
 launcher: a minimal, vertical-list home screen with a theme system that is
@@ -8,8 +8,6 @@ launcher: a minimal, vertical-list home screen with a theme system that is
 > from the source code of Niagara Launcher or its publisher. "Niagara Launcher"
 > is named only as the subject of comparative research. The independent product
 > must use its own name, branding, artwork, copy and code.
-> The repository name (`Niagara-REA`) was fixed before this work started; see
-> `research/DECISIONS.md` D-002 for the recommended rename.
 
 ## Status
 Specification phase. No launcher code exists here by design. See `research/STATUS.md`.
