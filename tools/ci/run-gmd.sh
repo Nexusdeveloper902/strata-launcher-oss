@@ -7,7 +7,7 @@ set -uo pipefail
 
 task="${1:?usage: run-gmd.sh <gradle managed-device task, e.g. api34DebugAndroidTest>}"
 log="$(mktemp)"
-infra_pattern='Unable to start Android emulator|Unable to find device serial|Failed to start emulator|emulator.*(timed out|did not boot|crash)|Timed out waiting for .*(device|emulator|boot)|device offline|device .* not found|adb server|INSTALL_FAILED_(INSUFFICIENT_STORAGE|USER_RESTRICTED)|Unable to connect to adb|System image .*(download|unzip)|Connection reset|Read timed out'
+infra_pattern='Unable to start Android emulator|Unable to find device serial|Failed to start emulator|emulator.*(timed out|did not boot|crash)|Timed out waiting for .*(device|emulator|boot)|device offline|device .* not found|adb server|INSTALL_FAILED_(INSUFFICIENT_STORAGE|USER_RESTRICTED)|Unable to connect to adb|System image .*(download|unzip)|Connection reset|Read timed out|Failed to install the following SDK components|Archive is not a ZIP archive|Error reading Zip content'
 
 # AGP reports "Error message from emulator process = []" when the emulator dies at once; print what the host knows.
 dump_emulator_diagnostics() {
@@ -61,6 +61,9 @@ while true; do
     echo "::warning::${task}: infrastructure failure detected, retrying once"
     attempt=$((attempt + 1))
     ./gradlew --stop >/dev/null 2>&1 || true
+    # A truncated system-image download (run 41670711767: "Archive is not a ZIP archive") must not be reused.
+    sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+    rm -rf "$sdk/.temp" "$sdk/.downloadIntermediates" 2>/dev/null || true
     continue
   fi
   echo "::error::${task}: failed for a reason that is not a known infrastructure failure"

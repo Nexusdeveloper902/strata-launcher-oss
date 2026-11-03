@@ -148,12 +148,20 @@ private fun focusReport(): String {
  * Closes a system "isn't responding" / "has stopped" dialog if one is showing. Such a dialog is a system window
  * that takes input focus from every app until dismissed; on a freshly booted, heavily loaded emulator the
  * system launcher (behind our activity) can trigger one. Returns whether a dialog was closed.
+ *
+ * For System UI the dialog is answered "Wait", never "Close app": killing System UI restarts it with the
+ * keyguard up, which stops our activity, and the restarted, loaded system can then not show the IME
+ * (docs/impl-notes/M2.md item 15, CI run 41664919322). Other apps (e.g. the system launcher) are closed.
  */
 private fun closeSystemErrorDialog(device: UiDevice): Boolean {
-    val button = device.findObject(By.res("android", "aerr_close")) ?: device.findObject(By.res("android", "aerr_wait"))
-    if (button == null) return false
-    Log.w(TAG, "Closing system error dialog: " + focusReport())
-    button.click()
+    val close = device.findObject(By.res("android", "aerr_close"))
+    val wait = device.findObject(By.res("android", "aerr_wait"))
+    if (close == null && wait == null) return false
+    val focus = focusReport()
+    val systemUi = focus.contains("Not Responding: com.android.systemui")
+    val button = if (systemUi) wait ?: close else close ?: wait
+    Log.w(TAG, "Answering system error dialog with " + (if (button === wait) "Wait" else "Close") + ": " + focus)
+    button?.click()
     return true
 }
 
@@ -163,6 +171,10 @@ private fun closeSystemErrorDialog(device: UiDevice): Boolean {
  *   the system launcher does not compete as HOME while ours runs.
  * - System error dialogs are suppressed (`hide_error_dialogs`, as on ATD images): an unresponsive background
  *   app is then killed instead of a dialog taking input focus. Any dialog already showing is closed.
+ * - Window, transition and animator scales are 0 (the usual instrumented-test setting). On the software-rendered
+ *   CI emulators an IME insets animation can run for seconds or hit the 10 s timeout (CI runs 41571533617 and
+ *   41667894220), which makes Back timing depend on emulator load. The close logic keys off the IME target state
+ *   either way (docs/impl-notes/M2.md items 16, 17); this only removes the load-dependent animation time.
  */
 private class DeviceStateRule : TestRule {
     private val component = "app.strata.launcher/app.strata.launcher.home.HomeActivity"
@@ -181,21 +193,34 @@ private class DeviceStateRule : TestRule {
                 Log.i(TAG, "set-home-activity: " + shell("cmd package set-home-activity $component"))
                 val previousHideErrorDialogs = shell("settings get global hide_error_dialogs")
                 shell("settings put global hide_error_dialogs 1")
+                val previousScales = animationScales.associateWith { shell("settings get global $it") }
+                animationScales.forEach { shell("settings put global $it 0") }
                 closeSystemErrorDialog(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()))
                 try {
                     base.evaluate()
                 } finally {
-                    if (previousHideErrorDialogs == "null" || previousHideErrorDialogs.isEmpty()) {
-                        shell("settings delete global hide_error_dialogs")
-                    } else {
-                        shell("settings put global hide_error_dialogs $previousHideErrorDialogs")
-                    }
+                    restoreGlobal("hide_error_dialogs", previousHideErrorDialogs)
+                    previousScales.forEach { (key, value) -> restoreGlobal(key, value) }
                     if (previousHome != null && !previousHome.startsWith("app.strata.launcher/")) {
                         shell("cmd package set-home-activity $previousHome")
                     }
                 }
             }
         }
+}
+
+private val animationScales = listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
+
+/** Puts back a global setting read with `settings get` ("null" = it was unset). */
+private fun restoreGlobal(
+    key: String,
+    previous: String,
+) {
+    if (previous == "null" || previous.isEmpty()) {
+        shell("settings delete global $key")
+    } else {
+        shell("settings put global $key $previous")
+    }
 }
 
 private fun ComposeTestRule.count(tag: String): Int = onAllNodesWithTag(tag).fetchSemanticsNodes().size

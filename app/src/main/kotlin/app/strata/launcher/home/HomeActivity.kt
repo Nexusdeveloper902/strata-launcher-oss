@@ -90,6 +90,14 @@ class HomeActivity : ComponentActivity() {
             viewModel.onAction(HomeAction.RefreshRole)
         }
 
+    /** Debug builds only: the search layer's Back/IME close decisions (booleans, no query), as `Strata/SearchClose`. */
+    private val searchCloseLog: (String) -> Unit =
+        if (BuildConfig.DEBUG) {
+            { appGraph.logger.d("SearchClose", it) }
+        } else {
+            {}
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -116,6 +124,7 @@ class HomeActivity : ComponentActivity() {
                             onClose = { viewModel.onAction(HomeAction.CloseSearch) },
                             seed = session.seed,
                             session = session.session,
+                            closeLog = searchCloseLog,
                         )
                     },
                 )

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -61,7 +60,6 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.InterceptPlatformTextInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -103,6 +101,8 @@ object SearchTestTags {
 /**
  * The search layer with its effects (snackbar for launch failures, close). [session] changes every time
  * the layer opens; the field then starts with [seed] (a printable key typed on home/list, FR-SEARCH-01).
+ * [closeLog] receives one line per Back/IME close decision (booleans only, never the query); the app routes it
+ * to its debug-level logger, so it is logcat-only in debug builds (docs/impl-notes/M2.md item 17).
  */
 @Composable
 fun SearchRoute(
@@ -113,8 +113,10 @@ fun SearchRoute(
     seed: String,
     session: Int,
     modifier: Modifier = Modifier,
+    closeLog: (String) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
+    val currentCloseLog by rememberUpdatedState(closeLog)
     val resources = LocalResources.current
     val currentOnAction by rememberUpdatedState(onAction)
     val currentOnClose by rememberUpdatedState(onClose)
@@ -122,6 +124,7 @@ fun SearchRoute(
         effects.collect { effect ->
             when (effect) {
                 SearchEffect.Close -> {
+                    currentCloseLog("onClose")
                     currentOnClose()
                 }
 
@@ -144,7 +147,7 @@ fun SearchRoute(
         }
     }
     Box(modifier = modifier.fillMaxSize()) {
-        SearchScreen(state = state, onAction = onAction, seed = seed, session = session)
+        SearchScreen(state = state, onAction = onAction, seed = seed, session = session, closeLog = closeLog)
         SnackbarHost(
             hostState = snackbar,
             modifier =
@@ -170,6 +173,7 @@ fun SearchScreen(
     seed: String,
     session: Int,
     modifier: Modifier = Modifier,
+    closeLog: (String) -> Unit = {},
 ) {
     val theme = Strata.theme
     val colors = Strata.colors
@@ -178,10 +182,10 @@ fun SearchScreen(
     val listState = rememberLazyListState()
     var field by remember { mutableStateOf(TextFieldValue(seed, TextRange(seed.length))) }
     var backProgress by remember { mutableFloatStateOf(0f) }
-    var hiddenByScroll by remember { mutableStateOf(false) }
     val imeVisible = WindowInsets.isImeVisible
     val imeVisibleNow by rememberUpdatedState(imeVisible)
     val currentState by rememberUpdatedState(state)
+    val imeClose = remember { ImeCloseTracker() }
 
     // Open: seed the field, focus it, show the IME; retry once on the next frame (ANDROID_PLATFORM §14).
     LaunchedEffect(session) {
@@ -198,29 +202,30 @@ fun SearchScreen(
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect {
             if (it is DragInteraction.Start) {
-                hiddenByScroll = true
+                imeClose.onResultsDrag()
                 keyboard?.hide()
             }
         }
     }
 
-    // Empty query: the Back that hides the IME also closes search (INTERACTION_SPEC §5 "Dismissal").
-    // Decide on the IME's target state, not `isImeVisible`: Compose updates `isImeVisible` only when an IME
-    // insets animation ends, and a slow device can take seconds to end it (or Back can land while the show
-    // animation still runs). The target changes as soon as the show or hide is applied to the window.
-    val imeTargetVisible = WindowInsets.imeAnimationTarget.getBottom(LocalDensity.current) > 0
-    var wasImeTargetVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(imeTargetVisible) {
-        if (wasImeTargetVisible && !imeTargetVisible) {
-            if (!hiddenByScroll && currentState.isBlank) onAction(SearchAction.Close)
-            hiddenByScroll = false
-        }
-        wasImeTargetVisible = imeTargetVisible
+    // Empty query: the Back that hides the IME also closes search (INTERACTION_SPEC §5 "Dismissal"). On API 26
+    // Gboard consumes that Back, so this IME-hide edge is the only close path. Which IME signal is trusted per
+    // API level, and why, is in [rememberImeShownForClose] (docs/impl-notes/M2.md items 16 and 17). This only
+    // reads the IME state; it never shows the IME (no re-show after Back, item 14).
+    val imeShown = rememberImeShownForClose()
+    val currentCloseLog by rememberUpdatedState(closeLog)
+    LaunchedEffect(imeShown) {
+        val blank = currentState.isBlank
+        val drag = imeClose.dragMarked
+        val change = imeClose.onIme(imeShown, queryBlank = blank)
+        currentCloseLog("ime shown=$imeShown source=$IME_CLOSE_SOURCE -> $change (queryBlank=$blank drag=$drag)")
+        if (change == ImeChange.HiddenClose) onAction(SearchAction.Close)
     }
 
     PredictiveBackHandler(enabled = true) { progress ->
         try {
             progress.collect { backProgress = it.progress }
+            currentCloseLog("back handler -> Close")
             onAction(SearchAction.Close)
         } catch (e: CancellationException) {
             backProgress = 0f
