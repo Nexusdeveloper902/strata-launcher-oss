@@ -41,9 +41,11 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.IndexLetter
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 object AlphabetIndexTestTags {
     const val INDEX = "alphabet_index"
@@ -173,7 +175,9 @@ fun AlphabetIndex(
                 .testTag(AlphabetIndexTestTags.INDEX)
                 .indexExclusion(
                     exclusion,
-                    lastTouchY,
+                    // Read only where it matters: a read here recomposes the whole index on every pointer move of a
+                    // scrub, and FULL / NONE ignore it (docs/perf/optimization-pass-1.md C-4).
+                    if (exclusion == IndexExclusion.AROUND_TOUCH) lastTouchY else null,
                     atEnd,
                     around = with(density) { IndexMath.AROUND_TOUCH_DP.dp.toPx() },
                     inward = with(density) { IndexMath.INWARD_EXTENSION_DP.dp.toPx() },
@@ -314,12 +318,14 @@ fun AlphabetIndex(
                     ACTIVE_WIDTH +
                         BUBBLE_GAP
                 }
-            val bubbleY = with(density) { fingerY.toDp() } - BUBBLE_SIZE / 2
             Box(
                 modifier =
                     Modifier
-                        .offset(x = bubbleX, y = bubbleY)
-                        .size(BUBBLE_SIZE)
+                        // The finger position is read in the layout phase only, so a drag within one letter moves
+                        // the bubble without recomposing the index (C-4).
+                        .offset {
+                            IntOffset(bubbleX.roundToPx(), (fingerY - (BUBBLE_SIZE / 2).toPx()).roundToInt())
+                        }.size(BUBBLE_SIZE)
                         .background(colors.surface, RoundedCornerShape(12.dp))
                         .testTag(AlphabetIndexTestTags.BUBBLE)
                         .semantics { hideFromAccessibility() },

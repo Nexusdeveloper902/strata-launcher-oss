@@ -50,7 +50,7 @@ class SearchBenchmark {
         }
 
     private companion object {
-        const val TARGET = "app.strata.launcher"
+        const val TARGET = "app.strata.launcher.benchmark"
         const val ALL_APPS = "home_all_apps"
         const val SEARCH_FIELD_IN_LIST = "app_list_search_field"
         const val FIELD = "search_field"

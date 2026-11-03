@@ -148,7 +148,12 @@ fun AppListScreen(
                 bottom = insets.calculateBottomPadding() + 96.dp,
             )
 
-        val row = RowCallbacks(badgeStyle, onLaunch, onLongPress, rowActions)
+        // Remembered: a new instance on every recomposition of the list made every visible row recompose too
+        // (RowCallbacks has identity equality; docs/perf/optimization-pass-1.md C-2).
+        val row =
+            remember(badgeStyle, onLaunch, onLongPress, rowActions) {
+                RowCallbacks(badgeStyle, onLaunch, onLongPress, rowActions)
+            }
         val offset = if (onOpenSearch != null) 1 else 0
         var focusTarget by remember { mutableStateOf<AppKey?>(null) }
         val currentOnJumpConsumed by rememberUpdatedState(onJumpConsumed)
@@ -311,6 +316,8 @@ private fun ListRow(
     }
     val focusRequester = remember { FocusRequester() }
     if (focus) LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+    // A fresh list per call would make AppRow's `actions` differ on every recomposition (C-3).
+    val actions = remember(app, callbacks.actions) { callbacks.actions(app) }
     AppRow(
         label = app.displayLabel,
         secondary = app.secondaryLine,
@@ -319,7 +326,7 @@ private fun ListRow(
         badgeStyle = callbacks.badgeStyle,
         onClick = { callbacks.onLaunch(app, coordinates[0]?.let { originOf(it, view) }) },
         onLongClick = callbacks.onLongPress?.let { { it(app) } },
-        actions = callbacks.actions(app),
+        actions = actions,
         icon = IconRequestKey(app.key, app.lastUpdateTime),
         dimIcon = app.suspended,
         tag = if (app.suspended) stringResource(R.string.row_suspended) else null,

@@ -102,7 +102,7 @@ class ListBenchmark {
     }
 
     private companion object {
-        const val TARGET = "app.strata.launcher"
+        const val TARGET = "app.strata.launcher.benchmark"
         const val ALL_APPS = "home_all_apps"
         const val LIST = "app_list"
         const val INDEX = "alphabet_index"

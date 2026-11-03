@@ -1,5 +1,6 @@
 package app.strata.launcher.feature.search
 
+import android.os.Build
 import android.view.View
 import android.view.ViewTreeObserver
 import androidx.compose.runtime.Composable
@@ -78,10 +79,11 @@ internal fun ImeHideClosesSearch(
     val currentLog by rememberUpdatedState(log)
     DisposableEffect(view, tracker) {
         var last: Boolean? = null
+        val reader = RootImeReader.of(view)
 
         fun observe() {
             // No root insets (view not attached yet / any more): no reading, so no false hide edge.
-            val visible = rootImeVisible(view) ?: return
+            val visible = reader.read() ?: return
             val blank = currentQueryBlank()
             val drag = tracker.dragMarked
             val change = tracker.onIme(visible, queryBlank = blank)
@@ -104,3 +106,41 @@ internal fun ImeHideClosesSearch(
 
 private fun rootImeVisible(view: View): Boolean? =
     ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime())
+
+/**
+ * [rootImeVisible] for every pre-draw, without its cost when nothing changed (docs/perf/optimization-pass-1.md C-5).
+ * `ViewCompat.getRootWindowInsets` wraps the platform insets in new compat objects on every call, i.e. on every
+ * frame while search is open. API 30+: the answer depends only on the platform `WindowInsets`, which is immutable,
+ * and `View.getRootWindowInsets()` returns the same instance until the window's insets change; so the answer is
+ * reused while the instance is the same. Below 30 the compat answer also reads the root view's visible insets
+ * (item 17 of docs/impl-notes/M2.md), so every frame reads afresh as before.
+ */
+internal class RootImeReader(
+    private val sdkInt: Int,
+    /** The platform `View.getRootWindowInsets()` (an immutable `WindowInsets`), or null when detached. */
+    private val platformInsets: () -> Any?,
+    /** The full [rootImeVisible] read. */
+    private val readVisible: () -> Boolean?,
+) {
+    private var lastInsets: Any? = null
+    private var lastVisible: Boolean? = null
+
+    fun read(): Boolean? {
+        if (sdkInt < Build.VERSION_CODES.R) return readVisible()
+        val insets = platformInsets()
+        if (insets == null) {
+            lastInsets = null
+            return null
+        }
+        if (insets === lastInsets) return lastVisible
+        val visible = readVisible()
+        lastInsets = if (visible == null) null else insets
+        lastVisible = visible
+        return visible
+    }
+
+    companion object {
+        fun of(view: View): RootImeReader =
+            RootImeReader(Build.VERSION.SDK_INT, { view.rootWindowInsets }, { rootImeVisible(view) })
+    }
+}

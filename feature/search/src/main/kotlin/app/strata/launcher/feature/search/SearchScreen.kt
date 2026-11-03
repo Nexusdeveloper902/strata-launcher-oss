@@ -302,13 +302,17 @@ fun SearchScreen(
                 count = items.size,
                 key = { "app_" + items[it].key.component + "_" + items[it].key.userSerial },
             ) { i ->
+                val app = items[i]
+                // Remembered per app: a fresh actions list on every keystroke made each visible row recompose
+                // (docs/perf/optimization-pass-1.md C-3).
+                val actions = remember(app, rowActions) { rowActions(app) }
                 ResultRow(
-                    app = items[i],
+                    app = app,
                     selected = i == state.selected,
                     badgeStyle = state.badgeStyle,
-                    onLaunch = { app, origin -> onAction(SearchAction.Launch(app, origin)) },
+                    onLaunch = { launched, origin -> onAction(SearchAction.Launch(launched, origin)) },
                     onLongPress = onLongPress,
-                    actions = rowActions(items[i]),
+                    actions = actions,
                 )
             }
             if (state.noResults) {

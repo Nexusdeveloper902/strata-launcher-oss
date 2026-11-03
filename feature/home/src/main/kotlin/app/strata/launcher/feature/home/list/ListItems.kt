@@ -3,25 +3,28 @@ package app.strata.launcher.feature.home.list
 import app.strata.launcher.core.model.AppList
 import app.strata.launcher.core.model.VisibleApp
 
-/** One lazy-list item of S-LIST. Keys are stable across updates (ARCHITECTURE M1 risk: 500 rows). */
+/**
+ * One lazy-list item of S-LIST. Keys are stable across updates (ARCHITECTURE M1 risk: 500 rows). They are computed
+ * once per item: the lazy list asks for keys while it measures, and a getter built a new string on every call.
+ */
 sealed interface ListItem {
     val key: String
 
     data class Header(val label: String, val sectionIndex: Int) : ListItem {
-        override val key: String get() = "h:$label"
+        override val key: String = "h:$label"
     }
 
     data class Row(val app: VisibleApp) : ListItem {
-        override val key: String get() = rowKey(app)
+        override val key: String = rowKey(app)
     }
 
     /** Two-column line: [start] and [end] belong to the same section (column-major, FR-LIST-07). */
     data class Pair(val start: VisibleApp, val end: VisibleApp?) : ListItem {
-        override val key: String get() = "p:" + rowKey(start)
+        override val key: String = "p:" + rowKey(start)
     }
 
     data class End(val hiddenCount: Int) : ListItem {
-        override val key: String get() = "end"
+        override val key: String = "end"
     }
 }
 

@@ -9,7 +9,9 @@ class AndroidBenchmarkConventionPlugin : Plugin<Project> {
         with(target) {
             pluginManager.apply("com.android.test")
             extensions.configure<TestExtension> {
-                namespace = strataNamespace()
+                // Self-instrumenting: this APK's package is its namespace, and must not equal the target's id
+                // (`app.strata.launcher.benchmark`, the `:app` benchmark build type). Sources keep their own package.
+                namespace = "${StrataBuild.BASE_NAMESPACE}.macrobenchmark"
                 compileSdk = StrataBuild.COMPILE_SDK
                 defaultConfig {
                     minSdk = StrataBuild.MIN_SDK

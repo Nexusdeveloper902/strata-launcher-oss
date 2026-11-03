@@ -37,6 +37,8 @@ android {
         // keys so Macrobenchmark can install it. Never distributed.
         create("benchmark") {
             initWith(getByName("release"))
+            // A separate application, so installing it never replaces (or wipes the data of) the daily build.
+            applicationIdSuffix = ".benchmark"
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             isDebuggable = false

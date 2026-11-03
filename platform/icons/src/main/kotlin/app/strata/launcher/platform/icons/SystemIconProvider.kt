@@ -46,6 +46,7 @@ class SystemIconProvider(
 ) : IconProvider {
     private val appContext = context.applicationContext
     private val diskDir: File by lazy { diskDir?.invoke() ?: File(appContext.cacheDir, "icons") }
+    private val disk by lazy { DiskLru(this.diskDir, DISK_CAP_BYTES) }
     private val launcherApps by lazy { appContext.getSystemService(LauncherApps::class.java) }
     private val userManager by lazy { appContext.getSystemService(UserManager::class.java) }
 
@@ -63,7 +64,8 @@ class SystemIconProvider(
         val key = cacheKey(req)
         memory.get(key)?.let { return IconResult.Image(it) }
         return try {
-            val image = withContext(ioDispatcher) { readDisk(key) } ?: withContext(renderDispatcher) { render(req) }
+            val image =
+                withContext(ioDispatcher) { readDisk(key) } ?: withContext(renderDispatcher) { render(req, key) }
             if (image == null) {
                 IconResult.Monogram
             } else {
@@ -82,7 +84,10 @@ class SystemIconProvider(
         if (critical) memory.evictAll() else memory.trimToSize(memory.maxSize() / 2)
     }
 
-    private fun render(req: IconRequest): IconImage? {
+    private fun render(
+        req: IconRequest,
+        key: String,
+    ): IconImage? {
         val component = ComponentName.unflattenFromString(req.key.component) ?: return null
         val apps = launcherApps ?: return null
         val user = userManager?.getUserForSerialNumber(req.key.userSerial) ?: return null
@@ -93,7 +98,7 @@ class SystemIconProvider(
         val size = req.sizePx.coerceIn(1, MAX_SIZE_PX)
         val bitmap = drawable.toBitmap(size, size, Bitmap.Config.ARGB_8888)
         val image = IconImage(bitmap, bitmap.width, bitmap.height)
-        scope.launch(ioDispatcher) { writeDisk(cacheKey(req), bitmap) }
+        scope.launch(ioDispatcher) { writeDisk(key, bitmap) }
         return image
     }
 
@@ -117,27 +122,16 @@ class SystemIconProvider(
             diskDir.mkdirs()
             // A unique temp file: concurrent writes of the same key must not share (and corrupt) one.
             val tmp = File.createTempFile("w-$key-", ".tmp", diskDir)
+            val target = File(diskDir, "$key.$EXT")
             try {
                 tmp.outputStream().use { bitmap.compress(format(), QUALITY, it) }
-                if (!tmp.renameTo(File(diskDir, "$key.$EXT"))) tmp.delete()
+                if (!tmp.renameTo(target)) tmp.delete()
             } catch (e: Exception) {
                 tmp.delete()
                 throw e
             }
-            trimDisk()
+            disk.onWritten(target.length())
         }.onFailure { logger.w(TAG, "icon disk write failed", it) }
-    }
-
-    /** LRU by last access (mtime): delete the oldest files until the directory fits the cap. */
-    private fun trimDisk() {
-        val files = diskDir.listFiles()?.filter { it.isFile } ?: return
-        var total = files.sumOf { it.length() }
-        if (total <= DISK_CAP_BYTES) return
-        for (f in files.sortedBy { it.lastModified() }) {
-            if (total <= DISK_CAP_BYTES) break
-            total -= f.length()
-            f.delete()
-        }
     }
 
     @Suppress("DEPRECATION")
@@ -171,8 +165,24 @@ class SystemIconProvider(
                     req.densityDpi,
                 ).joinToString("|")
             val digest = MessageDigest.getInstance("SHA-1").digest(raw.toByteArray())
-            return digest.joinToString("") { "%02x".format(it) }
+            return hex(digest)
         }
+
+        /**
+         * Lower-case hex, the same text as `"%02x".format` per byte (so existing L2 file names stay valid), without
+         * a `Formatter` per byte: [cached] runs on main for every row a list or search frame composes (C-6).
+         */
+        internal fun hex(bytes: ByteArray): String {
+            val out = CharArray(bytes.size * 2)
+            for (i in bytes.indices) {
+                val v = bytes[i].toInt() and 0xff
+                out[i * 2] = HEX[v ushr 4]
+                out[i * 2 + 1] = HEX[v and 0x0f]
+            }
+            return String(out)
+        }
+
+        private val HEX = "0123456789abcdef".toCharArray()
 
         /** NFR-PERF-04: the L1 cache is bounded by 1/8 of the memory class. */
         fun defaultMemoryBudget(context: Context): Int {
