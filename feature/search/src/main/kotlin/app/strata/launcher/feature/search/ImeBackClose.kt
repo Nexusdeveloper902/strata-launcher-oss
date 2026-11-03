@@ -1,23 +1,16 @@
 package app.strata.launcher.feature.search
 
-import android.os.Build
 import android.view.View
 import android.view.ViewTreeObserver
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
-/** What an IME visibility change means for the search layer (item 8 / 17 of docs/impl-notes/M2.md). */
+/** What an IME visibility change means for the search layer (items 8, 17, 18 of docs/impl-notes/M2.md). */
 internal enum class ImeChange {
     /** No visible → hidden edge. */
     None,
@@ -30,8 +23,8 @@ internal enum class ImeChange {
 }
 
 /**
- * Edge detector for "one Back closes search" with an empty query. Feed it every observed IME state; the first
- * observation counts, so a layer that opens while the IME is (or is still reported) up closes on the next hide.
+ * Edge detector for "one Back closes search" with an empty query. Feed it every observed IME state (repeats are
+ * fine: only a visible → hidden change decides); the first observation counts, so a layer that opens while the IME is (or is still reported) up closes on the next hide.
  * A results drag ([onResultsDrag]) marks the next hide as not-a-Back; any "visible" observation clears that
  * mark, so a drag while the IME was already hidden cannot swallow a later Back.
  */
@@ -61,41 +54,53 @@ internal class ImeCloseTracker {
     }
 }
 
-/** Which signal [rememberImeShownForClose] reads on this device (for the debug close log). */
-internal val IME_CLOSE_SOURCE: String =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) "imeAnimationTarget" else "rootInsets"
-
 /**
- * The IME state the empty-query close keys off. API 30+: Compose's `imeAnimationTarget` (item 16: it moves as
- * soon as the hide is applied, unlike `isImeVisible`). Below 30: the root view's insets (item 17).
+ * Closes search on the IME-hide edge (docs/impl-notes/M2.md items 8, 16–18). All API levels read
+ * `ViewCompat.getRootWindowInsets(view).isVisible(ime())` on every pre-draw and feed [tracker] right there:
+ * - It is the platform's own visibility. API 30+: the IME source's visibility, set when a show or hide is
+ *   applied, not when an animation ends (item 16) and regardless of the inset's size (item 18). Below 30: it
+ *   re-reads the visible insets that the dispatched insets can carry stale (item 17).
+ * - Pre-draw runs on every traversal, after insets are dispatched, so each state the window drew is seen.
+ *   Deciding in the listener (not via Compose state and an effect) means a short "visible" cannot be lost
+ *   between two recompositions (item 18).
+ * It only reads IME state and never shows the IME (item 14). [log] gets a line per change (booleans only).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun rememberImeShownForClose(): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        return WindowInsets.imeAnimationTarget.getBottom(LocalDensity.current) > 0
-    }
-    // API < 30 (item 17): ViewRootImpl dispatches insets *before* it stores the new visible insets, and
-    // androidx's compat IME inset falls back to those visible insets under edge-to-edge, so the dispatched
-    // insets (and every Compose IME value) can keep saying "IME up" after the hide until some later dispatch.
-    // `ViewCompat.getRootWindowInsets` re-reads them. Re-read on pre-draw: it runs on every traversal, after
-    // the visible insets are stored, even one that lays nothing out (a visible-insets-only change does not
-    // trigger a layout, so a global-layout listener could miss it). The guard writes only real changes, so the
-    // recomposition this causes cannot loop.
+internal fun ImeHideClosesSearch(
+    tracker: ImeCloseTracker,
+    queryBlank: () -> Boolean,
+    onClose: () -> Unit,
+    log: (String) -> Unit,
+) {
     val view = LocalView.current
-    var rootVisible by remember(view) { mutableStateOf(rootImeVisible(view)) }
-    DisposableEffect(view) {
+    val currentQueryBlank by rememberUpdatedState(queryBlank)
+    val currentOnClose by rememberUpdatedState(onClose)
+    val currentLog by rememberUpdatedState(log)
+    DisposableEffect(view, tracker) {
+        var last: Boolean? = null
+
+        fun observe() {
+            // No root insets (view not attached yet / any more): no reading, so no false hide edge.
+            val visible = rootImeVisible(view) ?: return
+            val blank = currentQueryBlank()
+            val drag = tracker.dragMarked
+            val change = tracker.onIme(visible, queryBlank = blank)
+            if (visible != last || change != ImeChange.None) {
+                currentLog("ime visible=$visible source=rootInsets -> $change (queryBlank=$blank drag=$drag)")
+            }
+            last = visible
+            if (change == ImeChange.HiddenClose) currentOnClose()
+        }
+        observe()
         val listener =
             ViewTreeObserver.OnPreDrawListener {
-                val now = rootImeVisible(view)
-                if (now != rootVisible) rootVisible = now
+                observe()
                 true
             }
         view.viewTreeObserver.addOnPreDrawListener(listener)
         onDispose { view.viewTreeObserver.removeOnPreDrawListener(listener) }
     }
-    return rootVisible
 }
 
-private fun rootImeVisible(view: View): Boolean =
-    ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+private fun rootImeVisible(view: View): Boolean? =
+    ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime())

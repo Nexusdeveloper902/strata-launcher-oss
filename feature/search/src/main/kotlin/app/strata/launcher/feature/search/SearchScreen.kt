@@ -34,6 +34,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -180,17 +181,22 @@ fun SearchScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     val listState = rememberLazyListState()
-    var field by remember { mutableStateOf(TextFieldValue(seed, TextRange(seed.length))) }
+    var field by remember(session) { mutableStateOf(TextFieldValue(seed, TextRange(seed.length))) }
     var backProgress by remember { mutableFloatStateOf(0f) }
     val imeVisible = WindowInsets.isImeVisible
     val imeVisibleNow by rememberUpdatedState(imeVisible)
-    val currentState by rememberUpdatedState(state)
     val imeClose = remember { ImeCloseTracker() }
 
-    // Open: seed the field, focus it, show the IME; retry once on the next frame (ANDROID_PLATFORM §14).
-    LaunchedEffect(session) {
-        field = TextFieldValue(seed, TextRange(seed.length))
+    // Open: seed the query. This runs when the layer's first composition is applied, before any input can reach
+    // the field. It used to run in the LaunchedEffect below, whose body can start hundreds of ms later on a loaded
+    // device and then wiped text typed in between (docs/impl-notes/M2.md item 18, CI run 41709431553).
+    DisposableEffect(session) {
         onAction(SearchAction.Open(seed))
+        onDispose {}
+    }
+
+    // Focus the field and show the IME; retry once on the next frame (ANDROID_PLATFORM §14).
+    LaunchedEffect(session) {
         focus.requestFocus()
         keyboard?.show()
         withFrameNanos { }
@@ -209,18 +215,17 @@ fun SearchScreen(
     }
 
     // Empty query: the Back that hides the IME also closes search (INTERACTION_SPEC §5 "Dismissal"). On API 26
-    // Gboard consumes that Back, so this IME-hide edge is the only close path. Which IME signal is trusted per
-    // API level, and why, is in [rememberImeShownForClose] (docs/impl-notes/M2.md items 16 and 17). This only
-    // reads the IME state; it never shows the IME (no re-show after Back, item 14).
-    val imeShown = rememberImeShownForClose()
+    // Gboard consumes that Back, so this IME-hide edge is the only close path. How the IME is observed, and
+    // why, is in [ImeHideClosesSearch] (docs/impl-notes/M2.md items 16–18).
     val currentCloseLog by rememberUpdatedState(closeLog)
-    LaunchedEffect(imeShown) {
-        val blank = currentState.isBlank
-        val drag = imeClose.dragMarked
-        val change = imeClose.onIme(imeShown, queryBlank = blank)
-        currentCloseLog("ime shown=$imeShown source=$IME_CLOSE_SOURCE -> $change (queryBlank=$blank drag=$drag)")
-        if (change == ImeChange.HiddenClose) onAction(SearchAction.Close)
-    }
+    ImeHideClosesSearch(
+        tracker = imeClose,
+        // The field's own text, not the VM state (which follows it asynchronously): what the user sees is
+        // what decides.
+        queryBlank = { field.text.isBlank() },
+        onClose = { onAction(SearchAction.Close) },
+        log = closeLog,
+    )
 
     PredictiveBackHandler(enabled = true) { progress ->
         try {

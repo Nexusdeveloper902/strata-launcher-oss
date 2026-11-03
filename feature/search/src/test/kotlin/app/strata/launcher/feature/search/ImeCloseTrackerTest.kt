@@ -55,4 +55,33 @@ class ImeCloseTrackerTest {
         assertThat(t.onIme(visible = false, queryBlank = true)).isEqualTo(ImeChange.None)
         assertThat(t.onIme(visible = false, queryBlank = true)).isEqualTo(ImeChange.None)
     }
+
+    @Test
+    fun everyFrameObservationsCloseExactlyOnce() {
+        // The pre-draw listener reports the same state on every frame; only the change decides.
+        val t = ImeCloseTracker()
+        repeat(3) { assertThat(t.onIme(visible = false, queryBlank = true)).isEqualTo(ImeChange.None) }
+        repeat(3) { assertThat(t.onIme(visible = true, queryBlank = true)).isEqualTo(ImeChange.None) }
+        assertThat(t.onIme(visible = false, queryBlank = true)).isEqualTo(ImeChange.HiddenClose)
+        repeat(3) { assertThat(t.onIme(visible = false, queryBlank = true)).isEqualTo(ImeChange.None) }
+    }
+
+    @Test
+    fun oneDrawnFrameWithTheImeUpIsEnoughToClose() {
+        // CI run 41675534786 (API 34): the IME was up for about one second before Back; one frame that saw it
+        // must be enough (item 18).
+        val t = ImeCloseTracker()
+        t.onIme(visible = false, queryBlank = true)
+        t.onIme(visible = true, queryBlank = true)
+        assertThat(t.onIme(visible = false, queryBlank = true)).isEqualTo(ImeChange.HiddenClose)
+    }
+
+    @Test
+    fun queryTypedWhileImeUpThenClearedClosesOnHide() {
+        // queryBlank is read at the hide, not when the IME appeared.
+        val t = ImeCloseTracker()
+        t.onIme(visible = true, queryBlank = false)
+        t.onIme(visible = true, queryBlank = false)
+        assertThat(t.onIme(visible = false, queryBlank = true)).isEqualTo(ImeChange.HiddenClose)
+    }
 }
