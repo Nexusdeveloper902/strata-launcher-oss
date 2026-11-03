@@ -11,6 +11,8 @@ import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.RoleController
+import app.strata.launcher.core.platformapi.system.SystemIntents
+import app.strata.launcher.core.platformapi.system.TextFolding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -32,6 +34,8 @@ interface AppGraph {
     val appLauncher: AppLauncher
     val launchLog: LaunchLogRepository
     val haptics: Haptics
+    val textFolding: TextFolding
+    val systemIntents: SystemIntents
 
     /** BCP-47 tags of the current configuration's locales (sections, collation). */
     val locales: MutableStateFlow<List<String>>

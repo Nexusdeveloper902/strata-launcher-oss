@@ -24,4 +24,7 @@
         <item quantity="other">Jump to %1$s, %2$d apps</item>
     </plurals>
     <string name="index_fold">•</string>
+
+    <!-- Search pill / field hint (VISUAL_SPEC §9.1) -->
+    <string name="search_hint">Search apps</string>
 </resources>

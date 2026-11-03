@@ -51,15 +51,18 @@ import app.strata.launcher.core.theme.model.IndexSide
 import app.strata.launcher.core.theme.model.IndexVisibility
 import app.strata.launcher.core.ui.AlphabetIndex
 import app.strata.launcher.core.ui.AppRow
+import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.feature.home.R
 import kotlinx.coroutines.launch
+import app.strata.launcher.core.ui.R as UiR
 
 object AppListTestTags {
     const val LIST = "app_list"
     const val END_SETTINGS = "app_list_end_settings"
     const val END_HIDDEN = "app_list_end_hidden"
     const val EMPTY = "app_list_empty"
+    const val SEARCH_FIELD = "app_list_search_field"
 
     fun row(app: VisibleApp) = "app_row_${app.key.component}_${app.key.userSerial}"
 
@@ -87,6 +90,8 @@ fun AppListScreen(
     onOpenHiddenApps: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    /** The list's search field (VISUAL_SPEC §2, FR-SEARCH-01); absent when null. */
+    onOpenSearch: (() -> Unit)? = null,
 ) {
     val theme = Strata.theme
     val colors = Strata.colors
@@ -123,6 +128,9 @@ fun AppListScreen(
         }
 
         LazyColumn(state = listState, contentPadding = contentPadding, modifier = Modifier.fillMaxSize()) {
+            if (onOpenSearch != null) {
+                item(key = SEARCH_FIELD_KEY, contentType = SEARCH_FIELD_KEY) { ListSearchField(onOpenSearch) }
+            }
             items(
                 count = model.items.size,
                 key = { model.items[it].key },
@@ -164,7 +172,8 @@ fun AppListScreen(
                 onSelect = { letter, first ->
                     val section = list.index[letter].sectionIndex
                     if (section in model.sectionStarts.indices) {
-                        scope.launch { listState.scrollToItem(model.sectionStarts[section]) }
+                        val offset = if (onOpenSearch != null) 1 else 0
+                        scope.launch { listState.scrollToItem(model.sectionStarts[section] + offset) }
                     }
                     onIndexScrub(first)
                 },
@@ -178,6 +187,25 @@ fun AppListScreen(
                         ),
             )
         }
+    }
+}
+
+/** The list's search field: the same pill shape; a tap opens S-SEARCH (VISUAL_SPEC §2, §9.1). */
+@Composable
+private fun ListSearchField(onOpenSearch: () -> Unit) {
+    val theme = Strata.theme
+    SearchPillFrame(
+        onClick = onOpenSearch,
+        modifier =
+            Modifier
+                .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 8.dp)
+                .testTag(AppListTestTags.SEARCH_FIELD),
+    ) {
+        Text(
+            text = stringResource(UiR.string.search_hint),
+            style = Strata.typography.label,
+            color = Strata.colors.textSecondary,
+        )
     }
 }
 
@@ -295,6 +323,7 @@ private fun EmptyAllHidden(
     }
 }
 
+private const val SEARCH_FIELD_KEY = "search_field"
 private val INDEX_RESERVE = 48.dp
 private val INDEX_BOTTOM_GAP = 24.dp
 private val GUTTER = 24.dp

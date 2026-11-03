@@ -33,8 +33,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** INTERACTION_SPEC §3 layers built so far (search, sheet and FAVEDIT arrive in M2/M3). */
-enum class HomeLayer { REST, LIST }
+/** INTERACTION_SPEC §3 layers built so far (sheet and FAVEDIT arrive in M3). */
+enum class HomeLayer { REST, LIST, SEARCH }
+
+/**
+ * An open search layer (INTERACTION_SPEC §3 `SEARCH(origin)`). [session] changes on every open, so the
+ * search field restarts with [seed] (the printable key that opened it, FR-SEARCH-01).
+ */
+data class SearchSession(val origin: HomeLayer, val seed: String, val session: Int)
 
 data class HomeUiState(
     /** `null` until the stored flag has been read. */
@@ -42,6 +48,8 @@ data class HomeUiState(
     /** `null` until the first role check has finished. */
     val isDefaultHome: Boolean? = null,
     val layer: HomeLayer = HomeLayer.REST,
+    /** Non-null while [layer] is [HomeLayer.SEARCH]. */
+    val search: SearchSession? = null,
     /** `null` until the first list (snapshot) is assembled. */
     val list: AppList? = null,
     val listTwoColumn: Boolean = true,
@@ -74,6 +82,15 @@ sealed interface HomeAction {
 
     /** Back from the list. */
     data object CloseList : HomeAction
+
+    /**
+     * Opens search from the current layer (FR-SEARCH-01): the list's search field, a printable hardware
+     * key on home or list ([seed] = that character), or Home press with the FR-HOME-05 setting.
+     */
+    data class OpenSearch(val seed: String = "") : HomeAction
+
+    /** Search closed (Back, Esc, launch): back to its origin layer. */
+    data object CloseSearch : HomeAction
 
     data class Launch(val app: VisibleApp, val origin: LaunchOrigin?) : HomeAction
 
@@ -114,6 +131,8 @@ class HomeViewModel(
 ) : ViewModel() {
     private val isDefaultHome = MutableStateFlow<Boolean?>(null)
     private val layer = MutableStateFlow(HomeLayer.REST)
+    private val search = MutableStateFlow<SearchSession?>(null)
+    private var searchSessions = 0
     private val effectChannel = Channel<HomeEffect>(Channel.BUFFERED)
 
     val effects: Flow<HomeEffect> = effectChannel.receiveAsFlow()
@@ -128,13 +147,14 @@ class HomeViewModel(
             currentSettings,
             appList.appList.map<AppList, AppList?> { it }.onStart { emit(null) },
             isDefaultHome,
-            layer,
+            combine(layer, search) { l, se -> l to se },
             resetNotices.causes,
-        ) { s, list, isDefault, l, resets ->
+        ) { s, list, isDefault, (l, se), resets ->
             HomeUiState(
                 onboardingDone = s?.onboardingDone,
                 isDefaultHome = isDefault,
                 layer = l,
+                search = se.takeIf { l == HomeLayer.SEARCH },
                 list = list,
                 listTwoColumn = s?.listTwoColumn ?: true,
                 badgeStyle = s?.badgeStyle ?: BadgeStyle.DOT,
@@ -151,8 +171,14 @@ class HomeViewModel(
             }
 
             HomeAction.HomePressed -> {
-                layer.value = HomeLayer.REST
-                effectChannel.trySend(HomeEffect.ReturnToRest)
+                // FR-HOME-05: at rest, the optional setting opens search; otherwise everything closes.
+                if (layer.value == HomeLayer.REST && currentSettings.value?.homePressOpensSearch == true) {
+                    openSearch("")
+                } else {
+                    layer.value = HomeLayer.REST
+                    search.value = null
+                    effectChannel.trySend(HomeEffect.ReturnToRest)
+                }
             }
 
             HomeAction.CompleteOnboarding -> {
@@ -165,6 +191,16 @@ class HomeViewModel(
 
             HomeAction.CloseList -> {
                 layer.value = HomeLayer.REST
+            }
+
+            is HomeAction.OpenSearch -> {
+                openSearch(action.seed)
+            }
+
+            HomeAction.CloseSearch -> {
+                val origin = search.value?.origin ?: HomeLayer.REST
+                if (layer.value == HomeLayer.SEARCH) layer.value = origin
+                search.value = null
             }
 
             is HomeAction.Launch -> {
@@ -192,6 +228,13 @@ class HomeViewModel(
                 resetNotices.dismiss()
             }
         }
+    }
+
+    private fun openSearch(seed: String) {
+        val current = layer.value
+        if (current == HomeLayer.SEARCH) return
+        search.value = SearchSession(origin = current, seed = seed, session = ++searchSessions)
+        layer.value = HomeLayer.SEARCH
     }
 
     /**

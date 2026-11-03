@@ -93,6 +93,10 @@ class AppListAssemblerTest {
         assertThat(shown.map { it.displayLabel }).containsExactly("Gamma", "Zulu").inOrder()
         assertThat(shown.first { it.displayLabel == "Zulu" }.systemLabel).isEqualTo("Beta")
         assertThat(list.hiddenCount).isEqualTo(1)
+        // FR-SEARCH-03: hidden apps stay available to search; private ones never (FR-APPS-10).
+        assertThat(list.hiddenApps.map { it.displayLabel }).containsExactly("Alpha")
+        assertThat(list.hiddenApps.single().hidden).isTrue()
+        assertThat(list.allApps.map { it.displayLabel }).containsExactly("Gamma", "Zulu", "Alpha").inOrder()
     }
 
     @Test

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- S-SEARCH (FR-SEARCH-01…07, INTERACTION_SPEC §5, §8) -->
+    <string name="search_field_description">Search apps</string>
+    <string name="search_clear">Clear search</string>
+    <string name="search_recent_header">Recent apps</string>
+    <string name="search_no_results">No apps match \u201C%1$s\u201D</string>
+    <string name="search_store">Search apps in store</string>
+    <string name="search_hidden_tag">Hidden</string>
+    <string name="search_results_description">Search results</string>
+
+    <!-- Launch failure (FR-APPS-02, INTERACTION_SPEC §8) -->
+    <string name="search_launch_failed">Couldn\'t open %1$s</string>
+    <string name="search_launch_failed_app_info">App info</string>
+</resources>

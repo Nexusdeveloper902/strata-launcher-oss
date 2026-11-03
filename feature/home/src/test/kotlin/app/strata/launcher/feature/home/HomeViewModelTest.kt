@@ -142,4 +142,63 @@ class HomeViewModelTest {
         vm.onAction(HomeAction.DismissResetBanner)
         assertThat(vm.state.value.showResetBanner).isFalse()
     }
+
+    /** INTERACTION_SPEC §3: SEARCH(origin) returns to its origin; each open is a new session with its seed. */
+    @Test
+    fun searchLayerReturnsToOrigin() {
+        val vm = viewModel()
+        vm.onAction(HomeAction.OpenSearch("m"))
+        val first = vm.state.value.search
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.SEARCH)
+        assertThat(first?.origin).isEqualTo(HomeLayer.REST)
+        assertThat(first?.seed).isEqualTo("m")
+        vm.onAction(HomeAction.CloseSearch)
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.REST)
+        assertThat(vm.state.value.search).isNull()
+
+        vm.onAction(HomeAction.OpenList)
+        vm.onAction(HomeAction.OpenSearch())
+        val second = vm.state.value.search
+        assertThat(second?.origin).isEqualTo(HomeLayer.LIST)
+        assertThat(second?.session).isNotEqualTo(first?.session)
+        vm.onAction(HomeAction.CloseSearch)
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.LIST)
+    }
+
+    /** INTERACTION_SPEC §3/§6: Home from SEARCH(list) goes to HOME_REST and clears the search. */
+    @Test
+    fun homePressedClosesSearch() {
+        val vm = viewModel()
+        vm.onAction(HomeAction.OpenList)
+        vm.onAction(HomeAction.OpenSearch("ma"))
+        vm.onAction(HomeAction.HomePressed)
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.REST)
+        assertThat(vm.state.value.search).isNull()
+    }
+
+    /** FR-HOME-05: "Home press opens search" (default off) opens search only from rest. */
+    @Test
+    fun homePressOpensSearchSetting() {
+        val vm = viewModel()
+        vm.onAction(HomeAction.HomePressed)
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.REST)
+        settings.set(Settings(onboardingDone = true, homePressOpensSearch = true))
+        vm.onAction(HomeAction.HomePressed)
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.SEARCH)
+        vm.onAction(HomeAction.HomePressed)
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.REST)
+    }
+
+    /** INTERACTION_SPEC §5: printable keys only, digits included, no chords or whitespace. */
+    @Test
+    fun printableKeys() {
+        assertThat(HomeKeys.printable('m'.code, ctrl = false, alt = false, meta = false)).isEqualTo("m")
+        assertThat(HomeKeys.printable('7'.code, ctrl = false, alt = false, meta = false)).isEqualTo("7")
+        assertThat(HomeKeys.printable('é'.code, ctrl = false, alt = false, meta = false)).isEqualTo("é")
+        assertThat(HomeKeys.printable('m'.code, ctrl = true, alt = false, meta = false)).isNull()
+        assertThat(HomeKeys.printable(' '.code, ctrl = false, alt = false, meta = false)).isNull()
+        assertThat(HomeKeys.printable('\t'.code, ctrl = false, alt = false, meta = false)).isNull()
+        assertThat(HomeKeys.printable(0, ctrl = false, alt = false, meta = false)).isNull()
+        assertThat(HomeKeys.printable(-0x7fffffff, ctrl = false, alt = false, meta = false)).isNull()
+    }
 }

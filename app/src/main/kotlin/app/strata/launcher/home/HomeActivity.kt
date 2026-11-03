@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.compose.setContent
@@ -23,9 +24,13 @@ import app.strata.launcher.core.ui.StrataDefaultTheme
 import app.strata.launcher.di.localeTags
 import app.strata.launcher.feature.home.HomeAction
 import app.strata.launcher.feature.home.HomeEffect
+import app.strata.launcher.feature.home.HomeKeys
+import app.strata.launcher.feature.home.HomeLayer
 import app.strata.launcher.feature.home.HomeRoute
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.onboarding.OnboardingStubScreen
+import app.strata.launcher.feature.search.SearchRoute
+import app.strata.launcher.feature.search.SearchViewModel
 import app.strata.launcher.platform.system.SystemIntentFactory
 import app.strata.launcher.settings.SettingsActivity
 
@@ -47,6 +52,25 @@ class HomeActivity : ComponentActivity() {
                     launchLog = graph.launchLog,
                     haptics = graph.haptics,
                     resetNotices = graph.resetNotices,
+                    ioDispatcher = graph.dispatchers.io,
+                )
+            }
+        }
+    }
+
+    private val searchViewModel: SearchViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                SearchViewModel(
+                    appList = graph.appList,
+                    settings = graph.settingsRepository,
+                    launchLog = graph.launchLog,
+                    launcher = graph.appLauncher,
+                    catalog = graph.appCatalog,
+                    textFolding = graph.textFolding,
+                    systemIntents = graph.systemIntents,
+                    defaultDispatcher = graph.dispatchers.default,
                     ioDispatcher = graph.dispatchers.io,
                 )
             }
@@ -83,6 +107,17 @@ class HomeActivity : ComponentActivity() {
                     onNavigate = ::navigate,
                     showSetDefaultButton = BuildConfig.DEBUG,
                     onSetDefault = ::requestDefaultHome,
+                    searchLayer = { session ->
+                        val searchState by searchViewModel.state.collectAsStateWithLifecycle()
+                        SearchRoute(
+                            state = searchState,
+                            effects = searchViewModel.effects,
+                            onAction = searchViewModel::onAction,
+                            onClose = { viewModel.onAction(HomeAction.CloseSearch) },
+                            seed = session.seed,
+                            session = session.session,
+                        )
+                    },
                 )
                 if (state.showOnboarding) {
                     OnboardingStubScreen(onContinue = { viewModel.onAction(HomeAction.CompleteOnboarding) })
@@ -120,6 +155,31 @@ class HomeActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onAction(HomeAction.RefreshRole)
+    }
+
+    /**
+     * Fallback for keys no focused composable consumed (nothing focused on home): a printable key on
+     * home or list opens search with that character (FR-SEARCH-01, INTERACTION_SPEC §5).
+     */
+    override fun onKeyDown(
+        keyCode: Int,
+        event: KeyEvent,
+    ): Boolean {
+        val layer = viewModel.state.value.layer
+        if (layer != HomeLayer.SEARCH && !viewModel.state.value.showOnboarding) {
+            val text =
+                HomeKeys.printable(
+                    event.unicodeChar,
+                    event.isCtrlPressed,
+                    event.isAltPressed,
+                    event.isMetaPressed,
+                )
+            if (text != null) {
+                viewModel.onAction(HomeAction.OpenSearch(text))
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onNewIntent(intent: Intent) {

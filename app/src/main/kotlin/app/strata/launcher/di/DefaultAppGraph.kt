@@ -25,11 +25,15 @@ import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.RoleController
+import app.strata.launcher.core.platformapi.system.SystemIntents
+import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.diagnostics.LogcatSink
 import app.strata.launcher.platform.apps.AndroidProfileSource
 import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
 import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
 import app.strata.launcher.platform.system.AndroidRoleController
+import app.strata.launcher.platform.system.AndroidSystemIntents
+import app.strata.launcher.platform.system.AndroidTextFolding
 import app.strata.launcher.platform.system.IcuCollation
 import app.strata.launcher.platform.system.ViewHaptics
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -123,6 +127,10 @@ class DefaultAppGraph(context: Context) : AppGraph {
     }
 
     override val launchLog: LaunchLogRepository get() = roomLaunchLog
+
+    override val textFolding: TextFolding by lazy { AndroidTextFolding() }
+
+    override val systemIntents: SystemIntents by lazy { AndroidSystemIntents(appContext) }
 
     private val viewHaptics = ViewHaptics()
 

@@ -12,6 +12,8 @@ import app.strata.launcher.testing.fakes.FakeLaunchLogRepository
 import app.strata.launcher.testing.fakes.FakeResetNotices
 import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
+import app.strata.launcher.testing.fakes.FakeSystemIntents
+import app.strata.launcher.testing.fakes.FakeTextFolding
 import app.strata.launcher.testing.fakes.RecordingLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +31,8 @@ class TestAppGraph(
     override val launchLog: FakeLaunchLogRepository = FakeLaunchLogRepository(),
     override val haptics: FakeHaptics = FakeHaptics(),
     override val resetNotices: FakeResetNotices = FakeResetNotices(),
+    override val textFolding: FakeTextFolding = FakeTextFolding(),
+    override val systemIntents: FakeSystemIntents = FakeSystemIntents(),
 ) : AppGraph {
     constructor(roleController: FakeRoleController = FakeRoleController(), onboarded: Boolean) :
         this(roleController, FakeSettingsRepository(Settings(onboardingDone = onboarded)))

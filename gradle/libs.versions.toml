@@ -26,6 +26,7 @@ ksp = "2.3.12"
 room = "2.8.5"
 protobuf = "4.36.2"
 protobuf-plugin = "0.10.0"
+icu4j = "78.3"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -59,6 +60,7 @@ junit4 = { module = "junit:junit", version.ref = "junit4" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core-ktx", version.ref = "androidx-test-core" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit-ktx", version.ref = "androidx-test-ext-junit" }

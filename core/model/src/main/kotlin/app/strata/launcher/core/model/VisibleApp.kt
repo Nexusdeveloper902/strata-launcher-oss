@@ -46,7 +46,12 @@ data class AppList(
     val hiddenCount: Int,
     /** True while the list still comes from the persisted snapshot (FR-LIFE-01). */
     val fromSnapshot: Boolean,
+    /** Hidden apps (not in [sections]), in collation order; search may show them (FR-SEARCH-03). */
+    val hiddenApps: List<VisibleApp> = emptyList(),
 ) {
+    /** Every non-private app: shown sections first, then hidden ones (the search index input). */
+    val allApps: List<VisibleApp> get() = sections.flatMap { it.apps } + hiddenApps
+
     val appCount: Int get() = sections.sumOf { it.apps.size }
 
     companion object {

@@ -37,15 +37,15 @@ object AppListAssembler {
             }
         val (hidden, shown) = all.partition { it.hidden }
         val withLines = disambiguate(shown)
-
-        val sorted =
-            withLines.sortedWith(
-                compareBy(comparator) { it: VisibleApp -> it.displayLabel }
-                    .thenBy { it.profileKind.ordinal }
-                    .thenBy { it.secondaryLine?.detail.orEmpty() }
-                    .thenBy { it.key.component }
-                    .thenBy { it.key.userSerial },
-            )
+        val order =
+            compareBy(comparator) { it: VisibleApp -> it.displayLabel }
+                .thenBy { it.profileKind.ordinal }
+                .thenBy { it.secondaryLine?.detail.orEmpty() }
+                .thenBy { it.key.component }
+                .thenBy { it.key.userSerial }
+        val sorted = withLines.sortedWith(order)
+        // Hidden apps are disambiguated among themselves; they only appear in search (FR-SEARCH-03).
+        val hiddenSorted = disambiguate(hidden).sortedWith(order)
 
         val buckets = arrayOfNulls<MutableList<VisibleApp>>(sections.labels.size)
         for (app in sorted) {
@@ -65,7 +65,13 @@ object AppListAssembler {
                 appSections += AppSection(label, apps)
             }
         }
-        return AppList(appSections, index, hiddenCount = hidden.size, fromSnapshot = catalog.fromSnapshot)
+        return AppList(
+            appSections,
+            index,
+            hiddenCount = hidden.size,
+            fromSnapshot = catalog.fromSnapshot,
+            hiddenApps = hiddenSorted,
+        )
     }
 
     private fun AppEntry.toVisible(override: AppOverride?): VisibleApp {

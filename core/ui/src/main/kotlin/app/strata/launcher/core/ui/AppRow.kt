@@ -2,6 +2,7 @@ package app.strata.launcher.core.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -36,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,7 +56,11 @@ object AppRowTestTags {
     const val WORK_BADGE = "app_row_work_badge"
     const val BADGE_DOT = "app_row_badge_dot"
     const val BADGE_COUNT = "app_row_badge_count"
+    const val TAG = "app_row_tag"
 }
+
+private val SELECTION_RING_WIDTH = 2.dp
+private val SELECTION_RING_RADIUS = 8.dp
 
 /**
  * One list row (FR-LIST-03 base row, VISUAL_SPEC §5–§7): monogram tile (system icons arrive in M3),
@@ -70,6 +76,10 @@ fun AppRow(
     profileKind: ProfileKind = ProfileKind.MAIN,
     badge: Int = 0,
     badgeStyle: BadgeStyle = BadgeStyle.DOT,
+    /** Short status tag after the label, e.g. "Hidden" in search results (FR-SEARCH-03). */
+    tag: String? = null,
+    /** Keyboard selection (search results, FR-SEARCH-04): draws the focus ring and sets `selected`. */
+    selected: Boolean = false,
 ) {
     val theme = Strata.theme
     val colors = Strata.colors
@@ -89,7 +99,15 @@ fun AppRow(
                 .fillMaxWidth()
                 .heightIn(min = maxOf(theme.list.rowHeightDp, MIN_TOUCH_DP).dp)
                 .background(if (pressed || focused) colors.highlight else colors.background.copy(alpha = 0f))
-                .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+                .then(
+                    if (selected) {
+                        Modifier
+                            .border(SELECTION_RING_WIDTH, colors.accent, RoundedCornerShape(SELECTION_RING_RADIUS))
+                            .semantics { this.selected = true }
+                    } else {
+                        Modifier
+                    },
+                ).clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
                 .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -126,6 +144,15 @@ fun AppRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag(AppRowTestTags.LABEL),
+                )
+            }
+            if (tag != null) {
+                Text(
+                    text = tag,
+                    style = type.caption,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    modifier = Modifier.testTag(AppRowTestTags.TAG),
                 )
             }
             if (secondaryText != null) {

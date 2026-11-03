@@ -1,0 +1,28 @@
+# T-SEARCH-04 ranking table over fixtures/search/labels.txt (FR-SEARCH-02, ARCHITECTURE §8).
+# query,check,expected   check: first | top:N | absent | none   (no launch counts; ties = collation)
+map,first,Maps
+gm,top:3,Google Maps
+cafe,first,Café
+CAFE,first,Café
+café,first,Café
+mpas,first,Maps
+maps,first,Maps
+google,first,Google Maps
+cal,top:2,Calendar
+cal,top:2,Calculator
+calc,first,Calculator
+calender,first,Calendar
+store,first,Play Store
+sr,first,Sound Recorder
+kn,first,Keep Notes
+strasse,first,Straße Guide
+lodz,first,Łódź Transit
+orsted,first,Ørsted Energy
+ecran,first,Écran
+angstrom,first,Ångström
+aeble,first,Æble Market
+テレ,first,テレビ
+почта,first,Почта
+corder,first,Recorder
+zzq,none,
+xyzzy,none,

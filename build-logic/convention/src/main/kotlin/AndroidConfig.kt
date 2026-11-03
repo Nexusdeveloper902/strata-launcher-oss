@@ -41,7 +41,7 @@ internal fun Project.addAndroidTestDependencies() {
 /**
  * Gradle Managed Devices for the per-PR smoke matrix (ARCHITECTURE 14.3: API 26, 34, 36 phones, x86_64) and the
  * AndroidX Test Orchestrator (each test in its own process, state cleared).
- * ATD images exist for API 34; 26 and 36 use the regular Google APIs image.
+ * All three use the regular Google APIs image: ATD images ship without a soft keyboard, which T-SEARCH-10 needs.
  */
 internal fun TestOptions.configureStrataManagedDevices() {
     execution = "ANDROIDX_TEST_ORCHESTRATOR"
@@ -54,7 +54,7 @@ internal fun TestOptions.configureStrataManagedDevices() {
         create("api34") {
             device = "Pixel 6"
             apiLevel = 34
-            systemImageSource = "google-atd"
+            systemImageSource = "google"
         }
         create("api36") {
             device = "Pixel 6"

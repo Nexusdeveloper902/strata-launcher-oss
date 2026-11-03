@@ -5,6 +5,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
 
     testImplementation(projects.testing.fixtures)
+    testImplementation(projects.core.search) // T-SEARCH-05: the real index over the Android transliterator
 }
 
 tasks.withType<Test>().configureEach {

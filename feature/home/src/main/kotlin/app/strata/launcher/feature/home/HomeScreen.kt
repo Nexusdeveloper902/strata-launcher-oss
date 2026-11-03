@@ -27,10 +27,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
@@ -61,6 +73,8 @@ fun HomeRoute(
     showSetDefaultButton: Boolean,
     onSetDefault: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The search layer, supplied by `:app` (features never import each other, ARCHITECTURE §2.1). */
+    searchLayer: @Composable (SearchSession) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -97,8 +111,74 @@ fun HomeRoute(
     }
     BackHandler(enabled = state.layer == HomeLayer.LIST) { onAction(HomeAction.CloseList) }
 
+    val search = state.search
+    val listShown = state.layer == HomeLayer.LIST || search?.origin == HomeLayer.LIST
     // Test tags double as resource ids, so UiAutomator and Macrobenchmark can find nodes (T-PERF-03/04/10).
-    Box(modifier = modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .semantics { testTagsAsResourceId = true }
+                .onKeyEvent { event -> handleHomeKey(event, state.layer, onAction) },
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    // INTERACTION_SPEC §7: home (or list) content fades to 0.3 α under search.
+                    .alpha(if (search != null) UNDER_SEARCH_ALPHA else 1f)
+                    .then(if (search != null) Modifier.clearAndSetSemantics {} else Modifier),
+        ) {
+            HomeLayers(state, listShown, listState, showSetDefaultButton, onSetDefault, onAction)
+        }
+        if (search != null) searchLayer(search)
+        SnackbarHost(hostState = snackbar, modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
+    }
+}
+
+/**
+ * Keyboard model of INTERACTION_SPEC §5 on home and list: a printable key opens search with that
+ * character, Tab opens the list from rest, Esc closes the list, Ctrl+, opens settings.
+ */
+private fun handleHomeKey(
+    event: KeyEvent,
+    layer: HomeLayer,
+    onAction: (HomeAction) -> Unit,
+): Boolean {
+    if (event.type != KeyEventType.KeyDown || layer == HomeLayer.SEARCH) return false
+    when {
+        event.isCtrlPressed && event.key == Key.Comma -> {
+            onAction(HomeAction.OpenSettings)
+        }
+
+        event.key == Key.Tab && layer == HomeLayer.REST -> {
+            onAction(HomeAction.OpenList)
+        }
+
+        event.key == Key.Escape && layer == HomeLayer.LIST -> {
+            onAction(HomeAction.CloseList)
+        }
+
+        else -> {
+            val text =
+                HomeKeys.printable(event.utf16CodePoint, event.isCtrlPressed, event.isAltPressed, event.isMetaPressed)
+                    ?: return false
+            onAction(HomeAction.OpenSearch(text))
+        }
+    }
+    return true
+}
+
+@Composable
+private fun HomeLayers(
+    state: HomeUiState,
+    listShown: Boolean,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    showSetDefaultButton: Boolean,
+    onSetDefault: () -> Unit,
+    onAction: (HomeAction) -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
         HomeScreen(
             state = state,
             showSetDefaultButton = showSetDefaultButton,
@@ -107,7 +187,7 @@ fun HomeRoute(
             onDismissReset = { onAction(HomeAction.DismissResetBanner) },
         )
         val list = state.list
-        if (state.layer == HomeLayer.LIST && list != null) {
+        if (listShown && list != null) {
             AppListScreen(
                 list = list,
                 twoColumnSetting = state.listTwoColumn,
@@ -116,12 +196,15 @@ fun HomeRoute(
                 onIndexScrub = { first -> onAction(HomeAction.IndexScrub(first)) },
                 onOpenSettings = { onAction(HomeAction.OpenSettings) },
                 onOpenHiddenApps = { onAction(HomeAction.OpenHiddenApps) },
+                onOpenSearch = { onAction(HomeAction.OpenSearch()) },
                 listState = listState,
             )
         }
-        SnackbarHost(hostState = snackbar, modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding())
     }
 }
+
+/** INTERACTION_SPEC §7 "HOME → SEARCH": home content fades to 0.3 α. */
+private const val UNDER_SEARCH_ALPHA = 0.3f
 
 /**
  * HOME_REST: placeholder home (T-HOME-01) over the wallpaper, the APP_MODE banner stub (T-HOME-02),

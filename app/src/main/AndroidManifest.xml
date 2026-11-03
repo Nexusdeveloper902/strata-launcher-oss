@@ -36,6 +36,10 @@
         <intent> <!-- icon packs: ecosystem convention, not an Android API -->
             <action android:name="org.adw.ActivityStarter.THEMES" />
         </intent>
+        <intent> <!-- store hand-off from search (FR-SEARCH-07): row shown only when a handler resolves -->
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="market" />
+        </intent>
     </queries>
 
     <application

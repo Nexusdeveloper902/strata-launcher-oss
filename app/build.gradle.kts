@@ -46,6 +46,7 @@ dependencies {
     implementation(projects.platform.system)
     implementation(projects.platform.apps)
     implementation(projects.feature.home)
+    implementation(projects.feature.search)
     implementation(projects.feature.onboarding)
 
     implementation(libs.androidx.core.ktx)

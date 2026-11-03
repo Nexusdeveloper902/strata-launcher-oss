@@ -1,0 +1,61 @@
+# T-SEARCH-04 fixture: 60 app labels authored by us (one per line; '#' starts a comment).
+Maps
+Google Maps
+Gmail
+Café
+Camera
+Calendar
+Calculator
+Clock
+Contacts
+Files
+Photos
+Phone
+Messages
+Settings
+Play Store
+Music
+Notes
+Weather
+News
+Drive
+Docs
+Sheets
+Slides
+Keep Notes
+Translate
+Wallet
+Fitness
+Podcasts
+Recorder
+Gallery
+Mail
+Browser
+Wayfinder
+Flashlight
+Radio
+Reader
+Tasks
+Timer
+Mapster
+Amazing Maps
+Smart Home
+Sound Recorder
+Voice Search
+Health
+Bank
+Taxi
+Tickets
+Crosswords
+Scanner
+Library
+Garden Planner
+Recipes
+Ångström
+Straße Guide
+Łódź Transit
+Ørsted Energy
+Écran
+Æble Market
+テレビ
+Почта
