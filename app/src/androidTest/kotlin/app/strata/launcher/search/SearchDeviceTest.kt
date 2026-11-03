@@ -116,7 +116,18 @@ class SearchDeviceTest {
         compose.onNodeWithTag(AppListTestTags.SEARCH_FIELD).performClick()
         compose.waitUntil(timeoutMillis = 5_000) { searchOpen() && imeVisible() }
         device.pressBack()
-        compose.waitUntil(timeoutMillis = 3_000) { !searchOpen() }
+        // The close follows the IME hide, so wait for the window to report the IME hidden (system latency), then give
+        // search 3 s to react. On a starved emulator the hide alone can take seconds: PR #8 run 41655333918 (API 36)
+        // logged the Back at once (ImeBackAnimationController hide request), pressBack returning after 1.1 s, and
+        // the hide animation at ~1 s per frame that never reported its end (ImeTracker STATUS_TIMEOUT 10 s later).
+        val imeHidden = runCatching { compose.waitUntil(timeoutMillis = 10_000) { !imeVisible() } }.isSuccess
+        try {
+            compose.waitUntil(timeoutMillis = 3_000) { !searchOpen() }
+        } catch (e: ComposeTimeoutException) {
+            val state =
+                "imeHiddenWithin10s=$imeHidden imeVisible=${imeVisible()} searchOpen=${searchOpen()} focus=${focusReport()}"
+            throw AssertionError("One Back with an empty query did not close search: $state", e)
+        }
     }
 }
 

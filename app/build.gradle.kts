@@ -8,6 +8,7 @@ android {
         applicationId = "app.strata.launcher"
         versionCode = 1
         versionName = "0.0.1-m0"
+        buildConfigField("boolean", "STRICT_MODE_DEATH", "false")
     }
 
     buildFeatures {
@@ -20,6 +21,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // StrictMode thread-policy death (docs/impl-notes/M0.md). Off by default: OEM framework code (Samsung
+            // One UI) does disk I/O on the main thread and killed the sideloaded debug APK at launch. The emulator
+            // smoke tests turn it on with -Pstrata.strictModeDeath=true (tools/ci/run-gmd.sh).
+            val strictDeath = providers.gradleProperty("strata.strictModeDeath").orNull == "true"
+            buildConfigField("boolean", "STRICT_MODE_DEATH", strictDeath.toString())
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

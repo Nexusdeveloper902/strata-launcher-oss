@@ -40,6 +40,7 @@ attempt=1
 while true; do
   echo "::group::GMD ${task} attempt ${attempt}"
   ./gradlew ":app:${task}" --no-daemon --stacktrace \
+    -Pstrata.strictModeDeath=true \
     -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
     -Pandroid.experimental.testOptions.managedDevices.emulator.showKernelLogging=true \
     2>&1 | tee "$log"
