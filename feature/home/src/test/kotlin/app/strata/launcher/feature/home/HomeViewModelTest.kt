@@ -1,21 +1,28 @@
 package app.strata.launcher.feature.home
 
 import app.cash.turbine.test
+import app.strata.launcher.core.common.log.LogLevel
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.LaunchError
+import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.settings.ResetCause
 import app.strata.launcher.core.platformapi.system.HapticKind
 import app.strata.launcher.testing.fakes.FakeAppCatalog
 import app.strata.launcher.testing.fakes.FakeAppLauncher
 import app.strata.launcher.testing.fakes.FakeAppListSource
+import app.strata.launcher.testing.fakes.FakeFavoritesRepository
 import app.strata.launcher.testing.fakes.FakeHaptics
 import app.strata.launcher.testing.fakes.FakeLaunchLogRepository
+import app.strata.launcher.testing.fakes.FakeLockService
+import app.strata.launcher.testing.fakes.FakeOverridesRepository
 import app.strata.launcher.testing.fakes.FakeResetNotices
 import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
+import app.strata.launcher.testing.fakes.FakeSystemIntents
+import app.strata.launcher.testing.fakes.RecordingLogger
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -44,8 +51,28 @@ class HomeViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel() =
-        HomeViewModel(role, settings, FakeAppListSource(), catalog, launcher, log, haptics, resets, dispatcher)
+    private val logger = RecordingLogger()
+
+    private fun viewModel(
+        overrides: OverridesRepository = FakeOverridesRepository(),
+        lockService: FakeLockService = FakeLockService(),
+    ) =
+        HomeViewModel(
+            role,
+            settings,
+            FakeAppListSource(),
+            catalog,
+            launcher,
+            log,
+            haptics,
+            resets,
+            dispatcher,
+            overrides,
+            FakeFavoritesRepository(),
+            FakeSystemIntents(),
+            lockService,
+            logger,
+        )
 
     private val app =
         VisibleApp(
@@ -94,6 +121,60 @@ class HomeViewModelTest {
                 assertThat(awaitItem()).isEqualTo(HomeEffect.ReturnToRest)
             }
             assertThat(vm.state.value.layer).isEqualTo(HomeLayer.REST)
+        }
+
+    /** A failing Room write is logged and reported as an effect instead of crashing the launcher. */
+    @Test
+    fun failedWriteIsLoggedAndReported() =
+        runTest(dispatcher) {
+            val failing =
+                object : OverridesRepository by FakeOverridesRepository() {
+                    override suspend fun setHidden(
+                        key: AppKey,
+                        profileKind: ProfileKind,
+                        hidden: Boolean,
+                    ) = throw IllegalStateException("disk full")
+                }
+            val vm = viewModel(overrides = failing)
+            vm.effects.test {
+                vm.onAction(HomeAction.SetHidden(app.key, hidden = true))
+                assertThat(awaitItem()).isEqualTo(HomeEffect.WriteFailed)
+            }
+            assertThat(logger.entries.map { it.level }).contains(LogLevel.WARN)
+        }
+
+    /** A sheet whose app cannot be resolved is not a modal (it would draw nothing and block Back). */
+    @Test
+    fun sheetWithoutAppIsNoModal() {
+        val vm = viewModel()
+        vm.onAction(HomeAction.OpenSheet(app))
+        assertThat(vm.state.value.modal).isEqualTo(HomeModal.None)
+    }
+
+    /** A letter jump does not drop an Edit-favourites session. */
+    @Test
+    fun jumpIgnoredInFavEdit() {
+        val vm = viewModel()
+        vm.onAction(HomeAction.EditFavorites)
+        vm.onAction(HomeAction.JumpToLetter(3))
+        assertThat(vm.state.value.layer).isEqualTo(HomeLayer.FAV_EDIT)
+        assertThat(vm.state.value.listJump).isNull()
+    }
+
+    /** Service enabled in the system but not connected yet: no "turn on in settings" hint; disabled: hint. */
+    @Test
+    fun lockHintOnlyWhenServiceIsOff() =
+        runTest(dispatcher) {
+            val pending = viewModel(lockService = FakeLockService(enabled = true, connected = false))
+            pending.effects.test {
+                pending.onAction(HomeAction.LockScreen)
+                expectNoEvents()
+            }
+            val off = viewModel(lockService = FakeLockService(enabled = false))
+            off.effects.test {
+                off.onAction(HomeAction.LockScreen)
+                assertThat(awaitItem()).isEqualTo(HomeEffect.LockHint)
+            }
         }
 
     /** FR-APPS-02: a successful launch passes the key and writes the launch log. */

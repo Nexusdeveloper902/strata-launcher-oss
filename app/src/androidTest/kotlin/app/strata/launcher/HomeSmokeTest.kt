@@ -30,8 +30,8 @@ class HomeSmokeTest {
         if (onboarding > 0) {
             compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
         }
-        compose.waitUntil(timeoutMillis = 10_000) { compose.count(HomeTestTags.PLACEHOLDER) > 0 }
-        compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
+        compose.waitUntil(timeoutMillis = 10_000) { compose.count(HomeTestTags.ROOT) > 0 }
+        compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()
     }
 }
 

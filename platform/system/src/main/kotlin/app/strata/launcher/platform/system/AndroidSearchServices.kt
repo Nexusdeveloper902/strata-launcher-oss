@@ -6,6 +6,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.icu.text.Transliterator
 import android.os.Build
+import android.provider.AlarmClock
+import android.provider.CalendarContract
+import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.core.net.toUri
 import app.strata.launcher.core.common.Outcome
@@ -66,9 +69,20 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
             false
         }
 
-    override fun storeSearch(query: String): LaunchResult =
+    override fun storeSearch(query: String): LaunchResult = start(storeIntent(query))
+
+    override fun showAlarms(): LaunchResult = start(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+
+    override fun openCalendar(atMillis: Long): LaunchResult = start(calendarIntent(atMillis))
+
+    // Not a chooser: Intent.createChooser never throws ActivityNotFoundException, so "no handler" could not be reported.
+    override fun wallpaperPicker(): LaunchResult = start(Intent(Intent.ACTION_SET_WALLPAPER))
+
+    override fun accessibilitySettings(): LaunchResult = start(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+
+    private fun start(intent: Intent): LaunchResult =
         try {
-            appContext.startActivity(storeIntent(query).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             Outcome.Ok(Unit)
         } catch (e: ActivityNotFoundException) {
             Outcome.Err(LaunchError.NOT_FOUND)
@@ -80,5 +94,16 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
         /** `market://search?q=<query>` (FR-SEARCH-07). */
         fun storeIntent(query: String): Intent =
             Intent(Intent.ACTION_VIEW, "market://search".toUri().buildUpon().appendQueryParameter("q", query).build())
+
+        /** FR-HOME-03: `content://com.android.calendar/time/<ms>` (`CalendarContract.CONTENT_URI` + `time`). */
+        fun calendarIntent(atMillis: Long): Intent =
+            Intent(
+                Intent.ACTION_VIEW,
+                CalendarContract.CONTENT_URI
+                    .buildUpon()
+                    .appendPath("time")
+                    .appendPath(atMillis.toString())
+                    .build(),
+            )
     }
 }

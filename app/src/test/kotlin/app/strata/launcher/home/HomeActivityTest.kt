@@ -50,7 +50,7 @@ class HomeActivityTest {
             onboarded = true,
         ).install()
         start()
-        compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
+        compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()
         compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER).assertDoesNotExist()
     }
 
@@ -62,7 +62,7 @@ class HomeActivityTest {
             onboarded = true,
         ).install()
         start()
-        compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
+        compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()
         compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER).assertExists()
         compose.onNodeWithTag(HomeTestTags.SET_DEFAULT_BUTTON).assertExists()
     }
@@ -94,7 +94,7 @@ class HomeActivityTest {
                 .putExtra("component", "com.example/.Evil")
                 .putExtra("uri", "https://example.com")
         val activity = start(hostile)
-        compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
+        compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()
         assertThat(shadowOf(activity).nextStartedActivity).isNull()
         assertThat(activity.isFinishing).isFalse()
     }
@@ -110,6 +110,6 @@ class HomeActivityTest {
         compose.waitForIdle()
         assertThat(store.value.onboardingDone).isTrue()
         compose.onNodeWithTag(OnboardingTestTags.ROOT).assertDoesNotExist()
-        compose.onNodeWithTag(HomeTestTags.PLACEHOLDER).assertExists()
+        compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()
     }
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Optional double-tap lock (ANDROID_PLATFORM §10, §22; FR-GEST-03, D-011). The user turns it on in the system
+     accessibility settings; BIND_ACCESSIBILITY_SERVICE is a service guard, not a requested permission (§23). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service
+            android:name="app.strata.launcher.platform.system.LockAccessibilityService"
+            android:exported="false"
+            android:label="@string/lock_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/lock_accessibility_service" />
+        </service>
+    </application>
+</manifest>

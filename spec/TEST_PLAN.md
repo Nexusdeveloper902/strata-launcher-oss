@@ -75,7 +75,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 ## 4. SEARCH
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
-| T-SEARCH-01 | Swipe up opens search | home at rest, API 34 | UiAutomator swipe up 64 dp at 300 dp/s. Measure from release until the IME is visible (`WindowInsets.ime` > 0) | Field focused. IME visible ≤ 300 ms | I | FR-SEARCH-01, FR-GEST-01 |
+| T-SEARCH-01 | Swipe up opens search | home at rest, API 34 | UiAutomator swipe up 64 dp at 300 dp/s. Measure from release until the IME is visible (`WindowInsets.ime` > 0) | Field focused. IME visible ≤ 300 ms on physical devices (Galaxy A56 reference). **Changed by D-015:** emulator CI runs use a 5000 ms budget, because the software-rendered IME dominates the time (measured 3817 ms API 34, 2873 ms API 36) | I | FR-SEARCH-01, FR-GEST-01 |
 | T-SEARCH-02 | Hardware key starts search | hardware keyboard (emulator); home or list at rest | Type "m" | Search opens with query "m" and results | C + I | FR-SEARCH-01, FR-A11Y-04 |
 | T-SEARCH-03 | Pill and accessibility entry | TalkBack semantics | Tap the pill. Back. Invoke the home-root custom action "Search" | Search opens both times | C | FR-SEARCH-01, FR-GEST-06 |
 | T-SEARCH-04 | Ranking table | `FakeTextFolding` (ICU4J), fixture of 60 labels incl. Maps, Google Maps, Gmail, Café, Camera, Calendar, Calculator | Run the table `fixtures/search/ranking.csv` (query → expected top-k) | "map" → Maps first. "gm" → Google Maps in top 3. "cafe" → Café. "mpas" → Maps. "ca" → exact/prefix tiers before substring. Ties broken by launch count then collation | U | FR-SEARCH-02 |

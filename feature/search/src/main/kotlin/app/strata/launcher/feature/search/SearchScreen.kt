@@ -67,6 +67,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -80,6 +81,7 @@ import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.ui.AppRow
+import app.strata.launcher.core.ui.IconRequestKey
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
 import kotlinx.coroutines.CancellationException
@@ -114,6 +116,10 @@ fun SearchRoute(
     seed: String,
     session: Int,
     modifier: Modifier = Modifier,
+    /** Long-press on a result: the app sheet, owned by home (FR-APPS-03, T-APPS-05). */
+    onLongPress: (VisibleApp) -> Unit = {},
+    /** The sheet's actions per result as accessibility custom actions (FR-A11Y-01). */
+    rowActions: (VisibleApp) -> List<CustomAccessibilityAction> = { emptyList() },
     closeLog: (String) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
@@ -148,7 +154,15 @@ fun SearchRoute(
         }
     }
     Box(modifier = modifier.fillMaxSize()) {
-        SearchScreen(state = state, onAction = onAction, seed = seed, session = session, closeLog = closeLog)
+        SearchScreen(
+            state = state,
+            onAction = onAction,
+            seed = seed,
+            session = session,
+            onLongPress = onLongPress,
+            rowActions = rowActions,
+            closeLog = closeLog,
+        )
         SnackbarHost(
             hostState = snackbar,
             modifier =
@@ -174,6 +188,8 @@ fun SearchScreen(
     seed: String,
     session: Int,
     modifier: Modifier = Modifier,
+    onLongPress: (VisibleApp) -> Unit = {},
+    rowActions: (VisibleApp) -> List<CustomAccessibilityAction> = { emptyList() },
     closeLog: (String) -> Unit = {},
 ) {
     val theme = Strata.theme
@@ -291,6 +307,8 @@ fun SearchScreen(
                     selected = i == state.selected,
                     badgeStyle = state.badgeStyle,
                     onLaunch = { app, origin -> onAction(SearchAction.Launch(app, origin)) },
+                    onLongPress = onLongPress,
+                    actions = rowActions(items[i]),
                 )
             }
             if (state.noResults) {
@@ -418,6 +436,8 @@ private fun ResultRow(
     selected: Boolean,
     badgeStyle: BadgeStyle,
     onLaunch: (VisibleApp, LaunchOrigin?) -> Unit,
+    onLongPress: (VisibleApp) -> Unit,
+    actions: List<CustomAccessibilityAction>,
 ) {
     val view = LocalView.current
     val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
@@ -430,6 +450,9 @@ private fun ResultRow(
         tag = if (app.hidden) stringResource(R.string.search_hidden_tag) else null,
         selected = selected,
         onClick = { onLaunch(app, coordinates[0]?.let { originOf(it, view) }) },
+        onLongClick = { onLongPress(app) },
+        actions = actions,
+        icon = IconRequestKey(app.key, app.lastUpdateTime),
         modifier =
             Modifier
                 .onGloballyPositioned { coordinates[0] = it }

@@ -74,4 +74,10 @@ interface AppLauncher {
         key: AppKey,
         origin: LaunchOrigin?,
     ): LaunchResult
+
+    /**
+     * FR-APPS-07: the system `ACTION_DELETE` flow for the key's package and user (needs
+     * `REQUEST_DELETE_PACKAGES`). The row disappears when the platform reports the removal.
+     */
+    fun requestUninstall(key: AppKey): LaunchResult
 }

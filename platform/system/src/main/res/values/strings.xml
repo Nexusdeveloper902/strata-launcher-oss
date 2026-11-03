@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accessibility service shown in the system settings (FR-GEST-03) -->
+    <string name="lock_service_label">Strata screen lock</string>
+    <string name="lock_service_description">Lets Strata lock the screen when you double-tap an empty area of the home screen. It reads nothing on your screen and performs no other action.</string>
+</resources>

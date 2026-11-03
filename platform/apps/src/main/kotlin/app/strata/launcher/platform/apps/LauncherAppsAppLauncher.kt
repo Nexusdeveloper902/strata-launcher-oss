@@ -4,9 +4,12 @@ import android.app.ActivityOptions
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import android.os.UserHandle
 import android.window.SplashScreen
 import app.strata.launcher.core.common.Outcome
@@ -25,7 +28,8 @@ class LauncherAppsAppLauncher(
     context: Context,
     private val logger: Logger,
 ) : AppLauncher {
-    private val resolver by lazy { ProfileResolver(context.applicationContext) }
+    private val appContext = context.applicationContext
+    private val resolver by lazy { ProfileResolver(appContext) }
 
     override fun launch(
         key: AppKey,
@@ -41,6 +45,19 @@ class LauncherAppsAppLauncher(
     ): LaunchResult =
         start(key, "app info") { component, user ->
             resolver.launcherApps.startAppDetailsActivity(component, user, origin?.toRect(), null)
+        }
+
+    /**
+     * FR-APPS-07, ANDROID_PLATFORM §5: `ACTION_DELETE` with the `package:` URI, for the key's user
+     * (`EXTRA_USER`). The system shows its own confirmation; the result arrives as `onPackageRemoved`.
+     */
+    override fun requestUninstall(key: AppKey): LaunchResult =
+        start(key, "uninstall") { component, user ->
+            val intent =
+                Intent(Intent.ACTION_DELETE, Uri.fromParts("package", component.packageName, null))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+            if (user != Process.myUserHandle()) intent.putExtra(Intent.EXTRA_USER, user)
+            appContext.startActivity(intent)
         }
 
     private inline fun start(

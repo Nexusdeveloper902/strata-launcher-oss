@@ -87,6 +87,16 @@ class AppListScreenTest {
             haptics,
             FakeResetNotices(),
             Dispatchers.Unconfined,
+            app.strata.launcher.testing.fakes
+                .FakeOverridesRepository(),
+            app.strata.launcher.testing.fakes
+                .FakeFavoritesRepository(),
+            app.strata.launcher.testing.fakes
+                .FakeSystemIntents(),
+            app.strata.launcher.testing.fakes
+                .FakeLockService(),
+            app.strata.launcher.testing.fakes
+                .RecordingLogger(),
         )
 
     private fun show(

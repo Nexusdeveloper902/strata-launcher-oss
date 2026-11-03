@@ -104,6 +104,13 @@ class FakeAppLauncher : AppLauncher {
         appInfoRequests += key
         return Outcome.Ok(Unit)
     }
+
+    val uninstallRequests = mutableListOf<AppKey>()
+
+    override fun requestUninstall(key: AppKey): LaunchResult {
+        uninstallRequests += key
+        return Outcome.Ok(Unit)
+    }
 }
 
 class FakeProfileSource(

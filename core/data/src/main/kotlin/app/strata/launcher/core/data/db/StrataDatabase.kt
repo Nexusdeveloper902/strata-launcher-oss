@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Index
+import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
@@ -31,6 +32,8 @@ abstract class StrataDatabase : RoomDatabase() {
     abstract fun snapshotDao(): AppSnapshotDao
 
     abstract fun overrideDao(): AppOverrideDao
+
+    abstract fun favoriteDao(): FavoriteDao
 
     companion object {
         const val VERSION = 1
@@ -123,6 +126,33 @@ interface AppOverrideDao {
     @Upsert
     suspend fun upsert(row: AppOverrideEntity)
 
+    @Query("SELECT * FROM app_override WHERE component = :component AND user_serial = :userSerial")
+    suspend fun get(
+        component: String,
+        userSerial: Long,
+    ): AppOverrideEntity?
+
+    @Query("DELETE FROM app_override WHERE component = :component AND user_serial = :userSerial")
+    suspend fun delete(
+        component: String,
+        userSerial: Long,
+    )
+
+    /** Read-modify-write of one row; a row left with only defaults is deleted (FR-APPS-04/05 writes). */
+    @Transaction
+    suspend fun edit(
+        component: String,
+        userSerial: Long,
+        transform: (AppOverrideEntity) -> AppOverrideEntity,
+    ) {
+        val current = get(component, userSerial) ?: AppOverrideEntity(component, userSerial)
+        val next = transform(current)
+        val empty =
+            !next.hidden && next.customLabel == null && next.iconKind == null &&
+                next.iconPack == null && next.iconDrawable == null
+        if (empty) delete(component, userSerial) else upsert(next)
+    }
+
     @Query(
         "UPDATE app_override SET missing_since = :now " +
             "WHERE component = :component AND user_serial = :userSerial AND missing_since IS NULL",
@@ -153,5 +183,34 @@ interface AppOverrideDao {
         present.forEach { (c, s) -> clearMissing(c, s) }
         missing.forEach { (c, s) -> markMissing(c, s, now) }
         purgeMissingBefore(purgeCutoff)
+    }
+}
+
+@Dao
+interface FavoriteDao {
+    @Query("SELECT * FROM favorite ORDER BY position")
+    fun observe(): Flow<List<FavoriteEntity>>
+
+    @Query("SELECT * FROM favorite ORDER BY position")
+    suspend fun all(): List<FavoriteEntity>
+
+    @Query("DELETE FROM favorite")
+    suspend fun deleteAll()
+
+    @Insert
+    suspend fun insertAll(rows: List<FavoriteEntity>)
+
+    /** The whole order in one transaction (ARCHITECTURE §4: reorder = one transaction). */
+    @Transaction
+    suspend fun replaceAll(keys: List<Pair<String, Long>>) {
+        deleteAll()
+        insertAll(keys.mapIndexed { i, (component, serial) -> FavoriteEntity(i, component, serial) })
+    }
+
+    /** Read-modify-write of the whole order in one transaction; [transform] returns null for no change. */
+    @Transaction
+    suspend fun update(transform: (List<Pair<String, Long>>) -> List<Pair<String, Long>>?) {
+        val next = transform(all().map { it.component to it.userSerial }) ?: return
+        replaceAll(next)
     }
 }

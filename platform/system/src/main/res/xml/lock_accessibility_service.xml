@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lock-only: no event types, no window content, not an accessibility tool (ANDROID_PLATFORM §10). -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/lock_service_description"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="0"
+    tools:targetApi="31" />

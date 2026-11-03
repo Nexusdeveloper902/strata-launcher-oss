@@ -14,6 +14,7 @@ Phase: **specification complete → implementation next (M0)**. Updated 2026-10-
 | T-07 | agent:review | research/handoffs/T-07-review.md | Independent consistency/clean-room review | done |
 | T-08 | agent:fix | spec/*, research/handoffs/T-08.md | Apply the T-07 review findings R-01…R-32 | done |
 | T-09 | agent:spec-change | spec/*, research/handoffs/T-09.md | Apply owner request D-014: icon coverage tool and Strata glyph set | done |
+| T-10 | agent:spec-change | spec/TEST_PLAN.md, research/handoffs/T-10.md | Apply owner decision D-015: emulator budget for T-SEARCH-01 | done |
 
 Blockers: decompilation paused (U-001); no runtime device (U-002).
 

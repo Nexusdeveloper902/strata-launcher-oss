@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -50,8 +52,46 @@ object AlphabetIndexTestTags {
     fun letter(label: String) = "alphabet_index_letter_$label"
 }
 
+/**
+ * System gesture exclusion of the index (INTERACTION_SPEC §4.2, FR-GEST-05). [NONE] while home is not the resumed
+ * activity; [FULL] = the whole index rect; [AROUND_TOUCH] = "Keep back gesture on index side" (settings field 12).
+ */
+enum class IndexExclusion { NONE, FULL, AROUND_TOUCH }
+
 /** Geometry and letter resolution of the index, separated from Compose for unit tests. */
 object IndexMath {
+    /** INTERACTION_SPEC §4.2 rule 3. */
+    const val AROUND_TOUCH_DP = 200f
+    const val INWARD_EXTENSION_DP = 16f
+
+    /**
+     * Excluded vertical span in the index's own coordinates (0 = its top, which already sits below the status-bar
+     * inset and ends 24 dp above the bottom mandatory inset), or null for none. [around] and the result are in px.
+     */
+    fun exclusionSpan(
+        mode: IndexExclusion,
+        height: Float,
+        lastTouchY: Float?,
+        around: Float,
+    ): ClosedFloatingPointRange<Float>? =
+        when (mode) {
+            IndexExclusion.NONE -> {
+                null
+            }
+
+            IndexExclusion.FULL -> {
+                0f..height
+            }
+
+            IndexExclusion.AROUND_TOUCH -> {
+                val center = (lastTouchY ?: (height / 2f)).coerceIn(0f, height)
+                val half = around / 2f
+                val top = (center - half).coerceAtLeast(0f)
+                val bottom = (center + half).coerceAtMost(height)
+                top..bottom
+            }
+        }
+
     const val MIN_PITCH_DP = 14f
     const val MAX_PITCH_DP = 28f
 
@@ -113,6 +153,7 @@ fun AlphabetIndex(
     atEnd: Boolean = true,
     dots: Boolean = false,
     showBubble: Boolean = true,
+    exclusion: IndexExclusion = IndexExclusion.NONE,
 ) {
     val colors = Strata.colors
     val type = Strata.typography
@@ -121,6 +162,7 @@ fun AlphabetIndex(
     var active by remember { mutableStateOf(false) }
     var current by remember { mutableIntStateOf(-1) }
     var fingerY by remember { mutableFloatStateOf(0f) }
+    var lastTouchY by remember { mutableStateOf<Float?>(null) }
     val indexDescription = stringResource(R.string.index_description)
 
     BoxWithConstraints(
@@ -129,7 +171,13 @@ fun AlphabetIndex(
                 .width(TOUCH_WIDTH)
                 .fillMaxHeight()
                 .testTag(AlphabetIndexTestTags.INDEX)
-                .semantics {
+                .indexExclusion(
+                    exclusion,
+                    lastTouchY,
+                    atEnd,
+                    around = with(density) { IndexMath.AROUND_TOUCH_DP.dp.toPx() },
+                    inward = with(density) { IndexMath.INWARD_EXTENSION_DP.dp.toPx() },
+                ).semantics {
                     contentDescription = indexDescription
                     isTraversalGroup = true
                 },
@@ -156,6 +204,7 @@ fun AlphabetIndex(
                             first: Boolean,
                         ) {
                             fingerY = y
+                            lastTouchY = y
                             val target =
                                 IndexMath.resolve(
                                     letters,
@@ -279,6 +328,27 @@ fun AlphabetIndex(
                 Text(text = letters[current].label, style = type.bubble, color = colors.textPrimary, maxLines = 1)
             }
         }
+    }
+}
+
+/** Requests the system gesture exclusion of [mode] (API 29+; a no-op below). Sizes in px. */
+private fun Modifier.indexExclusion(
+    mode: IndexExclusion,
+    lastTouchY: Float?,
+    atEnd: Boolean,
+    around: Float,
+    inward: Float,
+): Modifier {
+    if (mode == IndexExclusion.NONE) return this
+    val extension = if (mode == IndexExclusion.AROUND_TOUCH) inward else 0f
+    return systemGestureExclusion { coordinates ->
+        val w = coordinates.size.width.toFloat()
+        val span =
+            IndexMath.exclusionSpan(mode, coordinates.size.height.toFloat(), lastTouchY, around)
+                ?: return@systemGestureExclusion Rect.Zero
+        val left = if (atEnd) -extension else 0f
+        val right = if (atEnd) w else w + extension
+        Rect(left, span.start, right, span.endInclusive)
     }
 }
 

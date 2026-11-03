@@ -19,3 +19,4 @@ captures/
 # Claude Code local state (keep the rest of .claude/ trackable)
 .claude/worktrees/
 .claude/settings.local.json
+__pycache__/

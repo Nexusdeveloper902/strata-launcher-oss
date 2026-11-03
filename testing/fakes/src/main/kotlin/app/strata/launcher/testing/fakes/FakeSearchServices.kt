@@ -34,4 +34,31 @@ class FakeSystemIntents(
         storeSearches += query
         return Outcome.Ok(Unit)
     }
+
+    /** Hand-offs started, by name ("alarms", "calendar", "wallpaper", "accessibility"). */
+    val started = mutableListOf<String>()
+
+    /** Names whose handler is missing (T-HOME-06: NotFound). */
+    val missing = mutableSetOf<String>()
+
+    private fun start(name: String): LaunchResult {
+        if (name in missing) return Outcome.Err(LaunchError.NOT_FOUND)
+        started += name
+        return Outcome.Ok(Unit)
+    }
+
+    override fun showAlarms(): LaunchResult = start(ALARMS)
+
+    override fun openCalendar(atMillis: Long): LaunchResult = start(CALENDAR)
+
+    override fun wallpaperPicker(): LaunchResult = start(WALLPAPER)
+
+    override fun accessibilitySettings(): LaunchResult = start(ACCESSIBILITY)
+
+    companion object {
+        const val ALARMS = "alarms"
+        const val CALENDAR = "calendar"
+        const val WALLPAPER = "wallpaper"
+        const val ACCESSIBILITY = "accessibility"
+    }
 }

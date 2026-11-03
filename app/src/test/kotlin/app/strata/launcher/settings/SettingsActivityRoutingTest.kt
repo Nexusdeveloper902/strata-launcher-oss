@@ -12,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.TestAppGraph
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.feature.onboarding.OnboardingTestTags
+import app.strata.launcher.feature.settings.SettingsTestTags
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import com.google.common.truth.Truth.assertThat

@@ -6,4 +6,5 @@ plugins {
 dependencies {
     api(projects.core.model)
     api(projects.core.theme)
+    implementation(libs.androidx.activity.compose) // PredictiveBackHandler for sheets
 }

@@ -85,6 +85,8 @@ object AppListAssembler {
             profileKind = profileKind,
             hidden = override?.hidden == true,
             flags = flags,
+            lastUpdateTime = lastUpdateTime,
+            renamed = custom != null,
         )
     }
 

@@ -28,7 +28,16 @@ data class VisibleApp(
     val badge: Int = 0,
     val secondaryLine: SecondaryLine? = null,
     val flags: Int = 0,
-)
+    /** Package `lastUpdateTime`: the icon cache key (ARCHITECTURE §9). */
+    val lastUpdateTime: Long = 0L,
+    /** A custom label is set (FR-APPS-05: the sheet offers "Reset name"). */
+    val renamed: Boolean = false,
+) {
+    fun hasFlag(flag: Int): Boolean = flags and flag != 0
+
+    /** FR-LIST-08 / FR-APPS-03 helpers. */
+    val suspended: Boolean get() = hasFlag(AppFlags.SUSPENDED)
+}
 
 /** One non-empty section of the A–Z list. */
 data class AppSection(val label: String, val apps: List<VisibleApp>)

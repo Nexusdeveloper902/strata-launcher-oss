@@ -15,25 +15,34 @@ import app.strata.launcher.core.data.ResetNoticeBoard
 import app.strata.launcher.core.data.catalog.AppCatalogRepository
 import app.strata.launcher.core.data.launchlog.RoomLaunchLogRepository
 import app.strata.launcher.core.data.list.AssembledAppListSource
-import app.strata.launcher.core.data.list.overridesFlow
+import app.strata.launcher.core.data.overrides.RoomFavoritesRepository
+import app.strata.launcher.core.data.overrides.RoomOverridesRepository
 import app.strata.launcher.core.data.settings.DataStoreSettingsRepository
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.AppListSource
+import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
+import app.strata.launcher.core.platformapi.apps.OverridesRepository
+import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.Haptics
+import app.strata.launcher.core.platformapi.system.LockService
 import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
+import app.strata.launcher.core.platformapi.system.TimeTicks
 import app.strata.launcher.diagnostics.LogcatSink
 import app.strata.launcher.platform.apps.AndroidProfileSource
 import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
 import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
+import app.strata.launcher.platform.icons.SystemIconProvider
+import app.strata.launcher.platform.system.AndroidLockService
 import app.strata.launcher.platform.system.AndroidRoleController
 import app.strata.launcher.platform.system.AndroidSystemIntents
 import app.strata.launcher.platform.system.AndroidTextFolding
+import app.strata.launcher.platform.system.AndroidTimeTicks
 import app.strata.launcher.platform.system.IcuCollation
 import app.strata.launcher.platform.system.ViewHaptics
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -107,7 +116,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
     override val appList: AppListSource by lazy {
         AssembledAppListSource(
             catalog = catalogRepository,
-            overrides = overridesFlow(strataDb),
+            overrides = overridesRepository.overrides,
             locales = locales,
             collation = collation,
             defaultDispatcher = dispatchers.default,
@@ -130,6 +139,27 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     override val textFolding: TextFolding by lazy { AndroidTextFolding() }
 
+    private val overridesRepository by lazy { RoomOverridesRepository(strataDb) }
+
+    override val overrides: OverridesRepository get() = overridesRepository
+
+    override val favorites: FavoritesRepository by lazy { RoomFavoritesRepository(strataDb) }
+
+    /** Icon render work: `Default.limitedParallelism(4)` (ARCHITECTURE §6). */
+    override val iconProvider: IconProvider by lazy {
+        SystemIconProvider(
+            context = appContext,
+            renderDispatcher = dispatchers.default.limitedParallelism(ICON_PARALLELISM),
+            ioDispatcher = dispatchers.io,
+            scope = appScope,
+            logger = logger,
+        )
+    }
+
+    override val timeTicks: TimeTicks by lazy { AndroidTimeTicks(appContext) }
+
+    override val lockService: LockService by lazy { AndroidLockService(appContext) }
+
     override val systemIntents: SystemIntents by lazy { AndroidSystemIntents(appContext) }
 
     private val viewHaptics = ViewHaptics()
@@ -150,6 +180,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     private companion object {
         const val TAG = "AppGraph"
+        const val ICON_PARALLELISM = 4
     }
 }
 

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Settings</string>
+
+    <string name="settings_group_home">Home</string>
+    <string name="settings_home_press_search">Home button opens search</string>
+    <string name="settings_hide_status_bar">Hide status bar</string>
+    <string name="settings_allow_rotation">Allow rotation</string>
+    <string name="settings_allow_rotation_summary">On phones. Tablets always follow the device orientation.</string>
+
+    <string name="settings_group_list">App list</string>
+    <string name="settings_two_column">Two columns on wide screens</string>
+
+    <string name="settings_group_search">Search</string>
+    <string name="settings_show_hidden">Show hidden apps in search</string>
+    <string name="settings_recents">Show recent apps</string>
+
+    <string name="settings_group_gestures">Gestures</string>
+    <string name="settings_haptics">Vibration feedback</string>
+    <string name="settings_keep_back">Keep back gesture on index side</string>
+    <string name="settings_keep_back_summary">The alphabet index only blocks the back gesture near the letter you touched.</string>
+    <string name="settings_lock">Double-tap to lock</string>
+    <string name="settings_lock_summary">Double-tap an empty area of the home screen to lock the screen.</string>
+    <string name="settings_lock_service_off">Screen lock is turned off in the system accessibility settings.</string>
+    <string name="settings_lock_open_accessibility">Open accessibility settings</string>
+    <string name="settings_lock_disclosure_title">Use an accessibility service to lock the screen?</string>
+    <string name="settings_lock_disclosure_body">Android only lets apps lock the screen through an accessibility service. Strata\'s service does one thing: it locks the screen when you double-tap an empty area of the home screen. It cannot read what is on your screen, does not watch what you do, and sends nothing anywhere. You turn it on in the next screen and can turn it off there at any time.</string>
+    <string name="settings_continue">Continue</string>
+    <string name="settings_cancel">Cancel</string>
+
+    <string name="settings_group_apps">Apps</string>
+    <string name="settings_hidden_apps">Hidden apps</string>
+    <plurals name="settings_hidden_count">
+        <item quantity="one">%1$d app hidden</item>
+        <item quantity="other">%1$d apps hidden</item>
+    </plurals>
+    <string name="settings_hidden_none">No hidden apps</string>
+    <string name="settings_unhide">Show in list</string>
+
+    <string name="settings_group_privacy">Privacy</string>
+    <string name="settings_pause_history">Pause app history</string>
+    <string name="settings_pause_history_summary">Strata stops recording which apps you open. History stays on this phone and is kept for 30 days.</string>
+    <string name="settings_clear_history">Clear app history</string>
+    <string name="settings_clear_history_summary">Removes recent apps and usage ranking now.</string>
+    <string name="settings_history_cleared">App history cleared</string>
+    <string name="settings_no_handler">No app can open this</string>
+    <string name="settings_write_failed">Couldn\'t save that change</string>
+</resources>

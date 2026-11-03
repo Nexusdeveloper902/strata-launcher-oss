@@ -3,7 +3,7 @@ package app.strata.launcher.core.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -34,9 +35,11 @@ import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +83,14 @@ fun AppRow(
     tag: String? = null,
     /** Keyboard selection (search results, FR-SEARCH-04): draws the focus ring and sets `selected`. */
     selected: Boolean = false,
+    /** Long-press opens the app sheet (FR-APPS-03, FR-GEST-02); the caller adds the `LONG_PRESS` haptic. */
+    onLongClick: (() -> Unit)? = null,
+    /** The sheet's actions as accessibility custom actions (FR-A11Y-01). */
+    actions: List<CustomAccessibilityAction> = emptyList(),
+    /** System icon to load through [LocalIconLoader]; the monogram tile shows until it arrives (or for good). */
+    icon: IconRequestKey? = null,
+    /** FR-LIST-08 / paused profile: the icon is drawn at 60 % α, the label keeps `textPrimary`. */
+    dimIcon: Boolean = false,
 ) {
     val theme = Strata.theme
     val colors = Strata.colors
@@ -107,20 +118,33 @@ fun AppRow(
                     } else {
                         Modifier
                     },
-                ).clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
-                .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp),
+                ).combinedClickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    role = Role.Button,
+                    onLongClick = onLongClick,
+                    onClick = onClick,
+                )
+                // FR-A11Y-03: the spoken name is the original-case label, read first (row node before children).
+                .semantics {
+                    contentDescription = label
+                    if (actions.isNotEmpty()) customActions = actions
+                }.padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (iconsVisible) {
             Box(modifier = Modifier.size(iconSize)) {
-                MonogramTile(
+                val iconState = rememberAppIconState(icon, iconSize)
+                AppIcon(
                     label = label,
+                    state = iconState,
                     size = iconSize,
                     shape = iconShape(),
-                    modifier = Modifier.testTag(AppRowTestTags.ICON),
+                    modifier = Modifier.testTag(AppRowTestTags.ICON).alpha(if (dimIcon) DIM_ALPHA else 1f),
                 )
-                if (profileKind == ProfileKind.WORK) {
+                // A system icon of another profile is already badged (VISUAL_SPEC §7).
+                if (profileKind == ProfileKind.WORK && !iconState.isSystemIcon) {
                     WorkBadge(modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp))
                 }
                 if (badge > 0) {
@@ -132,10 +156,8 @@ fun AppRow(
                 }
             }
         }
-        // Hidden labels stay the row's accessible name (THEME_SYSTEM §4.6).
-        val nameModifier =
-            if (theme.icons.labelsVisible) Modifier else Modifier.semantics { contentDescription = shownLabel }
-        Column(modifier = Modifier.weight(1f).then(nameModifier)) {
+        // Hidden labels stay the row's accessible name (THEME_SYSTEM §4.6): the row node carries it.
+        Column(modifier = Modifier.weight(1f)) {
             if (theme.icons.labelsVisible) {
                 Text(
                     text = shownLabel,
@@ -152,7 +174,7 @@ fun AppRow(
                     style = type.caption,
                     color = colors.textSecondary,
                     maxLines = 1,
-                    modifier = Modifier.testTag(AppRowTestTags.TAG),
+                    modifier = Modifier.testTag(AppRowTestTags.TAG).semantics { contentDescription = tag },
                 )
             }
             if (secondaryText != null) {
@@ -162,7 +184,10 @@ fun AppRow(
                     color = colors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.testTag(AppRowTestTags.SECONDARY),
+                    modifier =
+                        Modifier
+                            .testTag(AppRowTestTags.SECONDARY)
+                            .semantics { contentDescription = secondaryText },
                 )
             }
         }
@@ -337,5 +362,6 @@ fun NotificationBadge(
 }
 
 private const val MIN_TOUCH_DP = 48
+private const val DIM_ALPHA = 0.6f
 private const val MAX_COUNT = 99
 private const val MONOGRAM_SCALE = 1.1f

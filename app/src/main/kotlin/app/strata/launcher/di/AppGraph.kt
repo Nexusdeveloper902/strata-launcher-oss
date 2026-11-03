@@ -6,13 +6,18 @@ import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.AppListSource
+import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
+import app.strata.launcher.core.platformapi.apps.OverridesRepository
+import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.Haptics
+import app.strata.launcher.core.platformapi.system.LockService
 import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
+import app.strata.launcher.core.platformapi.system.TimeTicks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -36,6 +41,11 @@ interface AppGraph {
     val haptics: Haptics
     val textFolding: TextFolding
     val systemIntents: SystemIntents
+    val overrides: OverridesRepository
+    val favorites: FavoritesRepository
+    val iconProvider: IconProvider
+    val timeTicks: TimeTicks
+    val lockService: LockService
 
     /** BCP-47 tags of the current configuration's locales (sections, collation). */
     val locales: MutableStateFlow<List<String>>

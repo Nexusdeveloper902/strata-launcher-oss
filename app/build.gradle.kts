@@ -53,9 +53,11 @@ dependencies {
     implementation(projects.core.ui)
     implementation(projects.platform.system)
     implementation(projects.platform.apps)
+    implementation(projects.platform.icons)
     implementation(projects.feature.home)
     implementation(projects.feature.search)
     implementation(projects.feature.onboarding)
+    implementation(projects.feature.settings)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -65,6 +67,7 @@ dependencies {
 
     testImplementation(projects.testing.fakes)
     testImplementation(projects.testing.fixtures)
+    testImplementation(libs.androidx.room.runtime) // T-PRIV-05 opens the real launch-log database
     androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(projects.testing.fakes)
     androidTestImplementation(libs.androidx.room.runtime)

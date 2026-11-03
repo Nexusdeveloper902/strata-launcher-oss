@@ -2,6 +2,7 @@ package app.strata.launcher.home
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -13,21 +14,34 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.BuildConfig
 import app.strata.launcher.appGraph
 import app.strata.launcher.core.platformapi.system.SystemIntent
+import app.strata.launcher.core.ui.LocalIconLoader
 import app.strata.launcher.core.ui.StrataDefaultTheme
 import app.strata.launcher.di.localeTags
 import app.strata.launcher.feature.home.HomeAction
 import app.strata.launcher.feature.home.HomeEffect
 import app.strata.launcher.feature.home.HomeKeys
 import app.strata.launcher.feature.home.HomeLayer
+import app.strata.launcher.feature.home.HomeModal
 import app.strata.launcher.feature.home.HomeRoute
 import app.strata.launcher.feature.home.HomeViewModel
+import app.strata.launcher.feature.home.rememberAppActions
 import app.strata.launcher.feature.onboarding.OnboardingStubScreen
 import app.strata.launcher.feature.search.SearchRoute
 import app.strata.launcher.feature.search.SearchViewModel
@@ -53,6 +67,11 @@ class HomeActivity : ComponentActivity() {
                     haptics = graph.haptics,
                     resetNotices = graph.resetNotices,
                     ioDispatcher = graph.dispatchers.io,
+                    overrides = graph.overrides,
+                    favorites = graph.favorites,
+                    systemIntents = graph.systemIntents,
+                    lockService = graph.lockService,
+                    logger = graph.logger,
                 )
             }
         }
@@ -103,36 +122,76 @@ class HomeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         appGraph.startCatalog()
         appGraph.attachWindow(window.decorView)
+        val iconLoader = ProviderIconLoader(appGraph.iconProvider)
         setContent {
             StrataDefaultTheme {
-                val state by viewModel.state.collectAsStateWithLifecycle()
-                // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
-                ReportDrawnWhen { state.listReady }
-                HomeRoute(
-                    state = state,
-                    effects = viewModel.effects,
-                    onAction = viewModel::onAction,
-                    onNavigate = ::navigate,
-                    showSetDefaultButton = BuildConfig.DEBUG,
-                    onSetDefault = ::requestDefaultHome,
-                    searchLayer = { session ->
-                        val searchState by searchViewModel.state.collectAsStateWithLifecycle()
-                        SearchRoute(
-                            state = searchState,
-                            effects = searchViewModel.effects,
-                            onAction = searchViewModel::onAction,
-                            onClose = { viewModel.onAction(HomeAction.CloseSearch) },
-                            seed = session.seed,
-                            session = session.session,
-                            closeLog = searchCloseLog,
-                        )
-                    },
-                )
-                if (state.showOnboarding) {
-                    OnboardingStubScreen(onContinue = { viewModel.onAction(HomeAction.CompleteOnboarding) })
+                CompositionLocalProvider(LocalIconLoader provides iconLoader) {
+                    val state by viewModel.state.collectAsStateWithLifecycle()
+                    // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
+                    ReportDrawnWhen { state.listReady }
+                    WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
+                    val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
+                    HomeRoute(
+                        state = state,
+                        effects = viewModel.effects,
+                        onAction = viewModel::onAction,
+                        onNavigate = ::navigate,
+                        showSetDefaultButton = BuildConfig.DEBUG,
+                        onSetDefault = ::requestDefaultHome,
+                        timeTicks = appGraph.timeTicks.ticks,
+                        searchLayer = { session ->
+                            val searchState by searchViewModel.state.collectAsStateWithLifecycle()
+                            SearchRoute(
+                                state = searchState,
+                                effects = searchViewModel.effects,
+                                onAction = searchViewModel::onAction,
+                                onClose = { viewModel.onAction(HomeAction.CloseSearch) },
+                                seed = session.seed,
+                                session = session.session,
+                                onLongPress = { viewModel.onAction(HomeAction.OpenSheet(it)) },
+                                rowActions = appActions,
+                                closeLog = searchCloseLog,
+                            )
+                        },
+                    )
+                    if (state.showOnboarding) {
+                        OnboardingStubScreen(onContinue = { viewModel.onAction(HomeAction.CompleteOnboarding) })
+                    }
                 }
             }
         }
+    }
+
+    /** FR-HOME-04 (status bar, home window only) and FR-HOME-08 (phone rotation lock). */
+    @Composable
+    private fun WindowSettings(
+        hideStatusBar: Boolean,
+        allowRotation: Boolean,
+    ) {
+        val smallestWidth = LocalConfiguration.current.smallestScreenWidthDp
+        var statusBarTouched by remember { mutableStateOf(false) }
+        LaunchedEffect(hideStatusBar) {
+            // With the setting off from the start, leave the window's system-UI flags alone (below API 30 the
+            // controller writes systemUiVisibility, including IMMERSIVE_STICKY, on every call).
+            if (!hideStatusBar && !statusBarTouched) return@LaunchedEffect
+            statusBarTouched = true
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (hideStatusBar) {
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.statusBars())
+            }
+        }
+        LaunchedEffect(allowRotation, smallestWidth) {
+            requestedOrientation = HomeWindow.orientation(smallestWidth, allowRotation)
+        }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Drop half of the L1 icon cache when home goes to the background, all of it under real pressure.
+        appGraph.iconProvider.trim(critical = level > ComponentCallbacks2.TRIM_MEMORY_BACKGROUND)
     }
 
     override fun onStart() {
@@ -154,9 +213,22 @@ class HomeActivity : ComponentActivity() {
     private fun navigate(effect: HomeEffect) {
         val action =
             when (effect) {
-                HomeEffect.OpenSettings -> Intent.ACTION_APPLICATION_PREFERENCES
-                HomeEffect.OpenHiddenApps -> SettingsActivity.ACTION_HIDDEN_APPS
-                else -> return
+                HomeEffect.OpenSettings -> {
+                    Intent.ACTION_APPLICATION_PREFERENCES
+                }
+
+                HomeEffect.OpenHiddenApps -> {
+                    SettingsActivity.ACTION_HIDDEN_APPS
+                }
+
+                HomeEffect.LockHint -> {
+                    appGraph.systemIntents.accessibilitySettings()
+                    return
+                }
+
+                else -> {
+                    return
+                }
             }
         startActivity(Intent(action).setClass(this, SettingsActivity::class.java))
     }
@@ -174,8 +246,10 @@ class HomeActivity : ComponentActivity() {
         keyCode: Int,
         event: KeyEvent,
     ): Boolean {
-        val layer = viewModel.state.value.layer
-        if (layer != HomeLayer.SEARCH && !viewModel.state.value.showOnboarding) {
+        val current = viewModel.state.value
+        val layer = current.layer
+        val idle = current.modal == HomeModal.None && layer != HomeLayer.FAV_EDIT
+        if (layer != HomeLayer.SEARCH && idle && !current.showOnboarding) {
             val text =
                 HomeKeys.printable(
                     event.unicodeChar,
