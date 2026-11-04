@@ -13,6 +13,12 @@ import org.junit.runner.RunWith
 /** In-memory packs: the fixture equivalents of PACK_OK and PACK_BAD (TEST_PLAN §0). */
 class FakePackSource : IconPackSource {
     val packs = linkedMapOf<String, Pair<PackCandidate, String>>()
+
+    /** pack → drawable name → drawable. */
+    val drawables = mutableMapOf<String, Map<String, Drawable>>()
+    var failDiscovery = false
+    var drawableLoads = 0
+        private set
     var parses = 0
         private set
 
@@ -28,7 +34,7 @@ class FakePackSource : IconPackSource {
         packs.remove(pkg)
     }
 
-    override fun discover(): List<PackCandidate> = packs.values.map { it.first }
+    override fun discover(): List<PackCandidate>? = if (failDiscovery) null else packs.values.map { it.first }
 
     override fun appFilter(pack: String): AppFilterResult {
         parses++
@@ -42,7 +48,10 @@ class FakePackSource : IconPackSource {
         pack: String,
         name: String,
         densityDpi: Int,
-    ): Drawable? = null
+    ): Drawable? {
+        drawableLoads++
+        return drawables[pack]?.get(name)
+    }
 
     companion object {
         const val PACK_OK = "fixture.pack.ok"
@@ -104,5 +113,26 @@ class IconPackRegistryTest {
     fun beforeDiscoveryNothingIsKnown() {
         assertThat(registry.packs.value.discovered).isFalse()
         assertThat(registry.keyPart("x")).isEqualTo("x:pending")
+    }
+
+    /** A failed discovery keeps the last list; before any success it reports an empty discovered list. */
+    @Test
+    fun failedDiscoveryKeepsTheLastList() {
+        source.failDiscovery = true
+        registry.refreshNow()
+        assertThat(registry.packs.value).isEqualTo(
+            app.strata.launcher.core.model
+                .IconPacks(discovered = true),
+        )
+        source.failDiscovery = false
+        source.install(FakePackSource.PACK_OK, FakePackSource.OK_FILTER)
+        registry.refreshNow()
+        val before = registry.packs.value
+        val revision = registry.revision.value
+        source.failDiscovery = true
+        registry.refreshNow()
+        assertThat(registry.packs.value).isEqualTo(before)
+        assertThat(registry.revision.value).isEqualTo(revision)
+        assertThat(registry.isUsable(FakePackSource.PACK_OK)).isTrue()
     }
 }

@@ -142,4 +142,24 @@ class IconChooserTest {
         assertThat(vm.state.value.writeFailed).isTrue()
         assertThat(vm.state.value.done).isFalse()
     }
+
+    /** The pack of the app's current override opens first, even when it is not the first pack. */
+    @Test
+    fun overridePackOpensFirst() {
+        val second = "fixture.pack.second"
+        icons.iconPacks.value =
+            IconPacks(
+                listOf(IconPackInfo(ok, "OK Pack", 1, true), IconPackInfo(second, "Second", 1, true)),
+                discovered = true,
+            )
+        icons.drawables[second] = listOf("s1") to emptyMap()
+        overrides.state.value =
+            mapOf(
+                maps.key to
+                    app.strata.launcher.core.model
+                        .AppOverride(maps.key, icon = IconOverride(second, "s1")),
+            )
+        val vm = open()
+        assertThat(vm.state.value.selectedPack).isEqualTo(second)
+    }
 }

@@ -41,7 +41,7 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Makes the test APK an icon pack (androidTest manifest: ADW THEMES action; `assets/appfilter.xml`). */
+/** Makes the test APK an icon pack (androidTest manifest: ADW THEMES action; compiled `res/xml/appfilter.xml`). */
 class FixturePackActivity : Activity()
 
 /**
@@ -110,7 +110,7 @@ class IconDeviceTest {
         val info = p.iconPacks.value.find(pack)
         assertWithMessage("the test APK is visible as a pack through <queries>").that(info).isNotNull()
         assertThat(info!!.usable).isTrue()
-        assertThat(info.mappedCount).isEqualTo(2)
+        assertThat(info.mappedCount).isEqualTo(3)
         val style = IconStyle(shape = IconShapeKind.CIRCLE, packPackage = pack)
         val b = bitmap(runBlocking { p.icon(request("fixture.mapped/fixture.mapped.MainActivity", style)) })
         // Drawn as supplied: the corner keeps the pack colour (no shape mask on pack icons).
@@ -118,6 +118,11 @@ class IconDeviceTest {
         val chooser = runBlocking { p.packDrawables(pack, "fixture.mapped/fixture.mapped.MainActivity") }!!
         assertThat(chooser.suggested).isEqualTo("strata_fixture_pack_icon")
         assertThat(chooser.drawables).contains("strata_fixture_pack_icon_alt")
+        // `@drawable/` references in compiled XML resolve to entry names (most real packs ship res/xml/appfilter.xml).
+        val alt = runBlocking { p.packDrawables(pack, "fixture.other/fixture.other.Main") }!!
+        assertThat(alt.suggested).isEqualTo("strata_fixture_pack_icon_alt")
+        val altIcon = bitmap(runBlocking { p.icon(request("fixture.other/fixture.other.Main", style)) })
+        assertThat(altIcon.getPixel(size / 2, size / 2)).isEqualTo(Color.parseColor("#FF3300AA"))
     }
 
     /** T-SEC-06: the hostile variants abort the bounded parse, off main, and the main thread keeps running. */

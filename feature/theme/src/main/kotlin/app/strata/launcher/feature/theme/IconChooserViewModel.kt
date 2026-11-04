@@ -101,17 +101,15 @@ class IconChooserViewModel(
 
     init {
         icons.refreshPacks()
-        // Open the pack the app's override comes from, else the first usable pack.
+        // Open the pack the app's override comes from, else the first usable pack. Decided only once both the app
+        // (with its override) and the discovered packs are known, so a late app list cannot open the wrong pack.
         viewModelScope.launch {
-            icons.iconPacks.collect { packs ->
-                if (local.value.selectedPack != null || !packs.discovered) return@collect
-                val current =
-                    state.value.app
-                        ?.iconOverride
-                        ?.packPackage
+            state.collect { s ->
+                if (local.value.selectedPack != null || !s.packsDiscovered || s.app == null) return@collect
+                val current = s.app.iconOverride?.packPackage
                 val first =
-                    packs.packs.firstOrNull { it.packageName == current && it.usable }
-                        ?: packs.packs.firstOrNull { it.usable }
+                    s.packs.firstOrNull { it.packageName == current && it.usable }
+                        ?: s.packs.firstOrNull { it.usable }
                 first?.let { select(it.packageName) }
             }
         }

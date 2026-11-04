@@ -115,4 +115,32 @@ class AppFilterParserTest {
         assertThat(AppFilterParser.component("ComponentInfo{/C}")).isNull()
         assertThat(AppFilterParser.component("ComponentInfo{a.b/C;rm}")).isNull()
     }
+
+    /** Compiled `res/xml` reads `drawable="@drawable/x"` back as `@<id>`: the parser resolves the entry name. */
+    @Test
+    fun resourceReferencesResolveToEntryNames() {
+        val text =
+            "<resources>" +
+                "<item component=\"ComponentInfo{a.b/a.b.Main}\" drawable=\"@2131230890\"/>" +
+                "<item component=\"ComponentInfo{a.c/a.c.Main}\" drawable=\"@999\"/>" +
+                "<item component=\"ComponentInfo{a.d/a.d.Main}\" drawable=\"@drawable/plain_ref\"/>" +
+                "<item component=\"ComponentInfo{a.e/a.e.Main}\" drawable=\"@2131230891\"/>" +
+                "<calendar component=\"ComponentInfo{a.f/a.f.Main}\" prefix=\"@2131230892\"/>" +
+                "</resources>"
+        val names = mapOf(2131230890 to "maps", 2131230891 to "../evil", 2131230892 to "cal_")
+        val parser = Xml.newPullParser().apply { setInput(java.io.StringReader(text)) }
+        val f = (AppFilterParser.parse(parser, entryName = { names[it] }) as AppFilterResult.Ok).filter
+        assertThat(f.components).containsExactly("a.b/a.b.Main", "maps", "a.d/a.d.Main", "plain_ref")
+        assertThat(f.drawableFor("a.f/a.f.Main", 3)).isEqualTo("cal_3")
+        // A throwing resolver skips the item instead of failing the pack.
+        val p2 = Xml.newPullParser().apply { setInput(java.io.StringReader(text)) }
+        val f2 =
+            (
+                AppFilterParser.parse(
+                    p2,
+                    entryName = { throw IllegalStateException("gone") },
+                ) as AppFilterResult.Ok
+            ).filter
+        assertThat(f2.components).containsExactly("a.d/a.d.Main", "plain_ref")
+    }
 }

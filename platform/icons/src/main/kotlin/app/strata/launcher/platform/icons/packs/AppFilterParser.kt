@@ -1,5 +1,6 @@
 package app.strata.launcher.platform.icons.packs
 
+import android.content.res.XmlResourceParser
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
 import java.io.IOException
@@ -86,6 +87,11 @@ object AppFilterParser {
     fun parse(
         parser: XmlPullParser,
         nanoTime: () -> Long = System::nanoTime,
+        /**
+         * Entry name of a resource id (`Resources.getResourceEntryName`), for compiled XML: there `drawable="@drawable/x"`
+         * reads back as `@<id>`. Null for plain-text files. Failures return null (the item is skipped).
+         */
+        entryName: ((Int) -> String?)? = null,
     ): AppFilterResult {
         val deadline = nanoTime() + TIMEOUT_MS * 1_000_000
         val components = LinkedHashMap<String, String>()
@@ -109,7 +115,12 @@ object AppFilterParser {
                         if (parser.depth > MAX_DEPTH) return AppFilterResult.Rejected(PackProblem.TOO_DEEP)
                         when (parser.name) {
                             "item" -> {
-                                val drawable = attr(parser, "drawable")?.takeIf { DRAWABLE.matches(it) }
+                                val drawable =
+                                    drawableAttr(
+                                        parser,
+                                        "drawable",
+                                        entryName,
+                                    )?.takeIf { DRAWABLE.matches(it) }
                                 if (drawable != null) {
                                     drawables += drawable
                                     attr(
@@ -120,7 +131,10 @@ object AppFilterParser {
                             }
 
                             "calendar" -> {
-                                val prefix = attr(parser, "prefix")?.takeIf { DRAWABLE.matches(it + "31") }
+                                val prefix =
+                                    drawableAttr(parser, "prefix", entryName)?.takeIf {
+                                        DRAWABLE.matches(it + "31")
+                                    }
                                 val c = attr(parser, "component")?.let(::component)
                                 if (prefix != null && c != null) calendars.putIfAbsent(c, prefix)
                             }
@@ -145,6 +159,39 @@ object AppFilterParser {
         }
         return AppFilterResult.Ok(AppFilter(components, calendars, drawables.toList()))
     }
+
+    /**
+     * A drawable-name attribute. A reference (`@<id>` in compiled XML, `@drawable/name` in a text file) is turned into
+     * its entry name; the caller still applies the [DRAWABLE] pattern to the result.
+     */
+    private fun drawableAttr(
+        parser: XmlPullParser,
+        name: String,
+        entryName: ((Int) -> String?)?,
+    ): String? {
+        val raw = attr(parser, name) ?: return null
+        if (!raw.startsWith('@')) return raw
+        val id =
+            if (parser is XmlResourceParser) {
+                attrIndex(parser, name)?.let { parser.getAttributeResourceValue(it, 0) } ?: 0
+            } else {
+                raw.substring(1).toIntOrNull() ?: 0
+            }
+        if (id != 0) {
+            return try {
+                entryName?.invoke(id)
+            } catch (e: RuntimeException) {
+                null
+            }
+        }
+        // Plain text: `@drawable/name` (a reference that was never compiled).
+        return raw.substringAfter('/', "").takeIf { raw.startsWith("@drawable/") }
+    }
+
+    private fun attrIndex(
+        parser: XmlPullParser,
+        name: String,
+    ): Int? = (0 until minOf(parser.attributeCount, MAX_ATTRIBUTES)).firstOrNull { parser.getAttributeName(it) == name }
 
     private fun attr(
         parser: XmlPullParser,

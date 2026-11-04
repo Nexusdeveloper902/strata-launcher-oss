@@ -138,11 +138,18 @@ fun rememberAppIconState(
             state.alpha.snapTo(1f)
             return@LaunchedEffect
         }
-        val result = loader.load(req)
-        if (result is IconResult.Image) {
-            val first = state.bitmap == null
-            state.bitmap = result.image.toImageBitmap()
-            if (first && fadeMs > 0) state.alpha.animateTo(1f, tween(fadeMs)) else state.alpha.snapTo(1f)
+        when (val result = loader.load(req)) {
+            is IconResult.Image -> {
+                val first = state.bitmap == null
+                state.bitmap = result.image.toImageBitmap()
+                if (first && fadeMs > 0) state.alpha.animateTo(1f, tween(fadeMs)) else state.alpha.snapTo(1f)
+            }
+
+            IconResult.Monogram -> {
+                // The new request has no icon (e.g. its pack is gone): show the monogram, not the previous icon.
+                state.bitmap = null
+                state.alpha.snapTo(0f)
+            }
         }
     }
     return state

@@ -49,8 +49,14 @@ class IconPackRegistry(
                 source.discover()
             } catch (e: RuntimeException) {
                 logger.w(TAG, "pack discovery failed", e)
-                emptyList()
+                null
             }
+        if (candidates == null) {
+            // A failed query is not "no packs": keep the last list (and its parse results). Before the first
+            // success, report an empty discovered list so theme inputs do not wait forever.
+            if (!state.value.discovered) state.value = IconPacks(discovered = true)
+            return
+        }
         val names = candidates.mapTo(HashSet()) { it.packageName }
         val removed = parsed.keys.filter { it !in names }
         removed.forEach { parsed.remove(it) }

@@ -24,7 +24,6 @@ import app.strata.launcher.core.model.IconImage
 import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
-import app.strata.launcher.core.model.IconSource
 import app.strata.launcher.core.model.PackDrawables
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.platform.icons.packs.IconPackRegistry
@@ -119,7 +118,18 @@ class AndroidIconProvider(
         override fun onReceive(
             context: Context?,
             intent: Intent?,
-        ) = refreshPacks()
+        ) {
+            // An update sends REMOVED (replacing) then ADDED/REPLACED: refreshing on the first would show the pack as
+            // missing for a moment (a false notice).
+            if (isTransientRemoval(
+                    intent?.action,
+                    intent?.getBooleanExtra(Intent.EXTRA_REPLACING, false) == true,
+                )
+            ) {
+                return
+            }
+            refreshPacks()
+        }
     }
 
     override fun refreshPacks() = registry.refresh()
@@ -133,12 +143,17 @@ class AndroidIconProvider(
         val key = cacheKey(req)
         memory.get(key)?.let { return IconResult.Image(it) }
         return try {
-            val image =
-                withContext(ioDispatcher) { readDisk(key) } ?: withContext(renderDispatcher) { render(req, key) }
+            val disk = withContext(ioDispatcher) { readDisk(key) }
+            val image = disk ?: withContext(renderDispatcher) { render(req) }
             if (image == null) {
                 IconResult.Monogram
             } else {
-                memory.put(key, image)
+                // The pack state read while rendering must be the one the key was made from: a pack parsed (or
+                // removed) in between would otherwise leave this bitmap cached under the old key.
+                if (disk != null || cacheKey(req) == key) {
+                    memory.put(key, image)
+                    if (disk == null) scope.launch(ioDispatcher) { writeDisk(key, image.native as Bitmap) }
+                }
                 IconResult.Image(image)
             }
         } catch (e: CancellationException) {
@@ -191,10 +206,7 @@ class AndroidIconProvider(
         }
     }
 
-    private fun render(
-        req: IconRequest,
-        key: String,
-    ): IconImage? {
+    private fun render(req: IconRequest): IconImage? {
         val component = ComponentName.unflattenFromString(req.key.component) ?: return null
         val user = userManager?.getUserForSerialNumber(req.key.userSerial) ?: return null
         val size = req.sizePx.coerceIn(1, MAX_SIZE_PX)
@@ -235,9 +247,7 @@ class AndroidIconProvider(
         val supplied = overrideDrawable ?: packDrawable
         var bitmap = IconRenderer.render(sourceKind, size, style, icon, monochrome, supplied) ?: return null
         if (user != Process.myUserHandle()) bitmap = badged(bitmap, user, size)
-        val image = IconImage(bitmap, bitmap.width, bitmap.height)
-        if (sourceKind != IconSource.PLAIN || icon != null) scope.launch(ioDispatcher) { writeDisk(key, bitmap) }
-        return image
+        return IconImage(bitmap, bitmap.width, bitmap.height)
     }
 
     private fun systemIcon(
@@ -356,6 +366,12 @@ class AndroidIconProvider(
 
         /** ARCHITECTURE §9: L2 is capped at 32 MB. */
         const val DISK_CAP_BYTES: Long = 32L * 1024 * 1024
+
+        /** `PACKAGE_REMOVED` that is part of an update (`EXTRA_REPLACING`): the pack comes straight back. */
+        fun isTransientRemoval(
+            action: String?,
+            replacing: Boolean,
+        ): Boolean = action == Intent.ACTION_PACKAGE_REMOVED && replacing
 
         /** The request half of the key: format version, component, user, update time, size, density. */
         fun baseKey(req: IconRequest): String =

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- PACK_OK fixture (TEST_PLAN §0): the test APK doubles as an icon pack. Authored for these tests only. -->
-<resources>
-    <iconback img1="strata_fixture_pack_icon" />
-    <scale factor="0.9" />
-    <item component="ComponentInfo{fixture.mapped/fixture.mapped.MainActivity}" drawable="strata_fixture_pack_icon" />
-    <item component="ComponentInfo{fixture.other/.Main}" drawable="strata_fixture_pack_icon_alt" />
-    <calendar component="ComponentInfo{fixture.calendar/fixture.calendar.Main}" prefix="strata_fixture_cal_" />
-</resources>
