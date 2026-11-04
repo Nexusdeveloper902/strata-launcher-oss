@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -58,7 +59,14 @@ class ThemeFilesDeviceTest {
 
     @Test
     fun tTheme27_viewAndSendShowTheSummaryForEveryLabel() {
-        val before = context.appGraph.themeRepository.state.value.activeId
+        // Read the active id only once the theme repository has booted (before that the state is the Strata Default
+        // placeholder, whatever is active on disk).
+        val repo = context.appGraph.themeRepository
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { context.appGraph.startTheme() }
+        val end = SystemClock.uptimeMillis() + TIMEOUT_MS
+        while (!repo.state.value.loaded && SystemClock.uptimeMillis() < end) SystemClock.sleep(POLL_MS)
+        assertWithMessage("theme repository booted").that(repo.state.value.loaded).isTrue()
+        val before = repo.state.value.activeId
         for (name in listOf("a.json", "b.bin", "c.zip")) {
             val uri = publish(name)
             startImport(Intent(Intent.ACTION_VIEW).setDataAndType(uri, context.contentResolver.getType(uri)))
@@ -131,6 +139,7 @@ class ThemeFilesDeviceTest {
 
     private companion object {
         const val TIMEOUT_MS = 10_000L
+        const val POLL_MS = 50L
         const val HOUR = 60 * 60 * 1000L
     }
 }

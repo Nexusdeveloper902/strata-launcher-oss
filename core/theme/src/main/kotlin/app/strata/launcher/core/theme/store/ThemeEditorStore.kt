@@ -45,6 +45,8 @@ enum class ImageSeedError {
 data class ImageSeedResult(
     val seed: Int,
     val image: WallpaperImage?,
+    /** The image was to be kept as the wallpaper but is beyond the §10.3.3 limits (or failed to store). */
+    val wallpaperSkipped: Boolean = false,
 )
 
 /**
@@ -78,8 +80,9 @@ interface ThemeEditorStore {
     suspend fun drafts(): List<EditorDraft>
 
     /**
-     * Decodes [bytes] (bounds first, sampled), extracts a seed colour, and with [keepAsWallpaper] stores the image
-     * (re-encoded, stripped WebP, §10.3.3) in the image store, where it is kept while a draft or theme uses it.
+     * Decodes [bytes] (bounds first, sampled; any size the decoder can sample), extracts a seed colour, and with
+     * [keepAsWallpaper] stores the image (re-encoded, stripped WebP, within the §10.3.3 limits) in the image store,
+     * where it is kept while a draft or theme uses it.
      */
     suspend fun imageSeed(
         bytes: ByteArray,

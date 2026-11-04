@@ -24,8 +24,13 @@ import app.strata.launcher.core.theme.contrast.ContrastPair
 import app.strata.launcher.core.theme.importing.ConflictChoice
 import app.strata.launcher.core.theme.model.ColorRole
 import app.strata.launcher.core.theme.model.Variant
+import app.strata.launcher.core.theme.store.EditTarget
+import app.strata.launcher.core.theme.store.ImageSeedError
+import app.strata.launcher.core.theme.store.ImageSeedResult
+import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.ui.StrataDefaultTheme
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -182,22 +187,115 @@ class ThemeEditorTest {
         // A drag of the scale slider: many ticks, one step.
         for (v in 0..200) vm.onAction(EditorAction.Set("typography.scale", 0.8 + v * 0.0035, dragging = true))
         vm.onAction(EditorAction.EndDrag)
+        val doc = { vm.state.value.document!! }
+        assertThat(doc().typography.scale).isEqualTo(1.5)
+        // One undo removes the whole drag (and nothing else): the drag was a single step.
+        vm.onAction(EditorAction.Undo)
+        assertThat(doc().typography.scale).isEqualTo(1.0)
+        assertThat(doc().icons.sizeDp).isEqualTo(41)
+        vm.onAction(EditorAction.Redo)
+        assertThat(doc().typography.scale).isEqualTo(1.5)
         var undone = 0
         while (vm.state.value.canUndo) {
             vm.onAction(EditorAction.Undo)
             undone++
         }
-        assertThat(undone).isAtLeast(100)
-        // The first undo removed the whole drag.
-        vm.onAction(EditorAction.Redo)
+        // 120 field edits + 1 drag step.
+        assertThat(undone).isEqualTo(121)
+    }
+
+    // ---- review fixes: the draft offer, picker results, names --------------------------------------
+
+    @Test
+    fun draftOfferIsModalAndNeverLostUnanswered() {
+        val id = store(ThemeHarness.theme(idA, "Mine"))
+        val handle = SavedStateHandle()
+        val first = vm(EditorRequest.Edit(id), handle = handle)
+        first.onAction(EditorAction.Set("icons.sizeDp", 48))
+        timer.advanceTimeBy(2_100)
+        timer.runCurrent()
+        assertThat(runBlocking { h.repo.readDraft(id) }).isNotNull()
+
+        val next = ThemeHarness(files = h.files, index = h.index)
+        val second = vm(EditorRequest.Edit(id), harness = next, handle = handle)
+        assertThat(second.state.value.draftOffer).isNotNull()
+        // While unanswered, nothing edits the session or saves.
+        second.onAction(EditorAction.Set("icons.sizeDp", 60))
+        second.onAction(EditorAction.Save)
         assertThat(
-            vm.state.value.document!!
+            second.state.value.document!!
                 .icons.sizeDp,
-        ).isEqualTo(40)
+        ).isEqualTo(32)
+        // Back on the (clean) session leaves without deleting the recoverable draft.
+        second.onAction(EditorAction.Back)
+        assertThat(second.state.value.done).isTrue()
+        timer.advanceTimeBy(4_100)
+        timer.runCurrent()
+        assertThat(runBlocking { next.repo.readDraft(id) }?.tree?.toString()).contains("48")
+
+        // Discard answers it: edits work again and autosave resumes.
+        val third = vm(EditorRequest.Edit(id), harness = next, handle = handle)
+        third.onAction(EditorAction.DiscardDraft)
+        assertThat(runBlocking { next.repo.readDraft(id) }).isNull()
+        third.onAction(EditorAction.Set("icons.sizeDp", 52))
+        assertThat(
+            third.state.value.document!!
+                .icons.sizeDp,
+        ).isEqualTo(52)
+        timer.advanceTimeBy(2_100)
+        timer.runCurrent()
+        assertThat(runBlocking { next.repo.readDraft(id) }?.tree?.toString()).contains("52")
+    }
+
+    @Test
+    fun pickerResultBeforeTheSessionIsKept() {
+        val gate = CompletableDeferred<Unit>()
+        val seed = 0xFF2070D0.toInt()
+        val store =
+            object : ThemeEditorStore by h.repo {
+                override suspend fun newTheme(name: String): EditTarget {
+                    gate.await()
+                    return h.repo.newTheme(name)
+                }
+
+                override suspend fun imageSeed(
+                    bytes: ByteArray,
+                    keepAsWallpaper: Boolean,
+                ): Outcome<ImageSeedResult, ImageSeedError> = Outcome.Ok(ImageSeedResult(seed, null))
+            }
+        val uri = "content://test/picked.jpg"
+        h.documents.documents[uri] = byteArrayOf(1, 2, 3)
+        val handle = SavedStateHandle()
+        val vm =
+            ThemeEditorViewModel(
+                store = store,
+                themes = h.repo,
+                documents = h.documents,
+                handle = handle,
+                request = EditorRequest.FromImage,
+                computeDispatcher = Dispatchers.Unconfined,
+                timerScope = timer,
+            )
+        // Process death while the picker was open: its result arrives before the session exists.
+        vm.onAction(EditorAction.ImagePicked(uri))
+        assertThat(vm.state.value.document).isNull()
+        gate.complete(Unit)
+        val doc = vm.state.value.document!!
+        assertThat(doc.colors.sourceKind.wire).isEqualTo("seed")
+        assertThat(doc.colors.seedColor).isEqualTo(seed)
+    }
+
+    @Test
+    fun theNameCannotBeEmptied() {
+        val id = store(ThemeHarness.theme(idA, "Mine"))
+        val vm = vm(EditorRequest.Edit(id))
+        vm.onAction(EditorAction.Set("name", "", dragging = true))
+        vm.onAction(EditorAction.Set("name", "   ", dragging = true))
         assertThat(
             vm.state.value.document!!
-                .typography.scale,
-        ).isEqualTo(1.0)
+                .name,
+        ).isEqualTo("Mine")
+        assertThat(vm.state.value.dirty).isFalse()
     }
 
     @Test

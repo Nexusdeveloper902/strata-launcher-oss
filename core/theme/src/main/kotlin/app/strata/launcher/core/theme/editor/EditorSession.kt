@@ -81,6 +81,9 @@ class EditorSession(
         value: Any,
         coalesce: Boolean = false,
     ): Boolean {
+        // The required name is never emptied: the parser would render "Untitled theme" from a stored "", so the
+        // session would differ from its saved tree forever (always "unsaved").
+        if (!field.resettable && field.kind is FieldKind.Text && (value as? String)?.isBlank() == true) return false
         val next =
             if (value == "" && field.resettable && field.kind is FieldKind.Text) {
                 TreeEdits.remove(tree, field.path)

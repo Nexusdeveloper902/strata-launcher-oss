@@ -101,6 +101,13 @@ class DefaultThemeRepository(
     /** Platform font/image checks of imports (THEME_SYSTEM §10.3.3). */
     private val media: ThemeMedia = ThemeMedia.TRUSTING,
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    /**
+     * Where [state] is written. The app passes the main dispatcher: compositions collect [state] directly
+     * (`ThemeHost`), and a value set from a worker thread resumes them there. Under the Compose test clock that
+     * resumption runs the recomposition inline on the worker ("multithreaded access to SnapshotStateObserver",
+     * GMD API 34). Tests that need synchronous results keep the default.
+     */
+    private val publishDispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
 ) : ThemeRepository,
     ThemeManager,
     ThemeEditorStore {
@@ -174,7 +181,7 @@ class DefaultThemeRepository(
     override fun start() {
         if (!started.compareAndSet(false, true)) return
         scope.launch(themeDispatcher) { boot() }
-        scope.launch {
+        scope.launch(publishDispatcher) {
             val globals = settings.map(::globalsOf).catch { emit(ThemeGlobals()) }.distinctUntilChanged()
             val resolved =
                 combine(active.filterNotNull(), platformInputs.filterNotNull(), globals) { a, p, g -> Triple(a, p, g) }
@@ -686,41 +693,56 @@ class DefaultThemeRepository(
     override suspend fun imageSeed(
         bytes: ByteArray,
         keepAsWallpaper: Boolean,
-    ): Outcome<ImageSeedResult, ImageSeedError> =
-        withLibrary { lib ->
+    ): Outcome<ImageSeedResult, ImageSeedError> {
+        val header = ImageCheck.header(bytes) ?: return Outcome.Err(ImageSeedError.UNSUPPORTED)
+        // Decoding and re-encoding run off the library's serial dispatcher (they can take a while on a large photo);
+        // only the write into the image store holds it.
+        val decoded: Pair<Int?, ByteArray?> =
             try {
-                val header = ImageCheck.header(bytes)
-                if (header == null || bytes.size > ImageCheck.MAX_BYTES || !ImageCheck.withinLimits(header)) {
-                    return@withLibrary Outcome.Err(ImageSeedError.UNSUPPORTED)
-                }
-                val pixels =
-                    media.samplePixels(bytes, header, SEED_SAMPLE_SIDE)
-                        ?: return@withLibrary Outcome.Err(ImageSeedError.UNREADABLE)
-                val seed = SeedExtractor.seed(pixels) ?: return@withLibrary Outcome.Err(ImageSeedError.UNREADABLE)
-                var image: WallpaperImage? = null
-                if (keepAsWallpaper) {
+                withContext(resolveDispatcher) {
+                    // The seed comes from a sampled decode, so a photo beyond the wallpaper pixel limits still works.
+                    val seed = media.samplePixels(bytes, header, SEED_SAMPLE_SIDE)?.let(SeedExtractor::seed)
+                    val wallpaperOk = bytes.size <= ImageCheck.MAX_BYTES && ImageCheck.withinLimits(header)
                     val stored =
-                        when (val out = media.prepareImage(bytes, header)) {
-                            ImageOutcome.AsIs -> bytes
-                            is ImageOutcome.Reencoded -> out.webp
-                            ImageOutcome.Rejected -> return@withLibrary Outcome.Err(ImageSeedError.UNREADABLE)
+                        if (seed == null || !keepAsWallpaper || !wallpaperOk) {
+                            null
+                        } else {
+                            when (val out = media.prepareImage(bytes, header)) {
+                                ImageOutcome.AsIs -> bytes
+                                is ImageOutcome.Reencoded -> out.webp
+                                ImageOutcome.Rejected -> null
+                            }
                         }
-                    val sha = BundleCodec.sha256(stored)
-                    editorImages += sha
-                    lib.storeImage(ThemeImage(sha, ImageMediaType.WEBP, stored))
-                    image = WallpaperImage(sha, ImageMediaType.WEBP)
+                    seed to stored
                 }
-                Outcome.Ok(ImageSeedResult(seed, image))
-            } catch (e: java.io.IOException) {
-                logger.w(TAG, "image store failed", e)
-                Outcome.Err(ImageSeedError.UNREADABLE)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.e(TAG, "image seed failed", e)
-                Outcome.Err(ImageSeedError.UNREADABLE)
+                return Outcome.Err(ImageSeedError.UNREADABLE)
             } catch (e: OutOfMemoryError) {
-                Outcome.Err(ImageSeedError.UNSUPPORTED)
+                return Outcome.Err(ImageSeedError.UNSUPPORTED)
             }
+        val seed = decoded.first ?: return Outcome.Err(ImageSeedError.UNREADABLE)
+        val stored = decoded.second
+        var image: WallpaperImage? = null
+        if (stored != null) {
+            val sha = BundleCodec.sha256(stored)
+            editorImages += sha
+            val ok =
+                withLibrary { lib ->
+                    try {
+                        lib.storeImage(ThemeImage(sha, ImageMediaType.WEBP, stored))
+                        true
+                    } catch (e: Exception) {
+                        logger.w(TAG, "image store failed", e)
+                        false
+                    }
+                }
+            if (ok) image = WallpaperImage(sha, ImageMediaType.WEBP)
         }
+        return Outcome.Ok(ImageSeedResult(seed, image, wallpaperSkipped = keepAsWallpaper && image == null))
+    }
 
     override fun previewEnvironment(): PreviewEnvironment {
         val a = active.value

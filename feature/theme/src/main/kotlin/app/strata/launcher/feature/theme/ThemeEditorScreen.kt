@@ -184,6 +184,7 @@ private fun messageText(m: EditorMessage): Int =
         EditorMessage.IMAGE_UNREADABLE -> R.string.editor_image_unreadable
         EditorMessage.IMAGE_TOO_LARGE -> R.string.editor_image_too_large
         EditorMessage.IMAGE_APPLIED -> R.string.editor_image_applied
+        EditorMessage.IMAGE_NOT_KEPT -> R.string.editor_image_not_kept
         EditorMessage.NOTHING_TO_FIX -> R.string.editor_nothing_to_fix
         EditorMessage.FIXED -> R.string.editor_fixed
     }
@@ -362,27 +363,26 @@ private fun Toggle(
     FilterChip(selected = on, onClick = { onChange(!on) }, label = { Text(label) }, modifier = Modifier.testTag(tag))
 }
 
+/** The recovery offer is modal (§13): until Restore or Discard is chosen nothing edits the session or the draft. */
 @Composable
 private fun DraftOfferCard(onAction: (EditorAction) -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag(EditorTestTags.DRAFT_OFFER),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(stringResource(R.string.editor_draft_offer), color = MaterialTheme.colorScheme.onSecondaryContainer)
-            Row {
-                TextButton(
-                    onClick = { onAction(EditorAction.RestoreDraft) },
-                    modifier = Modifier.testTag(EditorTestTags.DRAFT_RESTORE),
-                ) { Text(stringResource(R.string.editor_draft_restore)) }
-                TextButton(
-                    onClick = { onAction(EditorAction.DiscardDraft) },
-                    modifier = Modifier.testTag(EditorTestTags.DRAFT_DISCARD),
-                ) { Text(stringResource(R.string.editor_draft_discard)) }
-            }
-        }
-    }
+    AlertDialog(
+        onDismissRequest = {},
+        modifier = Modifier.testTag(EditorTestTags.DRAFT_OFFER),
+        text = { Text(stringResource(R.string.editor_draft_offer)) },
+        confirmButton = {
+            TextButton(
+                onClick = { onAction(EditorAction.RestoreDraft) },
+                modifier = Modifier.testTag(EditorTestTags.DRAFT_RESTORE),
+            ) { Text(stringResource(R.string.editor_draft_restore)) }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { onAction(EditorAction.DiscardDraft) },
+                modifier = Modifier.testTag(EditorTestTags.DRAFT_DISCARD),
+            ) { Text(stringResource(R.string.editor_draft_discard)) }
+        },
+    )
 }
 
 @Composable
@@ -902,16 +902,26 @@ private fun JsonView(
                 ) { Text(stringResource(R.string.editor_json_close)) }
             }
             val error = json.error
-            Column(
-                modifier = Modifier.testTag(EditorTestTags.JSON_ERROR).semantics { liveRegion = LiveRegionMode.Polite },
-            ) {
+            // Only the valid ↔ invalid change is announced (politely), never each keystroke's details.
+            Text(
+                stringResource(if (error == null) R.string.editor_json_ok else R.string.editor_json_invalid),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+            Column(modifier = Modifier.testTag(EditorTestTags.JSON_ERROR)) {
                 when {
-                    error != null -> Text(jsonErrorText(error), color = MaterialTheme.colorScheme.error)
+                    error != null -> {
+                        Text(jsonErrorText(error), color = MaterialTheme.colorScheme.error)
+                    }
 
-                    json.issues.isEmpty() -> Text(stringResource(R.string.editor_json_valid))
+                    json.issues.isEmpty() -> {
+                        Text(stringResource(R.string.editor_json_valid))
+                    }
 
-                    else -> for (i in json.issues.take(MAX_ISSUES)) {
-                        Text(stringResource(R.string.editor_json_issue, i.path.ifEmpty { "/" }, i.message))
+                    else -> {
+                        for (i in json.issues.take(MAX_ISSUES)) {
+                            Text(stringResource(R.string.editor_json_issue, i.path.ifEmpty { "/" }, i.message))
+                        }
                     }
                 }
             }

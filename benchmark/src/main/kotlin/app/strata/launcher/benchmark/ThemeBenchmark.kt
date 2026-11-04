@@ -32,16 +32,16 @@ class ThemeBenchmark {
         pressHome()
         startActivityAndWait()
         device.wait(Until.hasObject(By.res(PILL_MENU)), TIMEOUT_MS)
-        device.findObject(By.res(PILL_MENU))?.click()
+        checkNotNull(device.findObject(By.res(PILL_MENU))) { "home menu button not found" }.click()
         val themes =
             device.wait(Until.findObject(By.res(MENU_THEMES)), TIMEOUT_MS) ?: device.findObject(By.text("Themes"))
-        themes?.click()
+        checkNotNull(themes) { "Themes menu item not found" }.click()
         device.wait(Until.hasObject(By.res(LIBRARY)), TIMEOUT_MS)
     }
 
     private fun MacrobenchmarkScope.openEditor() {
         openLibrary()
-        device.findObject(By.res(NEW_THEME))?.click()
+        checkNotNull(device.findObject(By.res(NEW_THEME))) { "New theme not found" }.click()
         device.wait(Until.hasObject(By.res(EDITOR_PREVIEW)), TIMEOUT_MS)
     }
 
@@ -62,7 +62,7 @@ class ThemeBenchmark {
             iterations = 5,
             setupBlock = { openEditor() },
         ) {
-            val toggle = device.findObject(By.res(PREVIEW_DARK)) ?: return@measureRepeated
+            val toggle = checkNotNull(device.findObject(By.res(PREVIEW_DARK))) { "preview dark toggle not found" }
             repeat(10) {
                 toggle.click()
                 device.waitForIdle()
@@ -79,11 +79,11 @@ class ThemeBenchmark {
             setupBlock = {
                 openEditor()
                 val scroll = device.findObject(By.res(EDITOR_SCROLL))
-                find(ACCENT_SWATCH, scroll)?.click()
-                find(ACCENT_HUE, scroll)
+                checkNotNull(find(ACCENT_SWATCH, scroll)) { "accent swatch not found" }.click()
+                checkNotNull(find(ACCENT_HUE, scroll)) { "accent hue slider not found" }
             },
         ) {
-            val slider = device.findObject(By.res(ACCENT_HUE)) ?: return@measureRepeated
+            val slider = checkNotNull(device.findObject(By.res(ACCENT_HUE))) { "accent hue slider not found" }
             val b = slider.visibleBounds
             val y = b.centerY()
             val left = b.left + b.width() / 10
@@ -110,7 +110,7 @@ class ThemeBenchmark {
         ) {
             flip = !flip
             val id = if (flip) PAPER else STRATA_DEFAULT
-            val row = device.findObject(By.res("theme_row_$id")) ?: return@measureRepeated
+            val row = checkNotNull(device.findObject(By.res("theme_row_$id"))) { "theme row $id not found" }
             row.click()
             device.waitForIdle()
         }

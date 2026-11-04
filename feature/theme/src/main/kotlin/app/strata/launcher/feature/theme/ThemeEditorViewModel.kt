@@ -15,7 +15,6 @@ import app.strata.launcher.core.theme.editor.EditorFields
 import app.strata.launcher.core.theme.editor.EditorSession
 import app.strata.launcher.core.theme.editor.ImageTheme
 import app.strata.launcher.core.theme.editor.JsonApply
-import app.strata.launcher.core.theme.importing.ImageCheck
 import app.strata.launcher.core.theme.model.ThemeDocument
 import app.strata.launcher.core.theme.parse.Issue
 import app.strata.launcher.core.theme.parse.Severity
@@ -50,6 +49,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** How the editor was opened (THEME_SYSTEM §13). */
@@ -80,6 +81,9 @@ enum class EditorMessage {
     IMAGE_UNREADABLE,
     IMAGE_TOO_LARGE,
     IMAGE_APPLIED,
+
+    /** Colours taken, but the image is beyond the wallpaper limits and was not kept. */
+    IMAGE_NOT_KEPT,
     NOTHING_TO_FIX,
     FIXED,
 }
@@ -246,7 +250,6 @@ class ThemeEditorViewModel(
 
     private data class Derived(
         val doc: ThemeDocument,
-        val effective: JsonObject,
         val preview: ThemePair,
         val contrast: ContrastReport,
         val swatches: List<Int>,
@@ -269,7 +272,6 @@ class ThemeEditorViewModel(
                     l.copy(appLabels = apps)
                 } else {
                     l.copy(
-                        effective = d.effective,
                         preview = d.preview,
                         contrast = d.contrast,
                         swatches = d.swatches,
@@ -320,7 +322,6 @@ class ThemeEditorViewModel(
             }.distinct()
         return Derived(
             doc,
-            EditorFields.effective(doc),
             ThemePair(light, dark),
             EditorContrast.report(doc, env.inputs, env.globals),
             swatches,
@@ -416,10 +417,21 @@ class ThemeEditorViewModel(
             )
         }
         publish()
-        if (request == EditorRequest.FromImage && handle.get<Boolean>(KEY_PICKED) != true && target.saved == null) {
+        if (handle.contains(KEY_PENDING_IMAGE)) {
+            if (pendingDraft == null) consumePendingImage(s)
+        } else if (request == EditorRequest.FromImage && handle.get<Boolean>(KEY_PICKED) != true &&
+            target.saved == null
+        ) {
             handle[KEY_PICKED] = true
             effectChannel.trySend(EditorEffect.PickImage)
         }
+    }
+
+    /** A picker result that arrived before the session (or while the draft offer was open). */
+    private fun consumePendingImage(s: EditorSession) {
+        if (!handle.contains(KEY_PENDING_IMAGE)) return
+        val uri = handle.remove<String>(KEY_PENDING_IMAGE)
+        imagePicked(s, uri?.takeIf { it != CANCELLED })
     }
 
     private var pendingDraft: EditorDraft? = null
@@ -440,7 +452,20 @@ class ThemeEditorViewModel(
             EditorAction.Pause -> return launchSafely { flushDraft() }
             else -> Unit
         }
-        if (s == null) return
+        if (s == null) {
+            // The picker can answer before the session exists (process death while it was open): keep the result.
+            if (action is EditorAction.ImagePicked) handle[KEY_PENDING_IMAGE] = action.uri ?: CANCELLED
+            return
+        }
+        if (pendingDraft != null) {
+            // The recovery offer is modal: until it is answered nothing may change the session or the draft file.
+            when (action) {
+                EditorAction.RestoreDraft, EditorAction.DiscardDraft -> Unit
+                EditorAction.Back -> return local.update { it.copy(done = true) }
+                is EditorAction.ImagePicked -> return run { handle[KEY_PENDING_IMAGE] = action.uri ?: CANCELLED }
+                else -> return
+            }
+        }
         when (action) {
             is EditorAction.Set -> {
                 val field = EditorFields.field(action.fieldId) ?: return
@@ -533,12 +558,14 @@ class ThemeEditorViewModel(
                 draftTree = s.tree
                 local.update { it.copy(draftOffer = null) }
                 publish()
+                consumePendingImage(s)
             }
 
             EditorAction.DiscardDraft -> {
                 pendingDraft = null
                 local.update { it.copy(draftOffer = null) }
                 launchSafely { deleteDraft(s.sessionId) }
+                consumePendingImage(s)
             }
 
             // Handled above, before the session check.
@@ -552,9 +579,13 @@ class ThemeEditorViewModel(
     private fun publish() {
         val s = session ?: return
         docs.value = s.document
+        // The controls read these on the main thread, in step with each edit (no off-thread lag: a slider never
+        // jumps back to an older value, the hex field and HCT axes follow the value just set).
+        val effective = EditorFields.effective(s.document)
         local.update {
             it.copy(
                 document = s.document,
+                effective = effective,
                 canUndo = s.canUndo,
                 canRedo = s.canRedo,
                 dirty = s.dirty,
@@ -571,6 +602,7 @@ class ThemeEditorViewModel(
                 withContext(computeDispatcher) {
                     EditorContrast.fix(tree, s::documentOf, env.inputs, env.globals)
                 }
+            if (s.tree !== tree) return@launchSafely // edited meanwhile: the result is stale
             if (s.replace(next)) {
                 publish()
                 effectChannel.trySend(EditorEffect.Message(EditorMessage.FIXED))
@@ -632,7 +664,7 @@ class ThemeEditorViewModel(
         launchSafely {
             try {
                 val bytes =
-                    when (val r = documents.read(uri, ImageCheck.MAX_BYTES)) {
+                    when (val r = documents.read(uri, IMAGE_READ_MAX_BYTES)) {
                         is DocumentRead.Ok -> r.bytes
 
                         DocumentRead.TooLarge -> return@launchSafely message(EditorMessage.IMAGE_TOO_LARGE)
@@ -649,8 +681,12 @@ class ThemeEditorViewModel(
                             withContext(computeDispatcher) {
                                 ImageTheme.apply(tree, r.value.seed, wallpaper, r.value.image)
                             }
+                        // Edited while the image was read: applying the result would drop that edit.
+                        if (s.tree !== tree) return@launchSafely
                         if (s.replace(next)) publish()
-                        message(EditorMessage.IMAGE_APPLIED)
+                        message(
+                            if (r.value.wallpaperSkipped) EditorMessage.IMAGE_NOT_KEPT else EditorMessage.IMAGE_APPLIED,
+                        )
                     }
 
                     is Outcome.Err -> {
@@ -688,7 +724,8 @@ class ThemeEditorViewModel(
                 s.markSaved(r.value)
                 handle[KEY_NEW] = false
                 deleteDraft(s.sessionId)
-                draftTree = s.tree
+                // The written snapshot: edits made while saving stay dirty and reach the next draft.
+                draftTree = tree
                 publish()
                 if (apply) {
                     ThemeApplyTrace.begin(themes.state.value.applyGeneration)
@@ -717,16 +754,18 @@ class ThemeEditorViewModel(
     private fun leave(discard: Boolean) {
         val s = session
         local.update { it.copy(done = true) }
-        if (discard && s != null) {
+        if (discard && s != null && pendingDraft == null) {
             // The app scope is not needed: the store finishes the delete on its own dispatcher.
             launchSafely { deleteDraft(s.sessionId) }
         }
     }
 
+    /** Always deletes (a flush may be writing right now); serialised with [flushDraft] so none survives the delete. */
     private suspend fun deleteDraft(sessionId: String) {
-        if (!draftExists) return
-        store.deleteDraft(sessionId)
-        draftExists = false
+        draftMutex.withLock {
+            store.deleteDraft(sessionId)
+            draftExists = false
+        }
     }
 
     /** The 2 s autosave (§13): writes the draft when the tree changed since the last write; drops it when clean. */
@@ -740,12 +779,18 @@ class ThemeEditorViewModel(
             return
         }
         if (tree === draftTree) return
-        val ok = store.writeDraft(EditorDraft(s.sessionId, s.sourceId, s.isNew, clock(), tree))
-        if (ok) {
-            draftTree = tree
-            draftExists = true
+        draftMutex.withLock {
+            // Left or saved while waiting for the lock: writing now would leave an orphan draft.
+            if (local.value.done || s.tree !== tree || !s.dirty) return
+            val ok = store.writeDraft(EditorDraft(s.sessionId, s.sourceId, s.isNew, clock(), tree))
+            if (ok) {
+                draftTree = tree
+                draftExists = true
+            }
         }
     }
+
+    private val draftMutex = Mutex()
 
     /** User operations never crash the screen (NFR-THEME-01): unexpected failures become a message. */
     private fun launchSafely(block: suspend () -> Unit) {
@@ -774,5 +819,13 @@ class ThemeEditorViewModel(
         private const val KEY_SESSION = "editor.session"
         private const val KEY_NEW = "editor.new"
         private const val KEY_PICKED = "editor.picked"
+        private const val KEY_PENDING_IMAGE = "editor.pendingImage"
+        private const val CANCELLED = ""
+
+        /**
+         * Photos are read up to 48 MiB for the seed (a 50 MP camera JPEG exceeds the 16 MiB wallpaper limit of
+         * §10.3.3; only the seed is taken from such an image, it is not kept as the wallpaper).
+         */
+        const val IMAGE_READ_MAX_BYTES = 48 * 1024 * 1024
     }
 }

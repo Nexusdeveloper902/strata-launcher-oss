@@ -22,12 +22,15 @@ import app.strata.launcher.core.theme.model.SourceKind
 import app.strata.launcher.core.theme.model.WallpaperSpec
 import app.strata.launcher.core.theme.resolve.PlatformInputs
 import app.strata.launcher.core.theme.resolve.ThemeResolver
+import app.strata.launcher.core.theme.store.ThemeState
 import app.strata.launcher.feature.theme.EditorAction
 import app.strata.launcher.feature.theme.EditorRequest
 import app.strata.launcher.feature.theme.EditorUiState
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,6 +54,60 @@ class ThemeEditorDeviceTest {
     val device = DeviceStateRule()
 
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    /** The theme that was active before the test; restored afterwards so no state leaks into later tests. */
+    private var activeBefore: String? = null
+
+    @Before
+    fun rememberActiveTheme() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { context.appGraph.startTheme() }
+        activeBefore = awaitTheme("loaded") { it.loaded }.activeId
+    }
+
+    /**
+     * Leaves the device as found: the previously active theme is applied again (T-THEME-51 applies its theme), and the
+     * themes and drafts this class made are deleted. Without this `ThemeFilesDeviceTest.tTheme27…` saw the editor's
+     * theme still active (CI run 41893533129).
+     */
+    @After
+    fun restoreThemes() {
+        val repo = context.appGraph.themeRepository
+        val before = activeBefore ?: return
+        if (!repo.state.value.activeId
+                .equals(before, ignoreCase = true)
+        ) {
+            repo.apply(before)
+            awaitTheme("previous theme active again") { it.activeId.equals(before, ignoreCase = true) }
+        }
+        runBlocking {
+            val manager = context.appGraph.themeManager
+            for (id in listOf(ID_37, ID_51)) {
+                manager.requestDelete(id)?.let { manager.commitDelete(it) }
+            }
+            val editor = context.appGraph.themeEditor
+            for (d in editor.drafts()) editor.deleteDraft(d.sessionId)
+            // Themes saved by create-from-image sessions (new ids) are named "Theme from image…": remove them too.
+            for (t in manager.entries()) {
+                if (!t.builtIn && t.name.startsWith(IMAGE_THEME_PREFIX)) {
+                    manager.requestDelete(t.id)?.let { manager.commitDelete(it) }
+                }
+            }
+        }
+    }
+
+    private fun awaitTheme(
+        what: String,
+        check: (ThemeState) -> Boolean,
+    ): ThemeState {
+        val repo = context.appGraph.themeRepository
+        val end = SystemClock.uptimeMillis() + TIMEOUT_MS
+        while (SystemClock.uptimeMillis() < end) {
+            val s = repo.state.value
+            if (check(s)) return s
+            SystemClock.sleep(POLL_MS)
+        }
+        throw AssertionError("timed out waiting for $what: active=${repo.state.value.activeId}")
+    }
 
     private fun storeTheme(
         id: String,
@@ -176,6 +233,8 @@ class ThemeEditorDeviceTest {
     fun tTheme51_editorFlowsMakeNoNetworkAccess() {
         val id = storeTheme(ID_51, "No network", ""","colors":{"mode":"light","light":{"textSecondary":"#BBBBBB"}}""")
         val instr = InstrumentationRegistry.getInstrumentation()
+        // Prepared before StrictMode is armed (the copy is test set-up, not an editor flow).
+        val uri = fixtureImageUri()
         val policy =
             StrictMode.ThreadPolicy
                 .Builder()
@@ -190,7 +249,10 @@ class ThemeEditorDeviceTest {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy
                     .Builder(oldMain!!)
+                    // The app's main thread: no network and no disk access at all during the editor flows.
                     .detectNetwork()
+                    .detectDiskReads()
+                    .detectDiskWrites()
                     .penaltyDeath()
                     .build(),
             )
@@ -204,7 +266,6 @@ class ThemeEditorDeviceTest {
                 .build(),
         )
         try {
-            val uri = fixtureImageUri()
             launch(EditorRequest.Edit(id)).use { s ->
                 s.await("banner") { it.contrast?.failing?.isNotEmpty() == true }
                 s.action(EditorAction.Set("colors.light.accent", "#224488"))
@@ -228,6 +289,7 @@ class ThemeEditorDeviceTest {
     private companion object {
         const val ID_37 = "aaaaaaaa-0000-4000-8000-000000000037"
         const val ID_51 = "aaaaaaaa-0000-4000-8000-000000000051"
+        const val IMAGE_THEME_PREFIX = "Theme from image"
         const val TIMEOUT_MS = 15_000L
         const val DRAFT_WAIT_MS = 6_000L
         const val POLL_MS = 50L

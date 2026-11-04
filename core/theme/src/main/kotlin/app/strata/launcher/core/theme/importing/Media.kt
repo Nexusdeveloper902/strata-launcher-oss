@@ -274,7 +274,7 @@ interface ThemeMedia {
     ): ImageOutcome
 
     /**
-     * Decodes [bytes] (bounds first, within the §10.3.3 limits) sampled down to at most [maxSide] pixels on the longer
+     * Decodes [bytes] (bounds first; no wallpaper pixel limit, the decode is sampled) down to at most [maxSide] pixels on the longer
      * side and returns its `0xAARRGGBB` pixels, for the create-from-image seed (§13). Null when it does not decode.
      */
     fun samplePixels(

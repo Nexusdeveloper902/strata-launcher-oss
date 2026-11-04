@@ -105,13 +105,15 @@ class AndroidThemeMedia(
         header: ImageHeader,
         maxSide: Int,
     ): IntArray? {
-        if (bytes.size > ImageCheck.MAX_BYTES || !ImageCheck.withinLimits(header)) return null
+        // No wallpaper pixel limit here: the decode is sampled down to about 2 × [maxSide], so its memory is bounded
+        // whatever the photo's size (a 50 MP camera image is fine).
+        if (header.width <= 0 || header.height <= 0) return null
         return try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             val w = bounds.outWidth
             val h = bounds.outHeight
-            if (w <= 0 || h <= 0 || !ImageCheck.withinLimits(header.copy(width = w, height = h))) return null
+            if (w <= 0 || h <= 0) return null
             var sample = 1
             while (w / sample > maxSide * 2 || h / sample > maxSide * 2) sample *= 2
             val opts =

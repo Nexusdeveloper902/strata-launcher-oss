@@ -78,6 +78,8 @@
     <string name="editor_json_copy">Copy JSON</string>
     <string name="editor_json_close">Close</string>
     <string name="editor_json_valid">No problems found.</string>
+    <string name="editor_json_ok">The JSON can be applied.</string>
+    <string name="editor_json_invalid">The JSON can\'t be applied.</string>
     <!-- %1$s = JSON pointer such as /colors/light/accent, %2$s = the problem. -->
     <string name="editor_json_issue">%1$s: %2$s</string>
     <string name="editor_json_copied">JSON copied</string>
@@ -91,6 +93,7 @@
     <string name="editor_image_unreadable">The image couldn\'t be read.</string>
     <string name="editor_image_too_large">The image is too large.</string>
     <string name="editor_image_applied">Colours taken from the image</string>
+    <string name="editor_image_not_kept">Colours taken from the image. It is too large to keep as the wallpaper.</string>
     <string name="editor_nothing_to_fix">Nothing to fix</string>
     <string name="editor_fixed">Colours adjusted. Undo restores them.</string>
     <string name="editor_new_theme_name">New theme</string>

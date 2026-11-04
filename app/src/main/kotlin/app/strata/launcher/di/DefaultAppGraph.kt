@@ -235,6 +235,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
             themeDispatcher = themeDispatcher,
             resolveDispatcher = dispatchers.default,
             scope = appScope,
+            publishDispatcher = dispatchers.main,
             logger = logger,
             media =
                 AndroidThemeMedia(
