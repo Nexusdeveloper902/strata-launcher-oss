@@ -23,6 +23,7 @@ import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.focusReport
 import app.strata.launcher.home.HomeActivity
+import app.strata.launcher.openAllApps
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -79,7 +80,7 @@ class SearchDeviceTest {
     /** T-SEARCH-10 (I): Back hides the IME first, then closes; with an empty query one Back closes. */
     @Test
     fun tSearch10_backSemantics() {
-        compose.onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
+        compose.openAllApps()
         compose.onNodeWithTag(AppListTestTags.SEARCH_FIELD).performClick()
         compose.waitUntil(timeoutMillis = 5_000) { searchOpen() }
         compose.onNodeWithTag(SearchTestTags.FIELD).performTextInput("ma")

@@ -42,6 +42,7 @@ import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
 import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.feature.search.SearchTestTags
+import app.strata.launcher.openAllApps
 import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
@@ -221,7 +222,7 @@ class HomeDeviceTest {
         device.pressHome()
         compose.waitUntil(5_000) { compose.count(SearchTestTags.LAYER) == 0 }
         compose.waitUntil(3_000) { !imeVisible(home) }
-        compose.onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
+        compose.openAllApps()
         device.pressHome()
         compose.waitUntil(5_000) { compose.count(AppListTestTags.LIST) == 0 }
         vm(home).onAction(HomeAction.OpenHomeMenu)
@@ -290,8 +291,7 @@ class HomeDeviceTest {
     /** T-GEST-05 / T-GEST-09 / T-COMPAT-02 (subset): a drag inside the index scrubs; Back from the other edge works. */
     @Test
     fun tGest05_indexScrubAndBack() {
-        compose.onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
-        compose.waitUntil(3_000) { compose.count(AppListTestTags.LIST) > 0 }
+        compose.openAllApps()
         device.pressBack()
         compose.waitUntil(3_000) { compose.count(AppListTestTags.LIST) == 0 }
     }
@@ -390,7 +390,7 @@ class HomeDeviceTest {
     @Test
     fun fixtureFlows() {
         assumeTrue(shell("pm path $FIXTURE_PACKAGE").contains("package:"))
-        compose.onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
+        compose.openAllApps()
         compose
             .onNode(
                 SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollToIndex),

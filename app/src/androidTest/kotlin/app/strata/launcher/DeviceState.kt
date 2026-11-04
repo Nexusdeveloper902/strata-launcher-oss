@@ -5,10 +5,16 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
+import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import app.strata.launcher.feature.home.HomeTestTags
+import app.strata.launcher.feature.home.list.AppListTestTags
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
@@ -80,6 +86,29 @@ fun <A : ComponentActivity> AndroidComposeTestRule<ActivityScenarioRule<A>, A>.a
         val focus = focusReport()
         Log.e(TAG, "Window never focused. $focus")
         throw AssertionError("Window never focused. $focus", e)
+    }
+}
+
+/**
+ * Taps "All apps" and waits until the list layer (with its search field) is composed.
+ *
+ * "All apps" is on the rest page before the app list has loaded. The list arrives from the catalog snapshot
+ * (Room on the IO dispatcher, assembled on Default), and Compose idling does not track that work. Until it
+ * arrives, the LIST layer shows only the hidden rest page, with no list and no search field. So
+ * `performClick()` followed by a lookup of a list node fails whenever the catalog is slower than the first
+ * frames. CI run 41769795194 (API 34, tSearch10) clicked 1.9 s after the first frame and found no
+ * `app_list_search_field`. Waiting for the list itself makes the step deterministic.
+ */
+fun ComposeTestRule.openAllApps(timeoutMillis: Long = 10_000) {
+    fun count(tag: String) = onAllNodesWithTag(tag).fetchSemanticsNodes().size
+    onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
+    try {
+        waitUntil(timeoutMillis) { count(AppListTestTags.LIST) > 0 && count(AppListTestTags.SEARCH_FIELD) > 0 }
+    } catch (e: ComposeTimeoutException) {
+        // The rest page's semantics are cleared once the LIST layer is set: "All apps" still present means
+        // the tap did not register; absent means the layer switched but the app list never arrived.
+        val allAppsStillShown = count(HomeTestTags.ALL_APPS) > 0
+        throw AssertionError("List not shown within $timeoutMillis ms (allAppsStillShown=$allAppsStillShown)", e)
     }
 }
 
