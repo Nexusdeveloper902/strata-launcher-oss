@@ -15,6 +15,8 @@ specification phase is **finished**; the next step is implementation, starting a
 - Workflow (see `CONTRIBUTING.md`): work on a branch, open a PR into `main`, squash-merge
   once CI is green. Never push to `main` (GitHub can't enforce this on the private Free
   plan; run `git config core.hooksPath tools/git-hooks` so the pre-push hook blocks it).
+  CI runs on the public mirror `strata-launcher-oss` (see CONTRIBUTING.md "Public mirror and
+  CI"): sync branches with `tools/mirror/sync-public.sh`, merge here once the mirror is green.
   Commit at each milestone step, with test IDs (`T-…`) named in the message when they pass.
 - Choose subagent models per task: `opus` for design, architecture and review,
   `sonnet` for mechanical or bulk work, `haiku` for trivial edits.

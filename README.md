@@ -2,7 +2,7 @@
 
 A minimal, vertical-list Android home screen with a fully free, user-controlled theme system.
 
-[![CI: GitHub Actions](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/Nexusdeveloper902/strata-launcher/actions/workflows/ci.yml)
+[![CI](https://github.com/Nexusdeveloper902/strata-launcher-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Nexusdeveloper902/strata-launcher-oss/actions/workflows/ci.yml)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)

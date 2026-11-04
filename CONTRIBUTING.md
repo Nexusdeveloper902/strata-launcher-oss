@@ -7,7 +7,8 @@ Solo project, but run like a team one: every change reaches `main` through a pul
 2. Commit in small steps; push the branch.
 3. Open a PR into `main` (the template asks for milestone/requirement IDs, T-IDs passing, and
    device checks for the Galaxy A56).
-4. Merge with **squash** once CI is green. `main` keeps linear history; head branches are
+4. Mirror the branch to the public repository and open a CI-only PR there (see
+   "Public mirror and CI" below). Merge the private PR with **squash** once that CI is green. `main` keeps linear history; head branches are
    deleted automatically. No human approval is required (nobody can approve their own PR), but
    review threads must be resolved.
 
@@ -27,6 +28,22 @@ The PR title becomes the squash commit subject, so write it the same way.
 ```
 If you changed requirement or test IDs, also run `python3 tools/trace/build.py`.
 New libraries must pass `checkDependencies` (the allow-list), Dependabot PRs included.
+
+## Public mirror and CI
+GitHub Actions minutes on this private Free-plan repository ran out, so CI runs on the public
+mirror [`Nexusdeveloper902/strata-launcher-oss`](https://github.com/Nexusdeveloper902/strata-launcher-oss),
+where Actions minutes are free.
+- The mirror is this repository with `research/APK_ANALYSIS.md`, `research/PUBLIC_BEHAVIOR.md`
+  and `research/EVIDENCE.md` removed from every commit (they describe the original app; see
+  `research/UNRESOLVED.md` U-001, U-003, U-004). Never add those files, or content from them,
+  to anything that is mirrored.
+- `tools/mirror/sync-public.sh <branch>...` (needs `pip install git-filter-repo`) filters and
+  pushes branches. The filter is deterministic, so syncs are fast-forwards; never force-push
+  the mirror.
+- Flow per change: push the branch here, run `tools/mirror/sync-public.sh <branch>`, open a PR
+  on the mirror to run CI, squash-merge the PR **here** once the mirror's CI is green, then run
+  `tools/mirror/sync-public.sh main` and close the mirror PR. Nothing is merged on the mirror.
+- This repository stays the source of truth.
 
 ## Clean room
 Follow `AGENTS.md`. Implement from `spec/` only. Never open `research/APK_ANALYSIS.md` or
