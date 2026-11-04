@@ -100,6 +100,54 @@ class AndroidThemeMedia(
         }
     }
 
+    override fun samplePixels(
+        bytes: ByteArray,
+        header: ImageHeader,
+        maxSide: Int,
+    ): IntArray? {
+        if (bytes.size > ImageCheck.MAX_BYTES || !ImageCheck.withinLimits(header)) return null
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val w = bounds.outWidth
+            val h = bounds.outHeight
+            if (w <= 0 || h <= 0 || !ImageCheck.withinLimits(header.copy(width = w, height = h))) return null
+            var sample = 1
+            while (w / sample > maxSide * 2 || h / sample > maxSide * 2) sample *= 2
+            val opts =
+                BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+            val scale = minOf(1f, maxSide.toFloat() / maxOf(decoded.width, decoded.height))
+            val small =
+                if (scale < 1f) {
+                    Bitmap.createScaledBitmap(
+                        decoded,
+                        (decoded.width * scale).toInt().coerceAtLeast(1),
+                        (decoded.height * scale).toInt().coerceAtLeast(1),
+                        true,
+                    )
+                } else {
+                    decoded
+                }
+            try {
+                IntArray(small.width * small.height).also {
+                    small.getPixels(it, 0, small.width, 0, 0, small.width, small.height)
+                }
+            } finally {
+                if (small !== decoded) small.recycle()
+                decoded.recycle()
+            }
+        } catch (e: Exception) {
+            logger.w(TAG, "image sample failed", e)
+            null
+        } catch (e: OutOfMemoryError) {
+            null
+        }
+    }
+
     /** EXIF orientation of [bytes] (`ORIENTATION_NORMAL` when absent or unreadable). */
     private fun orientation(bytes: ByteArray): Int =
         try {

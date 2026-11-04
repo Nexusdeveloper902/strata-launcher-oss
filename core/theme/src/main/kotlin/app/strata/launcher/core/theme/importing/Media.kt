@@ -273,6 +273,16 @@ interface ThemeMedia {
         header: ImageHeader,
     ): ImageOutcome
 
+    /**
+     * Decodes [bytes] (bounds first, within the §10.3.3 limits) sampled down to at most [maxSide] pixels on the longer
+     * side and returns its `0xAARRGGBB` pixels, for the create-from-image seed (§13). Null when it does not decode.
+     */
+    fun samplePixels(
+        bytes: ByteArray,
+        header: ImageHeader,
+        maxSide: Int,
+    ): IntArray? = null
+
     companion object {
         /** Accepts every font and keeps clean WebP as is, re-encodes nothing else (pure JVM tests). */
         val TRUSTING: ThemeMedia =
