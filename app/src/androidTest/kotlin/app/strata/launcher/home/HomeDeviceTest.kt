@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import android.view.View
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.ComposeTestRule
@@ -43,6 +44,7 @@ import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
 import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.feature.search.SearchTestTags
+import app.strata.launcher.focusReport
 import app.strata.launcher.openAllApps
 import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
@@ -192,6 +194,8 @@ class HomeDeviceTest {
     @Test
     fun tHome05_clockAndDate() {
         val ownPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        lateinit var owned: HomeActivity
+        compose.activityRule.scenario.onActivity { owned = it }
         compose.onNodeWithTag(HomeTestTags.CLOCK).performClick()
         // The clock app cold-starts through a trampoline activity and a splash window; waitForIdle returns while our
         // paused window is still the active one. CI run 41653871126: SHOW_ALARMS reached the clock on API 26/34/36,
@@ -204,13 +208,38 @@ class HomeDeviceTest {
         compose.waitUntil(20_000) { device.currentPackageName == ownPackage && resumedHome() != null }
         compose.onNodeWithTag(HomeTestTags.DATE).performClick()
         runCatching { compose.waitUntil(20_000) { device.currentPackageName != ownPackage } }
-        // A fresh emulator's calendar opens a first-run screen that may need more than one Back. End only once home is
-        // resumed again: closing the scenario mid-transition fails with "Current state was null" (CI run 41818633704,
-        // API 34).
-        compose.waitUntil(30_000) {
-            val back = device.currentPackageName == ownPackage && resumedHome() != null
-            if (!back) device.pressBack()
-            back
+        assertThat(device.currentPackageName).isNotEqualTo(ownPackage)
+        // The test plan has no Back after the date tap; the test only has to end with the rule's activity resumed
+        // (closing the scenario mid-transition fails with "Current state was null", CI run 41818633704, API 34).
+        // Not by pressing Back until home shows: a fresh emulator's calendar opens a first-run screen, and its close
+        // can take seconds. CI run 41876425721 (API 36): Back closed the calendar, our window was RESUMED but not yet
+        // visible 4 s later, so the next poll still saw another package and pressed Back again. That Back reached
+        // HomeActivity at HOME_REST, where no callback is registered (INTERACTION_SPEC §6) and the system finishes a
+        // non-home-task activity: the rule's activity was DESTROYED, the system launcher came to front, and no
+        // HomeActivity resumed for the remaining 25 s of Backs. Instead, bring the rule's own task to front.
+        bringToFront(owned)
+    }
+
+    /**
+     * Starts HomeActivity explicitly, as the entry activity does (`SettingsActivity.openHome`). HomeActivity is
+     * `singleTask`, so this brings the existing standard-type task (the rule's one; a home-task instance is of the home
+     * activity type and is not reused) to front and delivers a non-Home intent, which `onNewIntent` ignores. Waits
+     * until [owned] itself is resumed and focused; no key press can overshoot into it.
+     */
+    private fun bringToFront(owned: HomeActivity) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.context.startActivity(
+            Intent(instrumentation.targetContext, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            compose.waitUntil(20_000) {
+                var focused = false
+                instrumentation.runOnMainSync { focused = owned.window.decorView.hasWindowFocus() }
+                if (!focused) closeSystemErrorDialog(device)
+                focused && resumedHome() === owned
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("The rule's HomeActivity did not return to front. ${focusReport()}", e)
         }
     }
 
