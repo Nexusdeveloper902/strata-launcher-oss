@@ -124,6 +124,14 @@ data class HomeUiState(
     val listReady: Boolean get() = list != null
 
     val canAddFavorite: Boolean get() = favorites.size < FavoritesRepository.MAX
+
+    /**
+     * The soft keyboard may be up only while a text field is open: the search layer or the sheet's rename field.
+     * Everywhere else it is hidden (INTERACTION_SPEC §3 HOME_REST "IME hidden", ANDROID_PLATFORM §14 "closing
+     * search … hides the keyboard"), including after a show that the IME completes only after the field has gone.
+     */
+    val imeAllowed: Boolean
+        get() = layer == HomeLayer.SEARCH || (modal as? HomeModal.Sheet)?.renaming == true
 }
 
 sealed interface HomeAction {

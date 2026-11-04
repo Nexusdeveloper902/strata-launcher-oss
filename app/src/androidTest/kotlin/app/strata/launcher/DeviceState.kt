@@ -1,5 +1,7 @@
 package app.strata.launcher
 
+import android.app.Activity
+import android.content.Intent
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -11,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.feature.home.HomeTestTags
@@ -170,5 +174,54 @@ private fun restoreGlobal(
         shell("settings delete global $key")
     } else {
         shell("settings put global $key $previous")
+    }
+}
+
+/** A plain, opaque activity without Compose content (test APK manifest); see [coverForeignActivities]. */
+class CoverActivity : Activity()
+
+/** Lifecycle stages in which an activity can still be resumed or drawn. */
+private val liveStages =
+    listOf(Stage.PRE_ON_CREATE, Stage.CREATED, Stage.STARTED, Stage.RESUMED, Stage.PAUSED, Stage.RESTARTED)
+
+/**
+ * Before the compose rule tears down: puts [CoverActivity] in front of every live [type] other than [owned] (the rule's
+ * activity) and waits until each of them is STOPPED.
+ *
+ * Why: on API 29+ a Home press does not reach the rule's HomeActivity (a LAUNCHER-started, standard-type task) but
+ * creates a second instance in the system's home task, which the rule's `ActivityScenario` does not own. At
+ * teardown the rule closes only its own activity, so the system brings the other instance back to RESUMED. The
+ * Compose test environment then drains its composition dispatcher on the instrumentation thread
+ * (`withTestCoroutines` → `frameClockCoroutineScope.runTest {}`): a frame still queued there runs
+ * `measureAndLayoutForTest()` on every RESUMED compose root, off the main thread, while the main thread lays out the
+ * same root (insets/IME animation after the resume) → "performMeasureAndLayout called during measure layout" (CI
+ * runs 41765134195 and 41820548452, API 34, tHome09). A root that is not RESUMED is not in the registry, so with
+ * the cover in front (and revealed again after the rule's own activity closes) no root is left that the drain
+ * could lay out concurrently.
+ */
+fun ComposeTestRule.coverForeignActivities(
+    type: Class<out Activity>,
+    owned: Activity?,
+    timeoutMillis: Long = 15_000,
+) {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    fun foreign(): List<Activity> {
+        val found = mutableListOf<Activity>()
+        instrumentation.runOnMainSync {
+            val monitor = ActivityLifecycleMonitorRegistry.getInstance()
+            liveStages.flatMapTo(found) { stage -> monitor.getActivitiesInStage(stage).filter(type::isInstance) }
+        }
+        return found.filter { it !== owned }
+    }
+    if (foreign().isEmpty()) return
+    val context = instrumentation.context
+    context.startActivity(
+        Intent().setClassName(context, CoverActivity::class.java.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+    try {
+        waitUntil(timeoutMillis) { foreign().isEmpty() }
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError("Foreign ${type.simpleName} still live behind the cover. ${focusReport()}", e)
     }
 }

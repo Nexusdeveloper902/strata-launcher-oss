@@ -14,6 +14,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -140,6 +143,7 @@ class HomeActivity : ComponentActivity() {
                     // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                     ReportDrawnWhen { state.listReady }
                     WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
+                    HideStrayIme(state.imeAllowed)
                     val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
                     HomeRoute(
                         state = state,
@@ -199,6 +203,26 @@ class HomeActivity : ComponentActivity() {
         }
         LaunchedEffect(allowRotation, smallestWidth) {
             requestedOrientation = HomeWindow.orientation(smallestWidth, allowRotation)
+        }
+    }
+
+    /**
+     * Keeps the IME hidden whenever no text field is open ([app.strata.launcher.feature.home.HomeUiState.imeAllowed]).
+     * Closing search (Home press, Back, launch) ends the field's input session, which asks for a hide. On a loaded
+     * device the IME can still be completing the show that opening search requested; that hide is then cancelled and
+     * the late show leaves the keyboard up over home at rest (CI run 41820860155, API 34, T-HOME-09: hide
+     * "onCancelled at PHASE_CLIENT_APPLY_ANIMATION", then `onShown`). Reacting to the IME actually being visible,
+     * rather than issuing one hide at close time, makes the rest state hold whatever order the IME finishes in.
+     */
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
+    private fun HideStrayIme(allowed: Boolean) {
+        val visible = WindowInsets.isImeVisible
+        LaunchedEffect(visible, allowed) {
+            if (visible && !allowed) {
+                searchCloseLog("IME visible without a text field -> hide")
+                WindowCompat.getInsetsController(window, window.decorView).hide(WindowInsetsCompat.Type.ime())
+            }
         }
     }
 

@@ -35,6 +35,7 @@ import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
 import app.strata.launcher.awaitWindowFocus
 import app.strata.launcher.closeSystemErrorDialog
+import app.strata.launcher.coverForeignActivities
 import app.strata.launcher.feature.home.HomeAction
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.HomeViewModel
@@ -162,7 +163,7 @@ class HomeDeviceTest {
     }
 
     @After
-    fun resetSettings() {
+    fun tearDown() {
         runBlocking {
             appGraph().settingsRepository.update {
                 it.copy(
@@ -173,6 +174,11 @@ class HomeDeviceTest {
                 )
             }
         }
+        // A Home press (tHome09/10) or Back from another app (tHome05) can leave a HomeActivity in front that the
+        // rule does not own; it must not be RESUMED while the rule tears down (DeviceState.kt).
+        var owned: HomeActivity? = null
+        runCatching { compose.activityRule.scenario.onActivity { owned = it } }
+        compose.coverForeignActivities(HomeActivity::class.java, owned)
     }
 
     /** T-HOME-01 (from M3): Home shows the header and favourites region. */

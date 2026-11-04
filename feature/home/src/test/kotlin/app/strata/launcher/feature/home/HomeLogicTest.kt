@@ -52,6 +52,18 @@ class HomeLogicTest {
         assertThat(IndexMath.exclusionSpan(IndexExclusion.AROUND_TOUCH, 1000f, null, 200f)).isEqualTo(400f..600f)
     }
 
+    /** INTERACTION_SPEC §3/§6: the IME is allowed only with a text field open (search, rename); never at rest. */
+    @Test
+    fun imeAllowedOnlyWithATextField() {
+        val key = visible("Maps").key
+        assertThat(HomeUiState().imeAllowed).isFalse()
+        assertThat(HomeUiState(layer = HomeLayer.LIST).imeAllowed).isFalse()
+        assertThat(HomeUiState(modal = HomeModal.Menu).imeAllowed).isFalse()
+        assertThat(HomeUiState(modal = HomeModal.Sheet(key)).imeAllowed).isFalse()
+        assertThat(HomeUiState(modal = HomeModal.Sheet(key, renaming = true)).imeAllowed).isTrue()
+        assertThat(HomeUiState(layer = HomeLayer.SEARCH).imeAllowed).isTrue()
+    }
+
     /** VISUAL_SPEC §9.4: tabular `HH:MM` in 24 h; 12 h without a leading zero plus the period marker. */
     @Test
     fun clockFormat() {
