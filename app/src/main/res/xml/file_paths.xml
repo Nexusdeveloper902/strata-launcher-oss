@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider paths (ANDROID_PLATFORM §22): only cacheDir/share/ (exported themes and theme wallpapers handed to
+     the system, FR-THEME-23, FR-THEME-34). Nothing else of the app's storage is ever exposed. -->
+<paths>
+    <cache-path
+        name="share"
+        path="share/" />
+</paths>

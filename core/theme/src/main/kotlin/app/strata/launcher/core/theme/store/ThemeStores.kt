@@ -14,6 +14,12 @@ import app.strata.launcher.core.theme.contrast.ContrastStatus
 interface ThemeFileStore {
     fun read(name: String): ByteArray?
 
+    /** Like [read] with another cap: fonts (4 MiB) and images (16 MiB) are larger than a theme file (§10.3.3). */
+    fun readMedia(
+        name: String,
+        maxBytes: Int,
+    ): ByteArray?
+
     fun write(
         name: String,
         bytes: ByteArray,
@@ -51,7 +57,10 @@ interface BuiltInThemeSource {
 
 enum class ThemeOrigin { BUILTIN, USER, IMPORTED }
 
-/** `Entry` of §11.2, plus [causedProblem] for the crash-loop guard's "Caused a problem — not applied" mark. */
+/**
+ * `Entry` of §11.2, plus [causedProblem] for the crash-loop guard's "Caused a problem — not applied" mark and
+ * [hidden] for built-ins hidden from the picker (§11.3; a `BUILTIN` entry exists only to carry that flag).
+ */
 data class ThemeIndexEntry(
     val id: String,
     val name: String,
@@ -63,6 +72,7 @@ data class ThemeIndexEntry(
     val contrastStatus: ContrastStatus? = null,
     val needsAppUpdate: Boolean = false,
     val causedProblem: Boolean = false,
+    val hidden: Boolean = false,
 )
 
 /**

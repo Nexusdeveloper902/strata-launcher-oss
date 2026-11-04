@@ -1,10 +1,20 @@
 package app.strata.launcher.testing.fakes
 
+import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.theme.StrataDefault
+import app.strata.launcher.core.theme.importing.ConflictChoice
+import app.strata.launcher.core.theme.importing.ImportError
+import app.strata.launcher.core.theme.importing.ThemeImage
 import app.strata.launcher.core.theme.store.BuiltInThemeSource
+import app.strata.launcher.core.theme.store.DeleteTicket
+import app.strata.launcher.core.theme.store.ExportError
+import app.strata.launcher.core.theme.store.ExportFile
+import app.strata.launcher.core.theme.store.ImportCommit
+import app.strata.launcher.core.theme.store.ImportPreview
 import app.strata.launcher.core.theme.store.ThemeFileStore
 import app.strata.launcher.core.theme.store.ThemeIndex
 import app.strata.launcher.core.theme.store.ThemeIndexStore
+import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemePair
 import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.core.theme.store.ThemeState
@@ -25,6 +35,9 @@ class InMemoryThemeFileStore : ThemeFileStore {
     var killAfterWrites: Int = -1
     val unreadable = mutableSetOf<String>()
 
+    /** Thrown by every following write (e.g. an [IllegalStateException] to simulate a non-I/O bug). */
+    var writeFailure: Exception? = null
+
     private fun tick() {
         if (killAfterWrites == 0) {
             killAfterWrites = -1
@@ -38,10 +51,16 @@ class InMemoryThemeFileStore : ThemeFileStore {
         return files[name]?.copyOf()
     }
 
+    override fun readMedia(
+        name: String,
+        maxBytes: Int,
+    ): ByteArray? = read(name)?.let { if (it.size > maxBytes) it.copyOf(maxBytes) else it }
+
     override fun write(
         name: String,
         bytes: ByteArray,
     ) {
+        writeFailure?.let { throw it }
         tick()
         files[name] = bytes.copyOf()
     }
@@ -146,4 +165,51 @@ class FakeThemeRepository(
     override suspend fun library(): List<ThemeSummary> =
         listOf(ThemeSummary(StrataDefault.ID, StrataDefault.NAME, builtIn = true, applicable = true)) +
             themes.keys.map { ThemeSummary(it, it, builtIn = false, applicable = true) }
+}
+
+/**
+ * Inert [ThemeManager] for tests that do not exercise the library (the real one is the theme repository in
+ * `:core:data`; feature tests use it over in-memory stores). Lists Strata Default only; every import is rejected.
+ */
+class FakeThemeManager : ThemeManager {
+    override val revision = MutableStateFlow(0)
+
+    override suspend fun entries(): List<ThemeSummary> =
+        listOf(ThemeSummary(StrataDefault.ID, StrataDefault.NAME, builtIn = true, applicable = true))
+
+    override suspend fun prepareImport(bytes: ByteArray): Outcome<ImportPreview, ImportError> =
+        Outcome.Err(ImportError.NOT_A_THEME)
+
+    override suspend fun commitImport(
+        token: String,
+        choice: ConflictChoice,
+        apply: Boolean,
+    ): Outcome<ImportCommit, ImportError> = Outcome.Err(ImportError.UNREADABLE)
+
+    override fun discardImport(token: String) = Unit
+
+    override suspend fun undoReplace(id: String): Boolean = false
+
+    override suspend fun duplicate(id: String): String? = null
+
+    override suspend fun editableCopy(id: String): String? = null
+
+    override suspend fun requestDelete(id: String): DeleteTicket? = null
+
+    override suspend fun undoDelete(ticket: DeleteTicket) = Unit
+
+    override suspend fun commitDelete(ticket: DeleteTicket): Boolean = false
+
+    override suspend fun setHidden(
+        id: String,
+        hidden: Boolean,
+    ) = Unit
+
+    override suspend fun exportJson(id: String): ExportFile? = null
+
+    override suspend fun hasBundleMedia(id: String): Boolean = false
+
+    override suspend fun exportBundle(id: String): Outcome<ExportFile, ExportError> = Outcome.Err(ExportError.NOT_FOUND)
+
+    override suspend fun wallpaperImage(id: String): ThemeImage? = null
 }

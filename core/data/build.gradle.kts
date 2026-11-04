@@ -53,6 +53,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.truth)
+    // T-THEME-28 / T-THEME-29 / T-THEME-51 device tests (ThemeImportDeviceTest).
+    androidTestImplementation(projects.testing.fixtures)
+    androidTestImplementation(projects.testing.fakes)
 }
 
 // Built-in presets (THEME_SYSTEM §14): spec/sample-themes/ is the single source, copied into the generated

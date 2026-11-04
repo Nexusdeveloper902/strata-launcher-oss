@@ -42,11 +42,16 @@ class AtomicFileThemeFileStore(
         return File(root(), name)
     }
 
-    override fun read(name: String): ByteArray? {
+    override fun read(name: String): ByteArray? = readMedia(name, maxReadBytes)
+
+    override fun readMedia(
+        name: String,
+        maxBytes: Int,
+    ): ByteArray? {
         val f = file(name)
         val atomic = AtomicFile(f)
         return try {
-            atomic.openRead().use { it.readCapped(maxReadBytes) }
+            atomic.openRead().use { it.readCapped(maxBytes) }
         } catch (e: FileNotFoundException) {
             null
         }
@@ -273,6 +278,7 @@ internal object ThemeIndexMapper {
                 },
             needsAppUpdate = e.needsAppUpdate,
             causedProblem = e.causedProblem,
+            hidden = e.hidden,
         )
 
     private fun entry(e: ThemeIndexEntry): StoredThemeEntry =
@@ -299,5 +305,6 @@ internal object ThemeIndexMapper {
                 },
             ).setNeedsAppUpdate(e.needsAppUpdate)
             .setCausedProblem(e.causedProblem)
+            .setHidden(e.hidden)
             .build()
 }

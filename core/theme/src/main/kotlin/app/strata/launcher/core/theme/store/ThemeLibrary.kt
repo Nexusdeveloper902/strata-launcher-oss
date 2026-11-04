@@ -7,6 +7,16 @@ import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.contrast.Contrast
 import app.strata.launcher.core.theme.contrast.ContrastStatus
+import app.strata.launcher.core.theme.importing.BundleCodec
+import app.strata.launcher.core.theme.importing.FontCheck
+import app.strata.launcher.core.theme.importing.FontFormat
+import app.strata.launcher.core.theme.importing.ImageCheck
+import app.strata.launcher.core.theme.importing.ImportCandidate
+import app.strata.launcher.core.theme.importing.LibrarySnapshot
+import app.strata.launcher.core.theme.importing.ThemeFont
+import app.strata.launcher.core.theme.importing.ThemeImage
+import app.strata.launcher.core.theme.importing.ThemeImporter
+import app.strata.launcher.core.theme.model.ImageMediaType
 import app.strata.launcher.core.theme.model.ThemeDocument
 import app.strata.launcher.core.theme.parse.ParsedTheme
 import app.strata.launcher.core.theme.parse.ThemeError
@@ -16,6 +26,16 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+
+/** Result of [ThemeLibrary.exportBundle]. */
+sealed interface BundleExport {
+    class Ok(val bytes: ByteArray) : BundleExport
+
+    data object NotFound : BundleExport
+
+    /** Over the §10.3.3 limits: it could not be imported back. */
+    data object TooLarge : BundleExport
+}
 
 /** Where the theme of this start came from (THEME_SYSTEM §12). */
 enum class BootSource {
@@ -68,6 +88,19 @@ class ThemeLibrary(
     private var baksAtBoot: List<String> = emptyList()
 
     val currentIndex: ThemeIndex get() = index
+
+    /**
+     * Versions replaced by an import, kept for Undo until the process ends (§10.4). Their fonts and images count as
+     * referenced, so garbage collection never strips media an Undo would bring back. Only the latest replaced version
+     * is kept per id; an edit or a delete of the theme drops it.
+     */
+    private val replacedVersions = HashMap<String, ByteArray>()
+
+    /**
+     * Media hashes that someone outside the library still needs (prepared imports waiting for confirmation). Garbage
+     * collection treats them as referenced.
+     */
+    var pinnedMedia: () -> Set<String> = { emptySet() }
 
     // ---- boot -------------------------------------------------------------------------------------
 
@@ -232,6 +265,8 @@ class ThemeLibrary(
         var t = parsed.tree.with("modifiedAt", JsonString(stamp))
         if (t["createdAt"] == null) t = t.with("createdAt", JsonString(stamp))
         val bytes = ThemeWriter.write(t)
+        // An edit (or a new import) supersedes a pending Replace undo of this id.
+        replacedVersions.remove(id.lowercase())
 
         migratedOriginals.remove(id.lowercase())?.let { (version, original) ->
             val bak = "$USER_DIR/${id.lowercase()}.v$version.bak"
@@ -267,8 +302,10 @@ class ThemeLibrary(
             index = index.copy(activeThemeId = lkg, applyInProgress = false)
         }
         safeDelete(userFile(id))
+        replacedVersions.remove(id.lowercase())
         index = index.copy(entries = index.entries.filterNot { it.id.equals(id, ignoreCase = true) })
         persistIndex()
+        collectGarbage()
     }
 
     /** Moves an invalid stored file to `themes/quarantine/` (never deleted silently, §11.4). */
@@ -292,6 +329,222 @@ class ThemeLibrary(
             // Left in place; the next reconciliation tries again.
         }
     }
+
+    // ---- M5: library management, import, export (THEME_SYSTEM §10, §11.3) ------------------------
+
+    /** What the importer needs for conflict planning (§10.4). */
+    fun snapshot(): LibrarySnapshot {
+        val stored =
+            index.entries
+                .filter { it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null && !it.needsAppUpdate }
+                .mapNotNull { e ->
+                    val tree = (readParsed(userFile(e.id)) as? Outcome.Ok)?.value?.tree ?: return@mapNotNull null
+                    e.id.lowercase() to ThemeImporter.canonical(tree)
+                }.toMap()
+        val names = summaries().associate { it.id.lowercase() to it.name }
+        return LibrarySnapshot(builtInIds = builtInIds.keys + StrataDefault.ID.lowercase(), stored, names)
+    }
+
+    /**
+     * Commits an import (§10.4 step 3): media first (content-addressed, written only if absent), then the theme file
+     * and the index. Returns the saved theme and, when an existing theme was replaced, its previous bytes; those stay
+     * available to [restore] (and their media protected from garbage collection) until the process ends.
+     */
+    fun commitImport(
+        candidate: ImportCandidate,
+        tree: JsonObject,
+    ): Pair<ParsedTheme, ByteArray?> {
+        for (f in candidate.fonts) writeMediaIfAbsent("$FONTS_DIR/${f.storeName}", f.bytes)
+        candidate.image?.let { writeMediaIfAbsent("$IMAGES_DIR/${it.sha256}.$IMAGE_EXT", it.bytes) }
+        val id = (tree["id"] as? JsonString)?.value ?: candidate.parsed.document.id
+        val previous = if (index.entry(id) != null) rawBytes(id) else null
+        val saved = save(tree, ThemeOrigin.IMPORTED)
+        if (previous != null) {
+            // The latest replaced version is the one Undo brings back.
+            replacedVersions[id.lowercase()] = previous
+            collectGarbage()
+        }
+        return saved to previous
+    }
+
+    /** True while an Undo of a Replace is available for [id]. */
+    fun canRestore(id: String): Boolean = id.lowercase() in replacedVersions
+
+    /**
+     * Undo of an import's Replace (§10.4): writes back the version [commitImport] replaced. Returns false when there is
+     * nothing to restore (already restored, edited or deleted since).
+     */
+    fun restore(id: String): Boolean {
+        val bytes = replacedVersions[id.lowercase()] ?: return false
+        val parsed = (parser.parse(bytes) as? Outcome.Ok)?.value ?: return false
+        files.write(userFile(id), bytes)
+        replacedVersions.remove(id.lowercase())
+        val old = index.entry(id)
+        index =
+            index.withEntry(
+                (old ?: ThemeIndexEntry(id, parsed.document.name, ThemeOrigin.USER)).copy(
+                    name = parsed.document.name,
+                    fileSha256 = sha256(bytes),
+                    contrastStatus = contrastStatus(parsed.document),
+                ),
+            )
+        persistIndex()
+        // The import's media may now be unreferenced.
+        collectGarbage()
+        return true
+    }
+
+    /**
+     * Duplicates any theme (built-in, Strata Default or stored) as a new user theme "Name (copy)" with `basedOn` = the
+     * source id (§11.3). Editing a built-in uses this on the first change. Returns the new id.
+     */
+    fun duplicate(
+        id: String,
+        newId: String,
+    ): String? {
+        val source = (loadTheme(id) as? Outcome.Ok)?.value ?: return null
+        val taken = summaries().map { it.name.lowercase() }.toSet()
+        val name = ThemeImporter.uniqueName(copyName(source.document.name), taken)
+        val tree =
+            source.tree
+                .without("createdAt")
+                .without("modifiedAt")
+                .with("id", JsonString(newId))
+                .with("name", JsonString(name))
+                .with("basedOn", JsonString(source.document.id))
+        return save(tree, ThemeOrigin.USER).document.id
+    }
+
+    /** Hides or shows a built-in in the picker (§11.3). Stored themes are deleted instead. */
+    fun setHidden(
+        id: String,
+        hidden: Boolean,
+    ) {
+        if (builtInName(id) == null) return
+        val e = index.entry(id) ?: ThemeIndexEntry(id = id.lowercase(), name = id, origin = ThemeOrigin.BUILTIN)
+        index = index.withEntry(e.copy(hidden = hidden))
+        persistIndex()
+    }
+
+    /**
+     * Before deleting the active theme (§11.3): makes last-known-good (if it is another, loadable theme) or Strata
+     * Default active. Returns the new active id, or null when [id] was not active.
+     */
+    fun switchAwayFrom(id: String): String? {
+        if (!index.activeThemeId.equals(id, ignoreCase = true)) return null
+        val lkg = index.lastKnownGoodId
+        val target =
+            if (lkg.isNotEmpty() && !lkg.equals(id, ignoreCase = true) && loadTheme(lkg) is Outcome.Ok) {
+                lkg
+            } else {
+                StrataDefault.ID
+            }
+        apply(target)
+        return target
+    }
+
+    /** The stored document for export (§10.2): preserved unknowns, `modifiedAt` refreshed in the copy. */
+    fun exportJson(id: String): ByteArray? {
+        val parsed = (loadTheme(id) as? Outcome.Ok)?.value ?: return null
+        return ThemeWriter.write(parsed.tree.with("modifiedAt", JsonString(rfc3339(clock.nowMillis()))))
+    }
+
+    /** True when the theme references user fonts or an image that the stores hold ("Include fonts and wallpaper"). */
+    fun hasBundleMedia(id: String): Boolean {
+        val parsed = (loadTheme(id) as? Outcome.Ok)?.value ?: return false
+        return storedFonts(parsed).isNotEmpty() || storedImage(parsed) != null
+    }
+
+    /**
+     * A `.strata-theme.zip` with the theme, its user fonts and its wallpaper image (§10.3). Fails with
+     * [BundleExport.TooLarge] when the result would break the import limits of §10.3.3 (it could not be imported back).
+     */
+    fun exportBundle(id: String): BundleExport {
+        val parsed = (loadTheme(id) as? Outcome.Ok)?.value ?: return BundleExport.NotFound
+        val theme = exportJson(id) ?: return BundleExport.NotFound
+        val fonts = storedFonts(parsed)
+        val image = storedImage(parsed)
+        val total = theme.size.toLong() + fonts.sumOf { it.bytes.size.toLong() } + (image?.bytes?.size ?: 0)
+        if (fonts.size > BundleCodec.MAX_FONTS || total > BundleCodec.LIMITS.maxTotalBytes) return BundleExport.TooLarge
+        val zip = BundleCodec.write(theme, fonts, image)
+        if (zip.size > BundleCodec.LIMITS.maxArchiveBytes) return BundleExport.TooLarge
+        return BundleExport.Ok(zip)
+    }
+
+    /** The theme's wallpaper image from the image store, for the system hand-off (FR-THEME-34). */
+    fun wallpaperImage(id: String): ThemeImage? {
+        val parsed = (loadTheme(id) as? Outcome.Ok)?.value ?: return null
+        return storedImage(parsed)
+    }
+
+    private fun storedFonts(parsed: ParsedTheme): List<ThemeFont> {
+        val present = safeList(FONTS_DIR)
+        return ThemeImporter.userFonts(parsed).mapNotNull { sha ->
+            val name = present.firstOrNull { it.substringBefore('.') == sha } ?: return@mapNotNull null
+            val bytes = safeReadMedia("$FONTS_DIR/$name", FontCheck.MAX_BYTES) ?: return@mapNotNull null
+            val format = if (name.endsWith(".otf")) FontFormat.OTF else FontFormat.TTF
+            ThemeFont(sha, format, bytes).takeIf { BundleCodec.sha256(bytes) == sha }
+        }
+    }
+
+    private fun storedImage(parsed: ParsedTheme): ThemeImage? {
+        val sha =
+            parsed.document.wallpaper.image
+                ?.sha256 ?: return null
+        val bytes = safeReadMedia("$IMAGES_DIR/$sha.$IMAGE_EXT", ImageCheck.MAX_BYTES) ?: return null
+        if (BundleCodec.sha256(bytes) != sha) return null
+        return ThemeImage(sha, ImageMediaType.WEBP, bytes)
+    }
+
+    /**
+     * Deletes fonts and images that no stored theme (nor last-known-good) references (§10.3.3: the stores are shared
+     * and content-addressed; orphans are garbage-collected).
+     */
+    fun collectGarbage() {
+        val referencedFonts = HashSet<String>()
+        val referencedImages = HashSet<String>()
+        val trees =
+            index.entries
+                .filter { it.origin != ThemeOrigin.BUILTIN }
+                .map { userFile(it.id) } + LKG
+
+        fun reference(parsed: ParsedTheme) {
+            referencedFonts += ThemeImporter.userFonts(parsed)
+            parsed.document.wallpaper.image
+                ?.sha256
+                ?.let { referencedImages += it }
+        }
+        for (name in trees) (readParsed(name) as? Outcome.Ok)?.value?.let(::reference)
+        // Versions an Undo may restore, and media of prepared imports, are still in use.
+        for (bytes in replacedVersions.values) (parser.parse(bytes) as? Outcome.Ok)?.value?.let(::reference)
+        val pinned = pinnedMedia()
+        referencedFonts += pinned
+        referencedImages += pinned
+        // Stored files that need an app update are kept untouched with everything they might reference.
+        if (index.entries.any { it.needsAppUpdate }) return
+        for (f in safeList(FONTS_DIR)) if (f.substringBefore('.') !in referencedFonts) safeDelete("$FONTS_DIR/$f")
+        for (f in safeList(IMAGES_DIR)) if (f.substringBefore('.') !in referencedImages) safeDelete("$IMAGES_DIR/$f")
+    }
+
+    private fun writeMediaIfAbsent(
+        name: String,
+        bytes: ByteArray,
+    ) {
+        if (name.substringAfter('/') in safeList(name.substringBefore('/'))) return
+        files.write(name, bytes)
+    }
+
+    private fun safeReadMedia(
+        name: String,
+        cap: Int,
+    ): ByteArray? =
+        try {
+            files.readMedia(name, cap + 1)?.takeIf { it.size <= cap }
+        } catch (e: Exception) {
+            null
+        }
+
+    private fun copyName(name: String): String = "$name (copy)"
 
     // ---- index ------------------------------------------------------------------------------------
 
@@ -402,7 +655,16 @@ class ThemeLibrary(
         val builtIn =
             builtInIds.entries
                 .sortedBy { it.value.first }
-                .map { (id, v) -> ThemeSummary(id, v.second, builtIn = true, applicable = true) }
+                .map { (id, v) ->
+                    ThemeSummary(
+                        id,
+                        v.second,
+                        builtIn = true,
+                        applicable = true,
+                        hidden = index.entry(id)?.hidden == true,
+                        contrast = ContrastStatus.AA_ANY_WALLPAPER,
+                    )
+                }
         val stored =
             index.entries
                 .filter { it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null }
@@ -414,9 +676,21 @@ class ThemeLibrary(
                         builtIn = false,
                         applicable =
                             !it.needsAppUpdate && !it.causedProblem,
+                        needsAppUpdate = it.needsAppUpdate,
+                        causedProblem = it.causedProblem,
+                        contrast = it.contrastStatus,
                     )
                 }
-        return listOf(ThemeSummary(StrataDefault.ID, StrataDefault.NAME, builtIn = true, applicable = true)) +
+        val default =
+            ThemeSummary(
+                StrataDefault.ID,
+                StrataDefault.NAME,
+                builtIn = true,
+                applicable = true,
+                hidden = index.entry(StrataDefault.ID)?.hidden == true,
+                contrast = ContrastStatus.AA_ANY_WALLPAPER,
+            )
+        return listOf(default) +
             builtIn + stored
     }
 
@@ -484,6 +758,11 @@ class ThemeLibrary(
 
     companion object {
         const val USER_DIR = "user"
+        const val FONTS_DIR = "fonts"
+        const val IMAGES_DIR = "images"
+
+        /** Stored images are always WebP (§10.3.3, §11.1). */
+        const val IMAGE_EXT = "webp"
         const val QUARANTINE_DIR = "quarantine"
         const val SUFFIX = ".strata-theme.json"
         const val LKG = "lkg.strata-theme.json"

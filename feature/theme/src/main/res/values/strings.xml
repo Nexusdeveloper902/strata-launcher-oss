@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme library (FR-THEME-27) -->
+    <string name="theme_library_title">Themes</string>
+    <string name="theme_import">Import</string>
+    <string name="theme_show_hidden">Show hidden (%1$d)</string>
+    <string name="theme_hide_hidden">Hide hidden</string>
+    <string name="theme_active">Active</string>
+    <string name="theme_built_in">Built-in</string>
+    <string name="theme_hidden">Hidden</string>
+    <string name="theme_needs_update">Needs app update</string>
+    <string name="theme_caused_problem">Caused a problem — not applied</string>
+    <string name="theme_apply">Apply</string>
+    <string name="theme_duplicate">Duplicate</string>
+    <string name="theme_export">Export</string>
+    <string name="theme_share">Share</string>
+    <string name="theme_delete">Delete</string>
+    <string name="theme_hide">Hide</string>
+    <string name="theme_unhide">Show in list</string>
+    <string name="theme_more">More options for %1$s</string>
+    <string name="theme_deleted">“%1$s” deleted</string>
+    <string name="theme_undo">Undo</string>
+    <string name="theme_export_title">Export “%1$s”</string>
+    <string name="theme_export_bundle">Include fonts and wallpaper (.zip)</string>
+    <string name="theme_export_json">Theme only (.json)</string>
+    <string name="theme_export_font_licence">Only share fonts whose licence allows it.</string>
+    <string name="theme_cancel">Cancel</string>
+    <string name="theme_share_title">Share theme</string>
+    <string name="theme_exported">Theme exported</string>
+    <string name="theme_export_failed">The theme couldn\'t be exported.</string>
+    <string name="theme_export_too_large">With its fonts and wallpaper this theme is too large to import again. Export the theme only.</string>
+    <string name="theme_undo_too_late">Too late to undo: the theme was already deleted.</string>
+    <string name="theme_share_failed">The theme couldn\'t be shared.</string>
+    <string name="theme_duplicate_failed">The theme couldn\'t be copied. Not enough storage.</string>
+    <string name="theme_not_applicable">This theme can\'t be applied.</string>
+
+    <!-- Wallpaper confirmation (THEME_SYSTEM §4.3, FR-THEME-34) -->
+    <string name="theme_wallpaper_question">Also set this theme\'s wallpaper?</string>
+    <string name="theme_wallpaper_explain">The system wallpaper app opens, and you confirm there.</string>
+    <string name="theme_wallpaper_yes">Yes</string>
+    <string name="theme_wallpaper_no">No</string>
+    <string name="theme_no_wallpaper_app">No app on this device can set wallpapers</string>
+    <string name="theme_wallpaper_failed">The wallpaper couldn\'t be handed to the system.</string>
+
+    <!-- Import summary (THEME_SYSTEM §10.4) -->
+    <string name="theme_import_title">Import theme</string>
+    <string name="theme_import_loading">Checking the theme…</string>
+    <string name="theme_import_by">by %1$s</string>
+    <string name="theme_import_add">Add</string>
+    <string name="theme_import_add_apply">Add and apply</string>
+    <string name="theme_import_close">Close</string>
+    <string name="theme_import_renamed">Will be added as “%1$s”</string>
+    <string name="theme_import_already">Already in your themes</string>
+    <string name="theme_import_builtin_copy">Has the same id as a built-in theme, so it is added as a copy</string>
+    <string name="theme_import_contrast_any">Readable on any wallpaper</string>
+    <string name="theme_import_contrast_current">Readable on current wallpaper</string>
+    <string name="theme_import_contrast_low">Has low-contrast colours (will be adjusted while “Enforce contrast” is on)</string>
+    <plurals name="theme_import_newer_settings">
+        <item quantity="one">%1$d unknown setting from a newer version will be kept</item>
+        <item quantity="other">%1$d unknown settings from a newer version will be kept</item>
+    </plurals>
+    <plurals name="theme_import_missing_fonts">
+        <item quantity="one">%1$d font is not on this device; the system font is used</item>
+        <item quantity="other">%1$d fonts are not on this device; the system font is used</item>
+    </plurals>
+    <string name="theme_import_bundle">Includes its own fonts or wallpaper</string>
+    <string name="theme_import_missing_pack">This theme uses the icon pack %1$s, which is not installed</string>
+    <string name="theme_import_conflict_title">“%1$s” is already in your themes</string>
+    <string name="theme_import_conflict_body">This version is different. Replace the stored theme, or keep both?</string>
+    <string name="theme_import_replace">Replace</string>
+    <string name="theme_import_keep_both">Keep both</string>
+    <string name="theme_import_added">“%1$s” added</string>
+    <string name="theme_import_added_applied">“%1$s” added and applied</string>
+    <string name="theme_import_replaced">“%1$s” replaced</string>
+    <string name="theme_import_done">Done</string>
+    <string name="theme_preview_sample">Aa Sample</string>
+    <string name="theme_preview_secondary">Secondary text</string>
+    <string name="theme_preview_label">Preview of %1$s</string>
+
+    <!-- THEME_SYSTEM §8.2 messages -->
+    <string name="theme_error_not_a_theme">This file isn\'t a Strata theme.</string>
+    <string name="theme_error_newer">This theme was made with a newer version of Strata Launcher. Update the app to use it.</string>
+    <string name="theme_error_damaged">The file is damaged.</string>
+    <string name="theme_error_damaged_at">The file is damaged (line %1$d, column %2$d).</string>
+    <string name="theme_error_too_large">The file is too large.</string>
+    <string name="theme_error_unexpected_files">The theme bundle contains unexpected files.</string>
+    <string name="theme_error_font">A font in this bundle couldn\'t be read.</string>
+    <string name="theme_error_image">The wallpaper in this bundle couldn\'t be read.</string>
+    <string name="theme_error_unreadable">The file couldn\'t be opened.</string>
+    <string name="theme_error_storage">Not enough storage.</string>
+    <string name="theme_error_source">Strata can only import files shared by another app.</string>
+</resources>

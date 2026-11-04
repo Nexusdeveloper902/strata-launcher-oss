@@ -12,12 +12,15 @@ import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
+import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.LockService
 import app.strata.launcher.core.platformapi.system.RoleController
+import app.strata.launcher.core.platformapi.system.SharedFiles
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
+import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +53,15 @@ interface AppGraph {
 
     /** Active theme and library (ARCHITECTURE §4); [ThemeRepository.start] boots it off the main thread. */
     val themeRepository: ThemeRepository
+
+    /** Library management, import and export (THEME_SYSTEM §10, §11.3); same instance as [themeRepository]. */
+    val themeManager: ThemeManager
+
+    /** SAF document reads and writes (`content:` only). */
+    val documents: DocumentIO
+
+    /** Temporary `cacheDir/share/` copies behind the FileProvider. */
+    val sharedFiles: SharedFiles
 
     /** BCP-47 tags of the current configuration's locales (sections, collation). */
     val locales: MutableStateFlow<List<String>>

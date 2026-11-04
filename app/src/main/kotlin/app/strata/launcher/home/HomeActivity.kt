@@ -49,8 +49,8 @@ import app.strata.launcher.feature.search.SearchRoute
 import app.strata.launcher.feature.search.SearchViewModel
 import app.strata.launcher.platform.system.SystemIntentFactory
 import app.strata.launcher.settings.SettingsActivity
-import app.strata.launcher.theme.DebugThemeSwitch
 import app.strata.launcher.theme.ThemeHost
+import app.strata.launcher.theme.ThemesActivity
 
 /**
  * The HOME activity (ANDROID_PLATFORM §1, §22). Edge-to-edge over the wallpaper. Reads only
@@ -77,7 +77,7 @@ class HomeActivity : ComponentActivity() {
                     lockService = graph.lockService,
                     logger = graph.logger,
                     theme = graph.themeRepository,
-                    themesAvailable = DebugThemeSwitch.AVAILABLE,
+                    themesAvailable = true,
                 )
             }
         }
@@ -105,9 +105,6 @@ class HomeActivity : ComponentActivity() {
     private var roleRequestStartedAt = 0L
 
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
-
-    /** Debug builds: the internal theme switch (home menu → Themes) is open. */
-    private var themeSwitchOpen by mutableStateOf(false)
 
     private val roleRequest =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -170,10 +167,6 @@ class HomeActivity : ComponentActivity() {
                     )
                     if (state.showOnboarding) {
                         OnboardingStubScreen(onContinue = { viewModel.onAction(HomeAction.CompleteOnboarding) })
-                    }
-                    if (themeSwitchOpen) {
-                        val theme by appGraph.themeRepository.state.collectAsStateWithLifecycle()
-                        DebugThemeSwitch.Dialog(appGraph.themeRepository, theme.activeId) { themeSwitchOpen = false }
                     }
                 }
             }
@@ -273,7 +266,7 @@ class HomeActivity : ComponentActivity() {
                 }
 
                 HomeEffect.OpenThemes -> {
-                    themeSwitchOpen = true
+                    startActivity(Intent(this, ThemesActivity::class.java))
                     return
                 }
 

@@ -1,6 +1,9 @@
 package app.strata.launcher.platform.system
 
+import android.app.WallpaperManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -16,6 +19,7 @@ import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
+import app.strata.launcher.core.platformapi.system.WallpaperHandoff
 
 /**
  * [TextFolding] with `android.icu.text.Transliterator` "Any-Latin; Latin-ASCII" (API 29+; ARCHITECTURE §8
@@ -80,6 +84,49 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
 
     override fun accessibilitySettings(): LaunchResult = start(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
+    override fun share(
+        contentUri: String,
+        mimeType: String,
+        title: String,
+    ): LaunchResult {
+        val uri = contentUri.toUri()
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return Outcome.Err(LaunchError.SECURITY)
+        val send =
+            Intent(Intent.ACTION_SEND)
+                .setType(mimeType)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // ClipData carries the grant through the chooser to the chosen app.
+        send.clipData = ClipData.newRawUri(null, uri)
+        return start(Intent.createChooser(send, title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }
+
+    override fun setWallpaper(contentUri: String): WallpaperHandoff {
+        val uri = contentUri.toUri()
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return WallpaperHandoff.NO_HANDLER
+        val crop =
+            try {
+                WallpaperManager.getInstance(appContext).getCropAndSetWallpaperIntent(uri)
+            } catch (e: IllegalArgumentException) {
+                null // no cropper for this URI, or not content:/image (ANDROID_PLATFORM §12)
+            } catch (e: RuntimeException) {
+                null
+            }
+        if (crop != null) {
+            crop.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            crop.clipData = ClipData.newRawUri(null, uri)
+            if (start(crop) is Outcome.Ok) return WallpaperHandoff.CROP_AND_SET
+        }
+        // Started directly (not wrapped in a chooser), so a missing handler is detectable; the system resolver lets the
+        // user pick when several apps can set wallpapers.
+        val attach =
+            Intent(Intent.ACTION_ATTACH_DATA)
+                .setDataAndType(uri, IMAGE_TYPE)
+                .putExtra("mimeType", IMAGE_TYPE)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        return if (start(attach) is Outcome.Ok) WallpaperHandoff.ATTACH_DATA else WallpaperHandoff.NO_HANDLER
+    }
+
     private fun start(intent: Intent): LaunchResult =
         try {
             appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -91,6 +138,8 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
         }
 
     companion object {
+        private const val IMAGE_TYPE = "image/*"
+
         /** `market://search?q=<query>` (FR-SEARCH-07). */
         fun storeIntent(query: String): Intent =
             Intent(Intent.ACTION_VIEW, "market://search".toUri().buildUpon().appendQueryParameter("q", query).build())

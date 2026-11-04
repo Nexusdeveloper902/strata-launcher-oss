@@ -34,7 +34,7 @@ import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import app.strata.launcher.testing.fakes.FakeThemeRepository
 import app.strata.launcher.testing.fixtures.SearchFixtures.visible
 import app.strata.launcher.testing.fixtures.ThemeFixtures
-import app.strata.launcher.theme.DebugThemeSwitch
+import app.strata.launcher.theme.ThemesActivity
 import app.strata.launcher.theme.backdropIsLight
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -170,20 +170,15 @@ class HomeThemeActivityTest {
             ).assertExists()
     }
 
-    /** Debug builds: home menu → Themes lists the library and applies the choice live. */
+    /** Home menu → Themes opens the theme library (FR-THEME-27), in every build type. */
     @Test
-    fun debugThemeSwitch_appliesFromHomeMenu() {
-        assertThat(DebugThemeSwitch.AVAILABLE).isTrue()
-        val themes = FakeThemeRepository().apply { this.themes["hidden"] = hiddenSearch }
-        start(themes)
+    fun homeMenuThemes_opensTheLibrary() {
+        start(FakeThemeRepository())
         compose.onNodeWithTag(HomeTestTags.PILL_MENU).performClick()
         compose.onNodeWithTag(SheetTestTags.MENU_THEMES).performClick()
         frames()
-        compose.onNodeWithTag(DebugThemeSwitch.TAG_DIALOG).assertExists()
-        compose.onNodeWithTag(DebugThemeSwitch.itemTag("hidden")).performClick()
-        frames()
-        assertThat(themes.applied).containsExactly("hidden")
-        compose.onAllNodesWithTag(HomeTestTags.PILL).assertCountEquals(0)
+        val started = shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>()).nextStartedActivity
+        assertThat(started.component?.className).isEqualTo(ThemesActivity::class.java.name)
     }
 
     /** VISUAL_SPEC §6: bar icons follow the effective background. */

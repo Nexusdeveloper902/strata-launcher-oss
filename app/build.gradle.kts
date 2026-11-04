@@ -45,11 +45,6 @@ android {
             proguardFiles("benchmark-rules.pro")
         }
     }
-
-    sourceSets {
-        // The benchmark build type is release-like: it shares release's no-op debug switch (src/release).
-        getByName("benchmark").kotlin.directories.add("src/release/kotlin")
-    }
 }
 
 dependencies {
@@ -66,6 +61,7 @@ dependencies {
     implementation(projects.feature.search)
     implementation(projects.feature.onboarding)
     implementation(projects.feature.settings)
+    implementation(projects.feature.theme)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

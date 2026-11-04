@@ -18,6 +18,7 @@ import app.strata.launcher.core.data.list.AssembledAppListSource
 import app.strata.launcher.core.data.overrides.RoomFavoritesRepository
 import app.strata.launcher.core.data.overrides.RoomOverridesRepository
 import app.strata.launcher.core.data.settings.DataStoreSettingsRepository
+import app.strata.launcher.core.data.theme.AndroidThemeMedia
 import app.strata.launcher.core.data.theme.AssetBuiltInThemeSource
 import app.strata.launcher.core.data.theme.AtomicFileThemeFileStore
 import app.strata.launcher.core.data.theme.BootAttempts
@@ -32,13 +33,16 @@ import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
+import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.LockService
 import app.strata.launcher.core.platformapi.system.RoleController
+import app.strata.launcher.core.platformapi.system.SharedFiles
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
 import app.strata.launcher.core.theme.store.ThemeLibrary
+import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.diagnostics.LogcatSink
 import app.strata.launcher.platform.apps.AndroidProfileSource
@@ -46,6 +50,7 @@ import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
 import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
 import app.strata.launcher.platform.icons.SystemIconProvider
 import app.strata.launcher.platform.system.AndroidAnimatorScaleSource
+import app.strata.launcher.platform.system.AndroidDocumentIO
 import app.strata.launcher.platform.system.AndroidDynamicColorsSource
 import app.strata.launcher.platform.system.AndroidLockService
 import app.strata.launcher.platform.system.AndroidRoleController
@@ -55,12 +60,14 @@ import app.strata.launcher.platform.system.AndroidTimeTicks
 import app.strata.launcher.platform.system.AndroidWallpaperColorsSource
 import app.strata.launcher.platform.system.IcuCollation
 import app.strata.launcher.platform.system.ViewHaptics
+import app.strata.launcher.theme.FileProviderSharedFiles
 import app.strata.launcher.theme.PlatformThemeInputs
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Production bindings. Everything is lazy: building the graph does no I/O (ARCHITECTURE §10 step 1). */
@@ -192,7 +199,17 @@ class DefaultAppGraph(context: Context) : AppGraph {
         )
     }
 
-    override val themeRepository: ThemeRepository by lazy {
+    override val themeRepository: ThemeRepository get() = defaultThemeRepository
+
+    override val themeManager: ThemeManager get() = defaultThemeRepository
+
+    override val documents: DocumentIO by lazy { AndroidDocumentIO(appContext, dispatchers.io) }
+
+    override val sharedFiles: SharedFiles by lazy {
+        FileProviderSharedFiles(appContext, dispatchers.io, Clock.System, logger)
+    }
+
+    private val defaultThemeRepository: DefaultThemeRepository by lazy {
         DefaultThemeRepository(
             createLibrary = {
                 ThemeLibrary(
@@ -215,12 +232,43 @@ class DefaultAppGraph(context: Context) : AppGraph {
             resolveDispatcher = dispatchers.default,
             scope = appScope,
             logger = logger,
+            media =
+                AndroidThemeMedia(
+                    importCacheDir = { File(appContext.cacheDir, AndroidThemeMedia.IMPORT_DIR) },
+                    maxDecodeSide = {
+                        val m = appContext.resources.displayMetrics
+                        2 * maxOf(m.widthPixels, m.heightPixels)
+                    },
+                    logger = logger,
+                ),
         )
     }
+
+    private val themeStarted =
+        java.util.concurrent.atomic
+            .AtomicBoolean(false)
 
     override fun startTheme() {
         themeInputs.start()
         themeRepository.start()
+        // THEME_SYSTEM §10.1: share copies older than 24 h are deleted at process start.
+        if (themeStarted.compareAndSet(false, true)) {
+            appScope.launch {
+                sharedFiles.purgeExpired()
+                withContext(dispatchers.io) { purgeImportCache() }
+            }
+        }
+    }
+
+    /**
+     * Font-check temp dirs (`cacheDir/import/<random>/`) are deleted in `finally`; a process killed mid-check leaves one.
+     * Dirs older than an hour are removed at start (a younger one may belong to an import running right now).
+     */
+    private fun purgeImportCache() {
+        val now = System.currentTimeMillis()
+        File(appContext.cacheDir, AndroidThemeMedia.IMPORT_DIR).listFiles()?.forEach { dir ->
+            if (now - dir.lastModified() > IMPORT_CACHE_MAX_AGE_MS) dir.deleteRecursively()
+        }
     }
 
     override fun refreshThemeInputs() = themeInputs.refresh()
@@ -241,6 +289,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
         const val TAG = "AppGraph"
         const val ICON_PARALLELISM = 4
         const val THEMES_DIR = "themes"
+        const val IMPORT_CACHE_MAX_AGE_MS = 60 * 60 * 1000L
     }
 }
 

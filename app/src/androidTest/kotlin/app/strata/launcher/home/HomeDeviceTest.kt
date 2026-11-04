@@ -203,8 +203,15 @@ class HomeDeviceTest {
         // compose test only sees resumed activities, so wait until one is in front again.
         compose.waitUntil(20_000) { device.currentPackageName == ownPackage && resumedHome() != null }
         compose.onNodeWithTag(HomeTestTags.DATE).performClick()
-        device.waitForIdle()
-        device.pressBack()
+        runCatching { compose.waitUntil(20_000) { device.currentPackageName != ownPackage } }
+        // A fresh emulator's calendar opens a first-run screen that may need more than one Back. End only once home is
+        // resumed again: closing the scenario mid-transition fails with "Current state was null" (CI run 41818633704,
+        // API 34).
+        compose.waitUntil(30_000) {
+            val back = device.currentPackageName == ownPackage && resumedHome() != null
+            if (!back) device.pressBack()
+            back
+        }
     }
 
     /** T-HOME-07: "hide status bar" hides it on home; it is visible again in another app. */

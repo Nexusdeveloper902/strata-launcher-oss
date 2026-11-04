@@ -35,13 +35,19 @@ data class ThemeBanner(
     val details: String,
 )
 
-/** One row of the library listing (M4 uses it only for the debug switch; M5 builds the picker on it). */
+/** One row of the theme library (THEME_SYSTEM §11, FR-THEME-27). */
 data class ThemeSummary(
     val id: String,
     val name: String,
     val builtIn: Boolean,
     /** Stored but not applicable (`needsAppUpdate` or "Caused a problem — not applied"). */
     val applicable: Boolean,
+    /** Built-ins only: hidden from the picker (§11.3). */
+    val hidden: Boolean = false,
+    val needsAppUpdate: Boolean = false,
+    val causedProblem: Boolean = false,
+    /** Stored static contrast status (§7.3), null when unknown. */
+    val contrast: app.strata.launcher.core.theme.contrast.ContrastStatus? = null,
 )
 
 /**

@@ -31,6 +31,8 @@ message StoredThemeEntry {
   bool needs_app_update = 9;
   // "Caused a problem — not applied" (crash-loop guard, §12 step 4).
   bool caused_problem = 10;
+  // Built-in preset hidden from the picker (§11.3); BUILTIN entries exist only to carry this flag.
+  bool hidden = 11;
 }
 
 message StoredThemeIndex {

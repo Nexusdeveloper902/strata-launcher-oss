@@ -5,6 +5,7 @@ import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
+import app.strata.launcher.core.platformapi.system.WallpaperHandoff
 
 /**
  * [TextFolding] from a fixed table (pure JVM; no ICU on this module's runtime classpath, T-CI-02).
@@ -55,10 +56,50 @@ class FakeSystemIntents(
 
     override fun accessibilitySettings(): LaunchResult = start(ACCESSIBILITY)
 
+    /** (uri, mime) of every share sheet started. */
+    val shares = mutableListOf<Pair<String, String>>()
+
+    override fun share(
+        contentUri: String,
+        mimeType: String,
+        title: String,
+    ): LaunchResult {
+        if (SHARE in missing) return Outcome.Err(LaunchError.NOT_FOUND)
+        shares += contentUri to mimeType
+        return Outcome.Ok(Unit)
+    }
+
+    /** Whether a crop activity / an ATTACH_DATA handler resolves (T-THEME-42). */
+    var cropHandler = true
+    var attachHandler = true
+
+    /** (kind, uri) of every wallpaper hand-off started: kind is [CROP] or [ATTACH]. */
+    val wallpaperHandoffs = mutableListOf<Pair<String, String>>()
+
+    override fun setWallpaper(contentUri: String): WallpaperHandoff =
+        when {
+            cropHandler -> {
+                wallpaperHandoffs += CROP to contentUri
+                WallpaperHandoff.CROP_AND_SET
+            }
+
+            attachHandler -> {
+                wallpaperHandoffs += ATTACH to contentUri
+                WallpaperHandoff.ATTACH_DATA
+            }
+
+            else -> {
+                WallpaperHandoff.NO_HANDLER
+            }
+        }
+
     companion object {
         const val ALARMS = "alarms"
         const val CALENDAR = "calendar"
         const val WALLPAPER = "wallpaper"
         const val ACCESSIBILITY = "accessibility"
+        const val SHARE = "share"
+        const val CROP = "crop"
+        const val ATTACH = "attach"
     }
 }

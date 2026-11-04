@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Strata Launcher. Skeleton: spec/ANDROID_PLATFORM.md §22 with the ARCHITECTURE §17 deltas.
-     M0 declares only HomeActivity and SettingsActivity; the other components of §22 arrive with
-     their milestones. Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
+     Components of §22 arrive with their milestones (M5: ThemeImportActivity, FileProvider; ThemesActivity is
+     the non-exported theme library). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -92,5 +92,50 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Theme library (FR-THEME-27), opened from the home menu. Not exported. -->
+        <activity
+            android:name=".theme.ThemesActivity"
+            android:exported="false"
+            android:label="@string/themes_label"
+            android:taskAffinity="app.strata.launcher.settings" />
+
+        <!-- Theme import from other apps (FR-THEME-21). MIME list = THEME_SYSTEM §3.1 (canonical).
+             VIEW carries the URI in getData, so the filter pins scheme="content".
+             SEND carries it in EXTRA_STREAM (no data URI), so its filter has no scheme;
+             the activity rejects any EXTRA_STREAM that is not content: (ARCHITECTURE §13). -->
+        <activity
+            android:name=".theme.ThemeImportActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/theme_import_label">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity>
+
+        <!-- Share exported themes and hand theme wallpapers to the system via content:// URIs
+             (FR-THEME-23, FR-THEME-34). Not exported; access only through per-URI grants (T-SEC-05). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" /> <!-- only <cache-path path="share/"/> -->
+        </provider>
     </application>
 </manifest>

@@ -34,4 +34,21 @@ interface SystemIntents {
 
     /** FR-GEST-03: the system accessibility settings, where the lock service is turned on. */
     fun accessibilitySettings(): LaunchResult
+
+    /**
+     * Share sheet for a `content:` URI from [SharedFiles] (FR-THEME-23): `ACTION_SEND` with `EXTRA_STREAM`, [mimeType]
+     * and `FLAG_GRANT_READ_URI_PERMISSION`, in a chooser titled [title].
+     */
+    fun share(
+        contentUri: String,
+        mimeType: String,
+        title: String,
+    ): LaunchResult
+
+    /**
+     * FR-THEME-34 / ANDROID_PLATFORM §12: hands an `content:` URI with an image MIME type from our `FileProvider` to the system
+     * wallpaper activity (`getCropAndSetWallpaperIntent`, with a read grant), falling back to `ACTION_ATTACH_DATA`.
+     * Never calls `WallpaperManager.set*` (no `SET_WALLPAPER`, D-009).
+     */
+    fun setWallpaper(contentUri: String): WallpaperHandoff
 }
