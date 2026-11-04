@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.icu.text.Transliterator
+import android.net.Uri
 import android.os.Build
 import android.provider.AlarmClock
 import android.provider.CalendarContract
@@ -86,6 +87,9 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
     override fun wallpaperPicker(): LaunchResult = start(Intent(Intent.ACTION_SET_WALLPAPER))
 
     override fun accessibilitySettings(): LaunchResult = start(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+
+    override fun uninstallStrata(): LaunchResult =
+        start(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", appContext.packageName, null)))
 
     override fun share(
         contentUri: String,

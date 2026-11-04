@@ -56,7 +56,11 @@ class HomeHarness(
     themeRepository: ThemeRepository? = null,
     /** Installed icon packs (FR-APPS-06 notices). */
     val iconPacks: MutableStateFlow<IconPacks> = MutableStateFlow(IconPacks(discovered = true)),
+    val role: FakeRoleController = FakeRoleController(defaultHome = true),
 ) {
+    /** Taps on the APP_MODE banner's "Set as default". */
+    var setDefaultTaps = 0
+
     val catalog = FakeAppCatalog(Catalog(apps, fromSnapshot = false))
     val overrides = FakeOverridesRepository()
     val favoritesRepo = FakeFavoritesRepository(favorites)
@@ -81,7 +85,7 @@ class HomeHarness(
 
     val vm =
         HomeViewModel(
-            roleController = FakeRoleController(defaultHome = true),
+            roleController = role,
             settings = settingsRepo,
             appList = appList,
             catalog = catalog,
@@ -125,8 +129,8 @@ class HomeHarness(
             effects = vm.effects,
             onAction = vm::onAction,
             onNavigate = { navigations += it },
-            showSetDefaultButton = false,
-            onSetDefault = {},
+            showSetDefaultButton = true,
+            onSetDefault = { setDefaultTaps++ },
             searchLayer = { Box(Modifier.fillMaxSize().testTag(SEARCH_STUB)) },
         )
     }

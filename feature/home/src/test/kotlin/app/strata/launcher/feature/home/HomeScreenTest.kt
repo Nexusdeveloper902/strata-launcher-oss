@@ -20,6 +20,7 @@ import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.model.IndexVisibility
 import app.strata.launcher.core.ui.AlphabetIndexTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
+import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeSystemIntents
 import app.strata.launcher.testing.fixtures.AppFixtures.app
 import com.google.common.truth.Truth.assertThat
@@ -258,5 +259,25 @@ class HomeScreenTest {
         compose.onRoot().performTouchInput { doubleClick(point) }
         compose.waitForIdle()
         assertThat(h.lockService.locks).isEqualTo(1)
+    }
+
+    /**
+     * T-ONBOARD-06 (C): after "Not now" Strata is usable as an app and home shows the dismissible "Set as default"
+     * banner; Dismiss hides it (for 24 h, settings field 19).
+     */
+    @Test
+    fun tOnboard06_dismissibleBanner() {
+        val h = HomeHarness(apps, role = FakeRoleController(defaultHome = false))
+        h.setContent(compose)
+        h.vm.onAction(HomeAction.RefreshRole)
+        compose.waitForIdle()
+        compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER).assertIsDisplayed()
+        compose.onNodeWithTag(HomeTestTags.SET_DEFAULT_BUTTON).performClick()
+        assertThat(h.setDefaultTaps).isEqualTo(1)
+        compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER_DISMISS).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(HomeTestTags.APP_MODE_BANNER).assertDoesNotExist()
+        assertThat(h.settingsRepo.value.defaultHomeBannerDismissedUntil).isGreaterThan(0L)
+        compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()
     }
 }

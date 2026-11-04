@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Strata Launcher. Skeleton: spec/ANDROID_PLATFORM.md §22 with the ARCHITECTURE §17 deltas.
      Components of §22 arrive with their milestones (M5: ThemeImportActivity, FileProvider; ThemesActivity is
-     the non-exported theme library). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
+     the non-exported theme library; M6: PinRequestActivity). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -90,6 +90,20 @@
             <intent-filter>
                 <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
                 <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Pin shortcut / pin widget confirmation (default launcher target, ANDROID_PLATFORM §6, §22). v1 declines
+             every request (FR-APPS-08 pins are v1.x); a forged intent finishes at once (T-SEC-02). -->
+        <activity
+            android:name=".pin.PinRequestActivity"
+            android:autoRemoveFromRecents="true"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/Theme.Strata.Dialog">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+                <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
             </intent-filter>
         </activity>
 

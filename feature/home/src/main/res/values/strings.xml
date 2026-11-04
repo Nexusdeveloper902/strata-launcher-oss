@@ -2,6 +2,8 @@
 <resources>
     <string name="home_banner_not_default">Strata is not your default home app. The Home key opens another launcher.</string>
     <string name="home_banner_set_default">Set as default</string>
+    <string name="home_banner_lost">Strata is no longer your home app.</string>
+    <string name="home_banner_set_again">Set again</string>
 
     <!-- Home → list (INTERACTION_SPEC §3, VISUAL_SPEC §9.2) -->
     <string name="home_all_apps">All apps ›</string>

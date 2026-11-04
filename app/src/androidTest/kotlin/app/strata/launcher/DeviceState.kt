@@ -19,6 +19,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
+import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
@@ -115,6 +116,37 @@ fun ComposeTestRule.openAllApps(timeoutMillis: Long = 10_000) {
         throw AssertionError("List not shown within $timeoutMillis ms (allAppsStillShown=$allAppsStillShown)", e)
     }
 }
+
+/**
+ * Completes the first-run flow (FR-ONBOARD-01) when it is showing, without changes: Welcome → Skip favourites → the
+ * set-default step (Continue while Strata is home, else "Not now") → Done. The Orchestrator clears app data before
+ * every test, so each HomeActivity test starts with it. Returns the number of screens passed.
+ */
+fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
+    fun count(tag: String) = onAllNodesWithTag(tag).fetchSemanticsNodes().size
+
+    fun next(): String? =
+        when {
+            count(OnboardingTestTags.ROOT) == 0 -> null
+            count(OnboardingTestTags.WELCOME) > 0 -> OnboardingTestTags.CONTINUE
+            count(OnboardingTestTags.SKIP) > 0 -> OnboardingTestTags.SKIP
+            count(OnboardingTestTags.NOT_NOW) > 0 -> OnboardingTestTags.NOT_NOW
+            count(OnboardingTestTags.CONTINUE) > 0 -> OnboardingTestTags.CONTINUE
+            else -> ""
+        }
+    var screens = 0
+    while (screens < MAX_ONBOARDING_SCREENS) {
+        waitForIdle()
+        // The set-default step shows its buttons once the role check (off main) has finished.
+        waitUntil(timeoutMillis) { next() != "" }
+        val tag = next() ?: return screens
+        onNodeWithTag(tag).performClick()
+        screens++
+    }
+    throw AssertionError("Onboarding still shown after $screens screens")
+}
+
+private const val MAX_ONBOARDING_SCREENS = 6
 
 /**
  * Device state for the home device tests, set before the activity starts and restored afterwards:

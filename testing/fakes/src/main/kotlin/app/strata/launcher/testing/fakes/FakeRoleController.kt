@@ -1,5 +1,6 @@
 package app.strata.launcher.testing.fakes
 
+import app.strata.launcher.core.platformapi.system.DeviceBuild
 import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntent
 
@@ -13,6 +14,7 @@ class FakeRoleController(
             SystemIntent.DefaultAppsSettings,
             SystemIntent.Settings,
         ),
+    var device: DeviceBuild = DeviceBuild.UNKNOWN,
 ) : RoleController {
     var isDefaultHomeCalls: Int = 0
         private set
@@ -25,4 +27,6 @@ class FakeRoleController(
     override fun requestIntent(): SystemIntent = request
 
     override fun fallbackIntents(): List<SystemIntent> = fallbacks
+
+    override fun deviceBuild(): DeviceBuild = device
 }

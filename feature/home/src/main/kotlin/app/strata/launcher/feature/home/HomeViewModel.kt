@@ -97,6 +97,15 @@ sealed interface IconNotice {
     data class OverridePackGone(override val packageName: String) : IconNotice
 }
 
+/** The APP_MODE banner (FR-ONBOARD-02 "Not now", FR-ONBOARD-04 lost default). */
+enum class DefaultHomeBanner {
+    /** Strata has not been the home app in this process: "Strata isn't your home app" [Set as default]. */
+    NOT_DEFAULT,
+
+    /** Strata was the home app earlier in this process: "Strata is no longer your home app" [Set again]. */
+    LOST,
+}
+
 data class HomeUiState(
     /** `null` until the stored flag has been read. */
     val onboardingDone: Boolean? = null,
@@ -131,9 +140,14 @@ data class HomeUiState(
     val lockGestureOn: Boolean = false,
     /** The lock service is enabled in the system settings. */
     val lockServiceEnabled: Boolean = false,
+    /**
+     * INTERACTION_SPEC APP_MODE banner: the role is not held, onboarding is over and the banner was not dismissed in the
+     * last 24 h (FR-ONBOARD-04; settings field 19). Null when hidden.
+     */
+    val defaultBanner: DefaultHomeBanner? = null,
 ) {
-    /** INTERACTION_SPEC APP_MODE: same UI plus a banner while the role is not held (FR-ONBOARD-02). */
-    val showAppModeBanner: Boolean get() = isDefaultHome == false
+    /** INTERACTION_SPEC APP_MODE: same UI plus a dismissible banner while the role is not held (FR-ONBOARD-02/04). */
+    val showAppModeBanner: Boolean get() = defaultBanner != null
 
     /** D-008: onboarding is the first layer of home until `onboarding_done` is set. */
     val showOnboarding: Boolean get() = onboardingDone == false
@@ -155,6 +169,9 @@ data class HomeUiState(
 sealed interface HomeAction {
     /** `onResume`: the user may have changed the home app in Settings (FR-ONBOARD-04). */
     data object RefreshRole : HomeAction
+
+    /** The APP_MODE banner's Dismiss: hidden for 24 h (FR-ONBOARD-04). */
+    data object DismissDefaultBanner : HomeAction
 
     /** `onNewIntent(MAIN + HOME)` while home is in front (ANDROID_PLATFORM §1, INTERACTION_SPEC §6). */
     data object HomePressed : HomeAction
@@ -359,6 +376,13 @@ class HomeViewModel(
     /** Override packs whose notice was dismissed (or used) in this process: shown once each. */
     private val dismissedOverridePacks = MutableStateFlow<Set<String>>(emptySet())
     private val isDefaultHome = MutableStateFlow<Boolean?>(null)
+
+    /** Strata held the role at some check in this process (the banner then says "no longer", FR-ONBOARD-04). */
+    private var wasDefault = false
+    private val lostDefault = MutableStateFlow(false)
+
+    /** Clock time of the last role check: the banner's 24 h dismissal is compared against it. */
+    private val roleCheckedAt = MutableStateFlow(clock.nowMillis())
     private val local = MutableStateFlow(Local())
     private var searchSessions = 0
     private var jumps = 0
@@ -394,6 +418,15 @@ class HomeViewModel(
         val iconNotice: IconNotice?,
     )
 
+    private data class RoleView(
+        val isDefault: Boolean?,
+        val lost: Boolean,
+        val checkedAt: Long,
+    )
+
+    private val roleView: Flow<RoleView> =
+        combine(isDefaultHome, lostDefault, roleCheckedAt) { d, l, t -> RoleView(d, l, t) }
+
     private val iconNotice: Flow<IconNotice?> =
         combine(
             theme?.state?.map { it.packNotice }?.distinctUntilChanged() ?: flowOf(null),
@@ -409,12 +442,12 @@ class HomeViewModel(
         combine(
             currentSettings,
             currentList,
-            isDefaultHome,
+            roleView,
             local,
             combine(resetNotices.causes, favoriteKeys, lockService.enabled, themeBanner, iconNotice) { r, f, l, b, n ->
                 Extras(r, f, l, b, n)
             },
-        ) { s, list, isDefault, ui, (resets, favKeys, lockEnabled, banner, notice) ->
+        ) { s, list, role, ui, (resets, favKeys, lockEnabled, banner, notice) ->
             val shown =
                 list
                     ?.sections
@@ -425,7 +458,7 @@ class HomeViewModel(
             val sheetApp = sheetKey?.let { key -> list?.allApps?.firstOrNull { it.key == key } }
             HomeUiState(
                 onboardingDone = s?.onboardingDone,
-                isDefaultHome = isDefault,
+                isDefaultHome = role.isDefault,
                 layer = ui.layer,
                 search = ui.search.takeIf { ui.layer == HomeLayer.SEARCH },
                 list = list,
@@ -445,6 +478,7 @@ class HomeViewModel(
                 listJump = ui.jump,
                 lockGestureOn = lockService.supported && s?.lockGestureEnabled == true,
                 lockServiceEnabled = lockEnabled,
+                defaultBanner = defaultBanner(s, role),
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
 
@@ -465,6 +499,13 @@ class HomeViewModel(
         when (action) {
             HomeAction.RefreshRole -> {
                 refreshRole()
+            }
+
+            HomeAction.DismissDefaultBanner -> {
+                val until = clock.nowMillis() + BANNER_SNOOZE_MS
+                guardedWrite("dismiss default banner") {
+                    settings.update { it.copy(defaultHomeBannerDismissedUntil = until) }
+                }
             }
 
             HomeAction.HomePressed -> {
@@ -662,8 +703,22 @@ class HomeViewModel(
     private fun refreshRole() {
         lockService.refresh()
         viewModelScope.launch {
-            isDefaultHome.value = withContext(ioDispatcher) { roleController.isDefaultHome() }
+            val held = withContext(ioDispatcher) { roleController.isDefaultHome() }
+            if (held) wasDefault = true
+            lostDefault.value = !held && wasDefault
+            roleCheckedAt.value = clock.nowMillis()
+            isDefaultHome.value = held
         }
+    }
+
+    /** FR-ONBOARD-02/04: shown while the role is not held, after onboarding, unless dismissed in the last 24 h. */
+    private fun defaultBanner(
+        s: Settings?,
+        role: RoleView,
+    ): DefaultHomeBanner? {
+        if (s == null || !s.onboardingDone || role.isDefault != false) return null
+        if (role.checkedAt < s.defaultHomeBannerDismissedUntil) return null
+        return if (role.lost) DefaultHomeBanner.LOST else DefaultHomeBanner.NOT_DEFAULT
     }
 
     /**
@@ -966,3 +1021,6 @@ class HomeViewModel(
 }
 
 private const val TAG = "Home"
+
+/** FR-ONBOARD-04: a dismissed default-home banner stays hidden for 24 h. */
+internal const val BANNER_SNOOZE_MS: Long = 24L * 60 * 60 * 1000

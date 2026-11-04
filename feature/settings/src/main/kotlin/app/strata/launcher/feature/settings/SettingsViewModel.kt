@@ -2,6 +2,7 @@ package app.strata.launcher.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.VisibleApp
@@ -10,8 +11,10 @@ import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.LockService
+import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +26,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** The boolean settings this page edits (ARCHITECTURE §4.2 rows; FR-SET-05, FR-HOME-04/05/08, FR-GEST-05). */
 enum class Toggle {
@@ -73,6 +78,10 @@ data class SettingsUiState(
     val lockServiceEnabled: Boolean = false,
     /** The lock disclosure (ANDROID_PLATFORM §10: prominent disclosure before the system grant). */
     val showLockDisclosure: Boolean = false,
+    /** FR-SET-02 "Default home" status; `null` until checked. */
+    val defaultHome: Boolean? = null,
+    /** FR-SET-02: "switch the home app first" guidance before uninstalling Strata. */
+    val showUninstallGuidance: Boolean = false,
 )
 
 sealed interface SettingsAction {
@@ -95,6 +104,19 @@ sealed interface SettingsAction {
     data object OpenAccessibilitySettings : SettingsAction
 
     data object Resume : SettingsAction
+
+    /** FR-SET-02 "Default home" row: the set-default flow, or the home settings when Strata already is home. */
+    data object DefaultHomeRow : SettingsAction
+
+    /** FR-SET-02 "Uninstall Strata": guidance first while Strata is home, else the system uninstall dialog. */
+    data object UninstallStrata : SettingsAction
+
+    data object UninstallGuidanceContinue : SettingsAction
+
+    data object DismissUninstallGuidance : SettingsAction
+
+    /** The home settings opened by [SettingsEffect.OpenHomeSettings] returned. */
+    data class HomeSettingsReturned(val forUninstall: Boolean) : SettingsAction
 }
 
 sealed interface SettingsEffect {
@@ -104,6 +126,15 @@ sealed interface SettingsEffect {
 
     /** A storage write failed; the change was not saved. */
     data object WriteFailed : SettingsEffect
+
+    /** Start the set-default flow (FR-ONBOARD-02) in the host activity. */
+    data object SetDefault : SettingsEffect
+
+    /**
+     * Open the system home settings for a result (`HOME_SETTINGS` chain); the host reports the return with
+     * [SettingsAction.HomeSettingsReturned]. [forUninstall]: the uninstall dialog follows once Strata is no longer home.
+     */
+    data class OpenHomeSettings(val forUninstall: Boolean) : SettingsEffect
 }
 
 /**
@@ -118,8 +149,11 @@ class SettingsViewModel(
     private val lockService: LockService,
     private val systemIntents: SystemIntents,
     private val logger: Logger,
+    private val roleController: RoleController,
+    private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
     private val disclosure = MutableStateFlow(false)
+    private val role = MutableStateFlow(RoleUi())
     private val effectChannel = Channel<SettingsEffect>(Channel.BUFFERED)
 
     val effects: Flow<SettingsEffect> = effectChannel.receiveAsFlow()
@@ -130,13 +164,16 @@ class SettingsViewModel(
             appList.appList.map { it.hiddenApps }.onStart { emit(emptyList()) },
             lockService.enabled,
             disclosure,
-        ) { s, hidden, lockEnabled, showDisclosure ->
+            role,
+        ) { s, hidden, lockEnabled, showDisclosure, r ->
             SettingsUiState(
                 settings = s,
                 hiddenApps = hidden,
                 lockSupported = lockService.supported,
                 lockServiceEnabled = lockEnabled,
                 showLockDisclosure = showDisclosure,
+                defaultHome = r.held,
+                showUninstallGuidance = r.guidance,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState(lockSupported = lockService.supported))
 
@@ -185,9 +222,66 @@ class SettingsViewModel(
 
             SettingsAction.Resume -> {
                 lockService.refresh()
+                checkRole()
+            }
+
+            SettingsAction.DefaultHomeRow -> {
+                checkRole { held ->
+                    effectChannel.trySend(
+                        if (held) SettingsEffect.OpenHomeSettings(false) else SettingsEffect.SetDefault,
+                    )
+                }
+            }
+
+            SettingsAction.UninstallStrata -> {
+                checkRole { held -> if (held) role.update { it.copy(guidance = true) } else uninstallStrata() }
+            }
+
+            SettingsAction.UninstallGuidanceContinue -> {
+                role.update { it.copy(guidance = false) }
+                effectChannel.trySend(SettingsEffect.OpenHomeSettings(forUninstall = true))
+            }
+
+            SettingsAction.DismissUninstallGuidance -> {
+                role.update { it.copy(guidance = false) }
+            }
+
+            is SettingsAction.HomeSettingsReturned -> {
+                checkRole { held ->
+                    // T-SET-03: after switching the home app, the system uninstall dialog opens.
+                    if (action.forUninstall) {
+                        if (held) role.update { it.copy(guidance = true) } else uninstallStrata()
+                    }
+                }
             }
         }
     }
+
+    /** Re-reads the role off main; [then] runs with the result on the main thread. */
+    private fun checkRole(then: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val held =
+                try {
+                    withContext(ioDispatcher) { roleController.isDefaultHome() }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.w(TAG, "role check failed", e)
+                    return@launch
+                }
+            role.update { it.copy(held = held) }
+            then(held)
+        }
+    }
+
+    private fun uninstallStrata() {
+        if (systemIntents.uninstallStrata() !is Outcome.Ok) effectChannel.trySend(SettingsEffect.NoHandler)
+    }
+
+    private data class RoleUi(
+        val held: Boolean? = null,
+        val guidance: Boolean = false,
+    )
 
     /** A failed storage write is logged and shown as [SettingsEffect.WriteFailed]; cancellation is rethrown. */
     private fun guardedWrite(
@@ -207,7 +301,7 @@ class SettingsViewModel(
     }
 
     private fun openAccessibility() {
-        if (systemIntents.accessibilitySettings() !is app.strata.launcher.core.common.Outcome.Ok) {
+        if (systemIntents.accessibilitySettings() !is Outcome.Ok) {
             effectChannel.trySend(SettingsEffect.NoHandler)
         }
     }

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import androidx.annotation.RequiresApi
+import app.strata.launcher.core.platformapi.system.DeviceBuild
 import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntent
 
@@ -38,6 +39,14 @@ class AndroidRoleController(context: Context) : RoleController {
         }
 
     override fun fallbackIntents(): List<SystemIntent> = FALLBACK_CHAIN
+
+    override fun deviceBuild(): DeviceBuild =
+        DeviceBuild(
+            manufacturer = Build.MANUFACTURER.orEmpty(),
+            brand = Build.BRAND.orEmpty(),
+            fingerprint = Build.FINGERPRINT.orEmpty(),
+            incremental = Build.VERSION.INCREMENTAL.orEmpty(),
+        )
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun roleAvailable(): Boolean =

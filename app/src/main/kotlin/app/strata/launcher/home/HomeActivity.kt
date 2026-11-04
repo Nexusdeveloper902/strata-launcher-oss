@@ -1,18 +1,14 @@
 package app.strata.launcher.home
 
-import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
@@ -29,11 +25,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.BuildConfig
 import app.strata.launcher.appGraph
-import app.strata.launcher.core.platformapi.system.SystemIntent
 import app.strata.launcher.core.ui.LocalIconLoader
 import app.strata.launcher.di.localeTags
 import app.strata.launcher.feature.home.HomeAction
@@ -44,10 +40,14 @@ import app.strata.launcher.feature.home.HomeModal
 import app.strata.launcher.feature.home.HomeRoute
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.home.rememberAppActions
-import app.strata.launcher.feature.onboarding.OnboardingStubScreen
+import app.strata.launcher.feature.onboarding.OnboardingAction
+import app.strata.launcher.feature.onboarding.OnboardingRoute
+import app.strata.launcher.feature.onboarding.OnboardingViewModel
+import app.strata.launcher.feature.onboarding.SetDefaultDialogs
+import app.strata.launcher.feature.onboarding.SetDefaultViewModel
 import app.strata.launcher.feature.search.SearchRoute
 import app.strata.launcher.feature.search.SearchViewModel
-import app.strata.launcher.platform.system.SystemIntentFactory
+import app.strata.launcher.onboarding.SystemScreenLauncher
 import app.strata.launcher.settings.SettingsActivity
 import app.strata.launcher.theme.IconChooserActivity
 import app.strata.launcher.theme.ThemeHost
@@ -104,20 +104,37 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
-    private var roleRequestStartedAt = 0L
+    /** D-008: the first-run flow as home's first layer while `onboarding_done` is false (FR-ONBOARD-01). */
+    private val onboardingViewModel: OnboardingViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                OnboardingViewModel(
+                    appList = graph.appList,
+                    favorites = graph.favorites,
+                    settings = graph.settingsRepository,
+                    roles = graph.roleController,
+                    io = graph.dispatchers.io,
+                    logger = graph.logger,
+                    handle = createSavedStateHandle(),
+                )
+            }
+        }
+    }
+
+    /** The APP_MODE banner's "Set as default" / "Set again" (FR-ONBOARD-02/04). */
+    private val setDefaultViewModel: SetDefaultViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                SetDefaultViewModel(graph.roleController, graph.dispatchers.io, graph.logger)
+            }
+        }
+    }
+
+    private val systemScreens = SystemScreenLauncher(this) { appGraph.logger }
 
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
-
-    private val roleRequest =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val elapsed = SystemClock.elapsedRealtime() - roleRequestStartedAt
-            appGraph.logger.i(TAG, "role request result=${result.resultCode} after ${elapsed}ms")
-            if (result.resultCode != Activity.RESULT_OK && elapsed < SILENT_REFUSAL_MS) {
-                // "Don't ask again" refuses at once without UI (ANDROID_PLATFORM §2): go to settings instead of looping.
-                launchFallback()
-            }
-            viewModel.onAction(HomeAction.RefreshRole)
-        }
 
     /** Debug builds only: the search layer's Back/IME close decisions (booleans, no query), as `Strata/SearchClose`. */
     private val searchCloseLog: (String) -> Unit =
@@ -134,6 +151,8 @@ class HomeActivity : ComponentActivity() {
         appGraph.startCatalog()
         appGraph.attachWindow(window.decorView)
         val iconLoader = ProviderIconLoader(appGraph.iconProvider)
+        systemScreens.bind(onboardingViewModel.setDefault)
+        systemScreens.bind(setDefaultViewModel.flow)
         themeHost.holdFirstFrame(window.decorView)
         setContent {
             themeHost.Content(window) {
@@ -149,8 +168,8 @@ class HomeActivity : ComponentActivity() {
                         effects = viewModel.effects,
                         onAction = viewModel::onAction,
                         onNavigate = ::navigate,
-                        showSetDefaultButton = BuildConfig.DEBUG,
-                        onSetDefault = ::requestDefaultHome,
+                        showSetDefaultButton = true,
+                        onSetDefault = { setDefaultViewModel.flow.setAsDefault() },
                         timeTicks = appGraph.timeTicks.ticks,
                         searchLayer = { session ->
                             val searchState by searchViewModel.state.collectAsStateWithLifecycle()
@@ -168,7 +187,18 @@ class HomeActivity : ComponentActivity() {
                         },
                     )
                     if (state.showOnboarding) {
-                        OnboardingStubScreen(onContinue = { viewModel.onAction(HomeAction.CompleteOnboarding) })
+                        val onboarding by onboardingViewModel.state.collectAsStateWithLifecycle()
+                        // Done or "Not now" store `onboarding_done`; home's state then removes this layer.
+                        OnboardingRoute(
+                            state = onboarding,
+                            effects = onboardingViewModel.effects,
+                            onAction = onboardingViewModel::onAction,
+                            onFinished = {},
+                            onLeave = null,
+                        )
+                    } else {
+                        val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
+                        SetDefaultDialogs(setDefault, setDefaultViewModel.flow)
                     }
                 }
             }
@@ -287,6 +317,8 @@ class HomeActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onAction(HomeAction.RefreshRole)
+        onboardingViewModel.onAction(OnboardingAction.Resume)
+        setDefaultViewModel.flow.refresh()
     }
 
     /**
@@ -321,47 +353,5 @@ class HomeActivity : ComponentActivity() {
         if (HomeIntents.isHomePress(intent.action, intent.categories)) {
             viewModel.onAction(HomeAction.HomePressed)
         }
-    }
-
-    /** Debug "Set default" (IMPLEMENTATION_ROADMAP M0): role request on 29+, settings chain otherwise. */
-    private fun requestDefaultHome() {
-        val roles = appGraph.roleController
-        when (val first = roles.requestIntent()) {
-            SystemIntent.RequestHomeRole -> {
-                val intent = SystemIntentFactory.create(this, first)
-                if (intent == null) {
-                    launchFallback()
-                    return
-                }
-                roleRequestStartedAt = SystemClock.elapsedRealtime()
-                try {
-                    roleRequest.launch(intent)
-                } catch (e: ActivityNotFoundException) {
-                    appGraph.logger.w(TAG, "role request activity missing", e)
-                    launchFallback()
-                }
-            }
-
-            else -> {
-                launchFallback()
-            }
-        }
-    }
-
-    private fun launchFallback() {
-        for (target in appGraph.roleController.fallbackIntents()) {
-            val intent = SystemIntentFactory.create(this, target) ?: continue
-            try {
-                startActivity(intent)
-                return
-            } catch (e: ActivityNotFoundException) {
-                appGraph.logger.w(TAG, "no activity for $target", e)
-            }
-        }
-    }
-
-    private companion object {
-        const val TAG = "Home"
-        const val SILENT_REFUSAL_MS = 2_000L
     }
 }

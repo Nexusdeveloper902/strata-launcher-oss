@@ -102,6 +102,7 @@ object HomeTestTags {
     const val ROOT = "home_root"
     const val APP_MODE_BANNER = "home_app_mode_banner"
     const val SET_DEFAULT_BUTTON = "home_set_default_button"
+    const val APP_MODE_BANNER_DISMISS = "home_app_mode_banner_dismiss"
     const val ALL_APPS = "home_all_apps"
     const val RESET_BANNER = "home_reset_banner"
     const val THEME_BANNER = "home_theme_banner"
@@ -440,8 +441,14 @@ fun HomeScreen(
             val iconNotice = state.iconNotice
             if (state.showAppModeBanner || state.showResetBanner || themeBanner != null || iconNotice != null) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (state.showAppModeBanner) {
-                        AppModeBanner(showSetDefaultButton = showSetDefaultButton, onSetDefault = onSetDefault)
+                    val defaultBanner = state.defaultBanner
+                    if (defaultBanner != null) {
+                        AppModeBanner(
+                            kind = defaultBanner,
+                            showSetDefaultButton = showSetDefaultButton,
+                            onSetDefault = onSetDefault,
+                            onDismiss = { onAction(HomeAction.DismissDefaultBanner) },
+                        )
                     }
                     if (state.showResetBanner) ResetBanner { onAction(HomeAction.DismissResetBanner) }
                     if (themeBanner != null) ThemeBannerCard(themeBanner) { onAction(HomeAction.DismissThemeBanner) }
@@ -719,25 +726,55 @@ private fun homeRootActions(
     )
 }
 
+/** FR-ONBOARD-02 "Not now" and FR-ONBOARD-04 lost default: non-blocking, dismissible for 24 h. */
 @Composable
 private fun AppModeBanner(
+    kind: DefaultHomeBanner,
     showSetDefaultButton: Boolean,
     onSetDefault: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth().testTag(HomeTestTags.APP_MODE_BANNER),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(HomeTestTags.APP_MODE_BANNER)
+                .semantics { liveRegion = LiveRegionMode.Polite },
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = stringResource(R.string.home_banner_not_default),
+                text =
+                    stringResource(
+                        if (kind ==
+                            DefaultHomeBanner.LOST
+                        ) {
+                            R.string.home_banner_lost
+                        } else {
+                            R.string.home_banner_not_default
+                        },
+                    ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
-            if (showSetDefaultButton) {
-                Button(onClick = onSetDefault, modifier = Modifier.testTag(HomeTestTags.SET_DEFAULT_BUTTON)) {
-                    Text(text = stringResource(R.string.home_banner_set_default))
+            Row(modifier = Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag(HomeTestTags.APP_MODE_BANNER_DISMISS)) {
+                    Text(text = stringResource(R.string.reset_banner_dismiss))
+                }
+                if (showSetDefaultButton) {
+                    Button(onClick = onSetDefault, modifier = Modifier.testTag(HomeTestTags.SET_DEFAULT_BUTTON)) {
+                        Text(
+                            text =
+                                stringResource(
+                                    if (kind == DefaultHomeBanner.LOST) {
+                                        R.string.home_banner_set_again
+                                    } else {
+                                        R.string.home_banner_set_default
+                                    },
+                                ),
+                        )
+                    }
                 }
             }
         }

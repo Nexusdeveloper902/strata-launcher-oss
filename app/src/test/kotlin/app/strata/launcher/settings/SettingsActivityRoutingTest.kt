@@ -6,7 +6,6 @@ import android.content.Intent
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.TestAppGraph
@@ -15,6 +14,7 @@ import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.feature.settings.SettingsTestTags
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
+import app.strata.launcher.walkOnboarding
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -79,7 +79,7 @@ class SettingsActivityRoutingTest {
         val store = FakeSettingsRepository(Settings(onboardingDone = false))
         TestAppGraph(settingsRepository = store).install()
         val activity = start(launcherIntent())
-        compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
+        assertThat(compose.walkOnboarding { store.value.onboardingDone }).isAtMost(4)
         shadowOf(Looper.getMainLooper()).idle()
         assertThat(store.value.onboardingDone).isTrue()
         assertThat(shadowOf(activity).nextStartedActivity.component)

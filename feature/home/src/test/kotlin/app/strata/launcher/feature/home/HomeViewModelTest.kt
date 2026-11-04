@@ -13,6 +13,7 @@ import app.strata.launcher.core.platformapi.system.HapticKind
 import app.strata.launcher.testing.fakes.FakeAppCatalog
 import app.strata.launcher.testing.fakes.FakeAppLauncher
 import app.strata.launcher.testing.fakes.FakeAppListSource
+import app.strata.launcher.testing.fakes.FakeClock
 import app.strata.launcher.testing.fakes.FakeFavoritesRepository
 import app.strata.launcher.testing.fakes.FakeHaptics
 import app.strata.launcher.testing.fakes.FakeLaunchLogRepository
@@ -282,4 +283,62 @@ class HomeViewModelTest {
         assertThat(HomeKeys.printable(0, ctrl = false, alt = false, meta = false)).isNull()
         assertThat(HomeKeys.printable(-0x7fffffff, ctrl = false, alt = false, meta = false)).isNull()
     }
+
+    private fun bannerViewModel(clock: FakeClock) =
+        HomeViewModel(
+            role,
+            settings,
+            FakeAppListSource(),
+            catalog,
+            launcher,
+            log,
+            haptics,
+            resets,
+            dispatcher,
+            FakeOverridesRepository(),
+            FakeFavoritesRepository(),
+            FakeSystemIntents(),
+            FakeLockService(),
+            logger,
+            clock = clock,
+        )
+
+    /**
+     * T-ONBOARD-08 (R half) and T-LIFE-10 (banner half): the default is lost while Strata runs → "no longer your home
+     * app" on resume. Dismiss hides it for 24 h (FakeClock); after 24 h it is back.
+     */
+    @Test
+    fun tOnboard08_lostDefaultBanner_snoozedFor24h() =
+        runTest(dispatcher) {
+            val clock = FakeClock(now = 1_000_000L)
+            role.defaultHome = true
+            val vm = bannerViewModel(clock)
+            vm.onAction(HomeAction.RefreshRole)
+            assertThat(vm.state.value.defaultBanner).isNull()
+            role.defaultHome = false // switched in Settings / `cmd role`
+            vm.onAction(HomeAction.RefreshRole)
+            assertThat(vm.state.value.defaultBanner).isEqualTo(DefaultHomeBanner.LOST)
+
+            vm.onAction(HomeAction.DismissDefaultBanner)
+            assertThat(settings.value.defaultHomeBannerDismissedUntil).isEqualTo(clock.now + BANNER_SNOOZE_MS)
+            assertThat(vm.state.value.showAppModeBanner).isFalse()
+            clock.advanceBy(BANNER_SNOOZE_MS - 60_000) // reopened within 24 h
+            vm.onAction(HomeAction.RefreshRole)
+            assertThat(vm.state.value.showAppModeBanner).isFalse()
+            clock.advanceBy(120_000) // after 24 h
+            vm.onAction(HomeAction.RefreshRole)
+            assertThat(vm.state.value.defaultBanner).isEqualTo(DefaultHomeBanner.LOST)
+        }
+
+    /** T-ONBOARD-06 (R half): after "Not now" the app-mode banner shows; never during onboarding itself. */
+    @Test
+    fun tOnboard06_bannerAfterNotNow_notDuringOnboarding() =
+        runTest(dispatcher) {
+            settings.set(Settings(onboardingDone = false))
+            val vm = bannerViewModel(FakeClock(now = 5_000L))
+            vm.onAction(HomeAction.RefreshRole)
+            assertThat(vm.state.value.showAppModeBanner).isFalse()
+            settings.set(Settings(onboardingDone = true)) // "Not now"
+            assertThat(vm.state.value.defaultBanner).isEqualTo(DefaultHomeBanner.NOT_DEFAULT)
+        }
 }

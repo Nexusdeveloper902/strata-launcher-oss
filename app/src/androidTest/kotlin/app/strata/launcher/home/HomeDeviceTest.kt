@@ -42,10 +42,10 @@ import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
-import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.focusReport
 import app.strata.launcher.openAllApps
+import app.strata.launcher.passOnboarding
 import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
@@ -155,11 +155,7 @@ class HomeDeviceTest {
     @Before
     fun ready() {
         compose.waitForIdle()
-        if (compose.count(OnboardingTestTags.CONTINUE) >
-            0
-        ) {
-            compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
-        }
+        compose.passOnboarding()
         compose.waitUntil(timeoutMillis = 10_000) { compose.count(HomeTestTags.ROOT) > 0 }
         compose.awaitWindowFocus(device)
     }

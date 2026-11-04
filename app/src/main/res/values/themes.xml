@@ -8,4 +8,9 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackgroundCacheHint">@null</item>
     </style>
+
+    <!-- PinRequestActivity (ANDROID_PLATFORM §22): v1 declines pin requests and draws nothing itself. -->
+    <style name="Theme.Strata.Dialog" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

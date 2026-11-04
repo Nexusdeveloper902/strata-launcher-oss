@@ -65,6 +65,8 @@ class FakeSystemIntents(
 
     override fun accessibilitySettings(): LaunchResult = start(ACCESSIBILITY)
 
+    override fun uninstallStrata(): LaunchResult = start(UNINSTALL_STRATA)
+
     /** (uri, mime) of every share sheet started. */
     val shares = mutableListOf<Pair<String, String>>()
 
@@ -107,6 +109,7 @@ class FakeSystemIntents(
         const val CALENDAR = "calendar"
         const val WALLPAPER = "wallpaper"
         const val ACCESSIBILITY = "accessibility"
+        const val UNINSTALL_STRATA = "uninstall_strata"
         const val SHARE = "share"
         const val CROP = "crop"
         const val ATTACH = "attach"
