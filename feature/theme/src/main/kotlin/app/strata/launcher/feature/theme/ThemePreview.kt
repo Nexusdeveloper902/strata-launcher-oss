@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -212,7 +213,7 @@ private fun PreviewFavorites(
     ) {
         for (label in apps.take(FAVORITES)) {
             Text(
-                theme.typography.labelCase.apply(label, java.util.Locale.getDefault()),
+                theme.typography.labelCase.apply(label, LocalConfiguration.current.locales[0]),
                 color = colors.textPrimary,
                 fontSize = (LABEL_SP * theme.typography.scale * f.textScale).sp,
                 textAlign = textAlign(f.alignment),

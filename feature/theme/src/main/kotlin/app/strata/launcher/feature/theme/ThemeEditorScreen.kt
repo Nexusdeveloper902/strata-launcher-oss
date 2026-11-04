@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -122,6 +123,8 @@ object EditorTestTags {
     fun field(id: String) = "editor_field_${id.replace('.', '_')}"
 
     fun reset(id: String) = "editor_reset_${id.replace('.', '_')}"
+
+    fun swatch(id: String) = "editor_swatch_${id.replace('.', '_')}"
 
     fun slider(id: String) = "editor_slider_${id.replace('.', '_')}"
 
@@ -434,7 +437,7 @@ private fun ContrastBanner(
             if (failing.isEmpty()) return@Column
             for (c in failing) {
                 Text(
-                    "• " + pairText(c),
+                    stringResource(R.string.editor_bullet, pairText(c)),
                     color = onColour,
                     modifier = Modifier.testTag(EditorTestTags.pairLine(c.pair, c.variant)),
                 )
@@ -479,6 +482,7 @@ private fun GroupSection(
 ) {
     val expanded = state.expandedGroup == group.key
     val label = groupLabel(group.key)
+    val stateText = stringResource(if (expanded) R.string.editor_expanded else R.string.editor_collapsed)
     Row(
         modifier =
             Modifier
@@ -487,12 +491,12 @@ private fun GroupSection(
                 .clickable { onAction(EditorAction.Expand(if (expanded) null else group.key)) }
                 .semantics {
                     heading()
-                    stateDescription = if (expanded) "expanded" else "collapsed"
+                    stateDescription = stateText
                 }.testTag(EditorTestTags.group(group.key)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            (if (expanded) "▾ " else "▸ ") + label,
+            stringResource(if (expanded) R.string.editor_group_open else R.string.editor_group_closed, label),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.weight(1f).padding(start = 8.dp),
@@ -703,6 +707,7 @@ private fun ColourControl(
             null
         }
     var open by remember(field.id) { mutableStateOf(false) }
+    val swatchDescription = stringResource(R.string.editor_colour_value, label, Rgb.toHex(argb))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier =
@@ -711,7 +716,8 @@ private fun ColourControl(
                     .background(Color(argb), RoundedCornerShape(8.dp))
                     .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                     .clickable { open = !open }
-                    .semantics { contentDescription = "$label ${Rgb.toHex(argb)}" },
+                    .testTag(EditorTestTags.swatch(field.id))
+                    .semantics { contentDescription = swatchDescription },
         )
         Text(
             Rgb.toHex(argb),
@@ -735,13 +741,13 @@ private fun ColourControl(
         modifier = Modifier.fillMaxWidth(),
     )
     val hct = Hct.fromArgb(argb)
-    HctSlider(field, stringResource(R.string.editor_hue), hct.hue, 0.0..360.0, onAction) {
+    HctSlider(field, "hue", stringResource(R.string.editor_hue), hct.hue, 0.0..360.0, onAction) {
         Hct.from(it, hct.chroma, hct.tone).toArgb()
     }
-    HctSlider(field, stringResource(R.string.editor_chroma), hct.chroma, 0.0..MAX_CHROMA, onAction) {
+    HctSlider(field, "chroma", stringResource(R.string.editor_chroma), hct.chroma, 0.0..MAX_CHROMA, onAction) {
         Hct.from(hct.hue, it, hct.tone).toArgb()
     }
-    HctSlider(field, stringResource(R.string.editor_tone), hct.tone, 0.0..100.0, onAction) {
+    HctSlider(field, "tone", stringResource(R.string.editor_tone), hct.tone, 0.0..100.0, onAction) {
         Hct.from(hct.hue, hct.chroma, it).toArgb()
     }
     if (state.swatches.isNotEmpty()) {
@@ -767,6 +773,7 @@ private fun ColourControl(
 @Composable
 private fun HctSlider(
     field: EditorField,
+    axis: String,
     label: String,
     value: Double,
     range: ClosedFloatingPointRange<Double>,
@@ -787,7 +794,7 @@ private fun HctSlider(
                     .semantics {
                         contentDescription = label
                         stateDescription = shown
-                    }.testTag(EditorTestTags.slider("${field.id}.${label.lowercase(Locale.ROOT)}")),
+                    }.testTag(EditorTestTags.slider("${field.id}.$axis")),
         )
     }
 }
@@ -799,7 +806,7 @@ private fun ContrastChip(
     variant: Variant,
     role: String,
 ) {
-    val ratio = String.format(Locale.getDefault(), "%.1f", c.ratio)
+    val ratio = String.format(LocalConfiguration.current.locales[0], "%.1f", c.ratio)
     val text = stringResource(if (c.passes) R.string.editor_chip_pass else R.string.editor_chip_fail, ratio)
     val scheme = MaterialTheme.colorScheme
     Surface(

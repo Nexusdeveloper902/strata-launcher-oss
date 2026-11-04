@@ -28,6 +28,7 @@ import app.strata.launcher.core.theme.store.ImageSeedError
 import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemePair
 import app.strata.launcher.core.theme.store.ThemeRepository
+import app.strata.launcher.core.ui.ThemeApplyTrace
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -540,9 +541,11 @@ class ThemeEditorViewModel(
                 launchSafely { deleteDraft(s.sessionId) }
             }
 
-            else -> {
-                Unit
-            }
+            // Handled above, before the session check.
+            is EditorAction.PreviewDark, is EditorAction.PreviewWallpaper, is EditorAction.ShowProblems,
+            is EditorAction.SampleApps, is EditorAction.Expand, is EditorAction.KeepImageAsWallpaper,
+            EditorAction.KeepEditing, EditorAction.Pause,
+            -> {}
         }
     }
 
@@ -687,7 +690,10 @@ class ThemeEditorViewModel(
                 deleteDraft(s.sessionId)
                 draftTree = s.tree
                 publish()
-                if (apply) themes.apply(s.sessionId)
+                if (apply) {
+                    ThemeApplyTrace.begin(themes.state.value.applyGeneration)
+                    themes.apply(s.sessionId)
+                }
                 message(if (apply) EditorMessage.APPLIED else EditorMessage.SAVED)
                 if (leave) local.update { it.copy(done = true) }
             }

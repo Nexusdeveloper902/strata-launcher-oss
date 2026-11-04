@@ -17,6 +17,7 @@ import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.core.theme.store.ThemeSummary
+import app.strata.launcher.core.ui.ThemeApplyTrace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -250,6 +251,7 @@ class ThemeLibraryViewModel(
             emit(LibraryMessage.NOT_APPLICABLE)
             return
         }
+        ThemeApplyTrace.begin(themes.state.value.applyGeneration)
         themes.apply(id)
         launch { if (wallpaper.available(id)) local.update { it.copy(wallpaperPromptFor = t) } }
     }
