@@ -232,6 +232,7 @@ object ThemeResolver {
                         } else {
                             doc.animation.listEntrance
                         },
+                        themeDurationScale = if (systemOff) 0.0 else doc.animation.durationScale,
                     ),
                 haptics = ResolvedHaptics(globals.hapticsEnabled && doc.haptics.mode == HapticsMode.FOLLOW_SYSTEM),
                 contrast = ResolvedContrast(status, enforced),

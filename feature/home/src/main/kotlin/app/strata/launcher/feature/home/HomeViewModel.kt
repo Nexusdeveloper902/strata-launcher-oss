@@ -21,6 +21,7 @@ import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.apps.OverridesRepository
+import app.strata.launcher.core.platformapi.settings.ResetCause
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.HapticKind
@@ -28,6 +29,8 @@ import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.LockService
 import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntents
+import app.strata.launcher.core.theme.store.ThemeBanner
+import app.strata.launcher.core.theme.store.ThemeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
@@ -37,6 +40,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -90,6 +95,8 @@ data class HomeUiState(
     val badgeStyle: BadgeStyle = BadgeStyle.DOT,
     /** FR-LIFE-04 "Some settings were reset". */
     val showResetBanner: Boolean = false,
+    /** THEME_SYSTEM §12: "Your theme couldn't be loaded…" (or safe mode). */
+    val themeBanner: ThemeBanner? = null,
     val settings: Settings = Settings.DEFAULT,
     /** Shown favourites in order: present and not hidden (FR-APPS-04 keeps the slot of a hidden one). */
     val favorites: List<VisibleApp> = emptyList(),
@@ -165,6 +172,9 @@ sealed interface HomeAction {
     data object OpenHiddenApps : HomeAction
 
     data object DismissResetBanner : HomeAction
+
+    /** THEME_SYSTEM §12 step 2 banner. */
+    data object DismissThemeBanner : HomeAction
 
     // Long-press menus (FR-GEST-02) and the sheet (FR-APPS-03…07).
     data class OpenSheet(val app: VisibleApp, val rename: Boolean = false) : HomeAction
@@ -254,6 +264,9 @@ sealed interface HomeEffect {
 
     data class NotYetAvailable(val feature: LaterFeature) : HomeEffect
 
+    /** The theme switch (debug builds only until the M5 theme library). */
+    data object OpenThemes : HomeEffect
+
     /** FR-GEST-03: hint (once) when the lock is on in Strata but the service is off in the system. */
     data object LockHint : HomeEffect
 
@@ -287,6 +300,10 @@ class HomeViewModel(
     private val lockService: LockService,
     private val logger: Logger,
     private val clock: Clock = Clock.System,
+    /** Active theme: its `haptics` gate (FR-THEME-17) and the boot banner (THEME_SYSTEM §12). */
+    private val theme: ThemeRepository? = null,
+    /** The home menu's "Themes" opens [HomeEffect.OpenThemes] (debug builds' internal switch until M5). */
+    private val themesAvailable: Boolean = false,
 ) : ViewModel() {
     private val isDefaultHome = MutableStateFlow<Boolean?>(null)
     private val local = MutableStateFlow(Local())
@@ -313,14 +330,26 @@ class HomeViewModel(
             .catch { emit(emptyList()) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val themeBanner: Flow<ThemeBanner?> =
+        theme?.state?.map { it.banner }?.distinctUntilChanged() ?: flowOf(null)
+
+    private data class Extras(
+        val resets: Set<ResetCause>,
+        val favorites: List<AppKey>,
+        val lockEnabled: Boolean,
+        val themeBanner: ThemeBanner?,
+    )
+
     val state: StateFlow<HomeUiState> =
         combine(
             currentSettings,
             currentList,
             isDefaultHome,
             local,
-            combine(resetNotices.causes, favoriteKeys, lockService.enabled) { r, f, l -> Triple(r, f, l) },
-        ) { s, list, isDefault, ui, (resets, favKeys, lockEnabled) ->
+            combine(resetNotices.causes, favoriteKeys, lockService.enabled, themeBanner) { r, f, l, b ->
+                Extras(r, f, l, b)
+            },
+        ) { s, list, isDefault, ui, (resets, favKeys, lockEnabled, banner) ->
             val shown =
                 list
                     ?.sections
@@ -338,6 +367,7 @@ class HomeViewModel(
                 listTwoColumn = s?.listTwoColumn ?: true,
                 badgeStyle = s?.badgeStyle ?: BadgeStyle.DOT,
                 showResetBanner = resets.isNotEmpty(),
+                themeBanner = banner,
                 settings = s ?: Settings.DEFAULT,
                 favorites = favKeys.mapNotNull { shown[it] },
                 favoriteKeys = favKeys.toSet(),
@@ -431,6 +461,10 @@ class HomeViewModel(
                 resetNotices.dismiss()
             }
 
+            HomeAction.DismissThemeBanner -> {
+                theme?.dismissBanner()
+            }
+
             is HomeAction.OpenSheet -> {
                 openSheet(action.app, action.rename)
             }
@@ -488,7 +522,9 @@ class HomeViewModel(
             }
 
             HomeAction.MenuThemes -> {
-                closeModalThen(HomeEffect.NotYetAvailable(LaterFeature.THEMES))
+                closeModalThen(
+                    if (themesAvailable) HomeEffect.OpenThemes else HomeEffect.NotYetAvailable(LaterFeature.THEMES),
+                )
             }
 
             HomeAction.MenuWallpaper -> {
@@ -617,8 +653,16 @@ class HomeViewModel(
     }
 
     private fun tick(kind: HapticKind) {
-        // The global master wins over everything (FR-SET-05, FR-THEME-17).
-        if (currentSettings.value?.hapticsEnabled != false) haptics.tick(kind)
+        // The global master wins over everything (FR-SET-05); the theme's mode `off` silences too (FR-THEME-17).
+        val themeAllows =
+            theme
+                ?.state
+                ?.value
+                ?.themes
+                ?.light
+                ?.haptics
+                ?.enabled != false
+        if (currentSettings.value?.hapticsEnabled != false && themeAllows) haptics.tick(kind)
     }
 
     private fun openSheet(

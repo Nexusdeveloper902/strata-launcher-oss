@@ -1,0 +1,46 @@
+// Theme index (spec/THEME_SYSTEM.md §11.2): a cache over the files in filesDir/themes/user/.
+// Mirrors app.strata.launcher.core.theme.store.ThemeIndex. Field numbers are never reused.
+syntax = "proto3";
+package strata.theme;
+option java_package = "app.strata.launcher.core.data.theme";
+option java_multiple_files = true;
+option java_outer_classname = "ThemeIndexProtos";
+
+enum StoredOrigin {
+  STORED_ORIGIN_BUILTIN = 0;
+  STORED_ORIGIN_USER = 1;
+  STORED_ORIGIN_IMPORTED = 2;
+}
+
+enum StoredContrast {
+  STORED_CONTRAST_UNKNOWN = 0;
+  STORED_CONTRAST_AA_ANY_WALLPAPER = 1;
+  STORED_CONTRAST_AA_CURRENT_WALLPAPER = 2;
+  STORED_CONTRAST_LOW = 3;
+}
+
+message StoredThemeEntry {
+  string id = 1;
+  string name = 2;
+  StoredOrigin origin = 3;
+  string file_sha256 = 4;
+  int64 created_at = 5;
+  int64 modified_at = 6;
+  int64 last_applied_at = 7;
+  StoredContrast contrast_status = 8;
+  bool needs_app_update = 9;
+  // "Caused a problem — not applied" (crash-loop guard, §12 step 4).
+  bool caused_problem = 10;
+}
+
+message StoredThemeIndex {
+  repeated StoredThemeEntry entries = 1;
+  string active_theme_id = 2;
+  string last_known_good_id = 3;
+  bool apply_in_progress = 4;
+  int64 apply_started_at = 5;
+  // Starts that found apply_in_progress set inside the 5-minute window (§12 step 4 needs two).
+  int32 apply_crash_count = 6;
+  // 1 on every written index. 0 means "no index" (missing file or replaced after corruption).
+  int32 format_version = 7;
+}

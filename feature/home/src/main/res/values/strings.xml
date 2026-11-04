@@ -29,6 +29,9 @@
     <!-- Storage reset banner (FR-LIFE-04) -->
     <string name="reset_banner">Some settings were reset</string>
     <string name="reset_banner_dismiss">Dismiss</string>
+    <string name="theme_banner">Your theme couldn\'t be loaded, so the default theme is shown.</string>
+    <string name="theme_banner_safe_mode">Strata stopped while starting, so it started in safe mode with the default theme.</string>
+    <string name="theme_banner_details">Details</string>
 
     <!-- Header (FR-HOME-03, VISUAL_SPEC §9.4) -->
     <string name="clock_hm">%1$s:%2$s</string>

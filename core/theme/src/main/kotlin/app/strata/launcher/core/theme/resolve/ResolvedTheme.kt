@@ -140,6 +140,11 @@ data class ResolvedAnimation(
     /** Effective multiplier = theme × system animator scale; 0 when animations are off (§4.11). */
     val durationScale: Double,
     val listEntrance: ListEntrance,
+    /**
+     * The theme's own factor (0 when animations are off). Compose already applies the system animator scale to
+     * its animations (`MotionDurationScale`), so UI durations use base × this to get base × theme × system.
+     */
+    val themeDurationScale: Double = durationScale,
 ) {
     val enabled: Boolean get() = durationScale > 0.0
 }

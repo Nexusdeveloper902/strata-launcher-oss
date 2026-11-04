@@ -32,7 +32,6 @@ import app.strata.launcher.BuildConfig
 import app.strata.launcher.appGraph
 import app.strata.launcher.core.platformapi.system.SystemIntent
 import app.strata.launcher.core.ui.LocalIconLoader
-import app.strata.launcher.core.ui.StrataDefaultTheme
 import app.strata.launcher.di.localeTags
 import app.strata.launcher.feature.home.HomeAction
 import app.strata.launcher.feature.home.HomeEffect
@@ -47,6 +46,8 @@ import app.strata.launcher.feature.search.SearchRoute
 import app.strata.launcher.feature.search.SearchViewModel
 import app.strata.launcher.platform.system.SystemIntentFactory
 import app.strata.launcher.settings.SettingsActivity
+import app.strata.launcher.theme.DebugThemeSwitch
+import app.strata.launcher.theme.ThemeHost
 
 /**
  * The HOME activity (ANDROID_PLATFORM §1, §22). Edge-to-edge over the wallpaper. Reads only
@@ -72,6 +73,8 @@ class HomeActivity : ComponentActivity() {
                     systemIntents = graph.systemIntents,
                     lockService = graph.lockService,
                     logger = graph.logger,
+                    theme = graph.themeRepository,
+                    themesAvailable = DebugThemeSwitch.AVAILABLE,
                 )
             }
         }
@@ -98,6 +101,11 @@ class HomeActivity : ComponentActivity() {
 
     private var roleRequestStartedAt = 0L
 
+    private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
+
+    /** Debug builds: the internal theme switch (home menu → Themes) is open. */
+    private var themeSwitchOpen by mutableStateOf(false)
+
     private val roleRequest =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val elapsed = SystemClock.elapsedRealtime() - roleRequestStartedAt
@@ -120,11 +128,13 @@ class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        appGraph.startTheme()
         appGraph.startCatalog()
         appGraph.attachWindow(window.decorView)
         val iconLoader = ProviderIconLoader(appGraph.iconProvider)
+        themeHost.holdFirstFrame(window.decorView)
         setContent {
-            StrataDefaultTheme {
+            themeHost.Content(window) {
                 CompositionLocalProvider(LocalIconLoader provides iconLoader) {
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
@@ -156,6 +166,10 @@ class HomeActivity : ComponentActivity() {
                     )
                     if (state.showOnboarding) {
                         OnboardingStubScreen(onContinue = { viewModel.onAction(HomeAction.CompleteOnboarding) })
+                    }
+                    if (themeSwitchOpen) {
+                        val theme by appGraph.themeRepository.state.collectAsStateWithLifecycle()
+                        DebugThemeSwitch.Dialog(appGraph.themeRepository, theme.activeId) { themeSwitchOpen = false }
                     }
                 }
             }
@@ -196,8 +210,14 @@ class HomeActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        appGraph.refreshThemeInputs()
         // Callbacks are missed while not registered: reconcile on every start (ANDROID_PLATFORM §3.1).
         appGraph.appCatalog.requestReconcile()
+    }
+
+    override fun onStop() {
+        themeHost.onStop()
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -208,6 +228,8 @@ class HomeActivity : ComponentActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         appGraph.locales.value = localeTags(this)
+        // API 31+: a new system palette arrives as a configuration change (dynamic colour, THEME_SYSTEM §5.2).
+        appGraph.refreshThemeInputs()
     }
 
     private fun navigate(effect: HomeEffect) {
@@ -223,6 +245,11 @@ class HomeActivity : ComponentActivity() {
 
                 HomeEffect.LockHint -> {
                     appGraph.systemIntents.accessibilitySettings()
+                    return
+                }
+
+                HomeEffect.OpenThemes -> {
+                    themeSwitchOpen = true
                     return
                 }
 

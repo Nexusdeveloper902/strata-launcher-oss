@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,10 +81,14 @@ import app.strata.launcher.core.theme.model.IndexSide
 import app.strata.launcher.core.theme.model.IndexVisibility
 import app.strata.launcher.core.theme.model.SearchPosition
 import app.strata.launcher.core.theme.model.VerticalPosition
+import app.strata.launcher.core.theme.store.ThemeBanner
+import app.strata.launcher.core.theme.store.ThemeBannerKind
 import app.strata.launcher.core.ui.AlphabetIndex
 import app.strata.launcher.core.ui.IndexExclusion
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.backdropFade
+import app.strata.launcher.core.ui.strataBackdrop
 import app.strata.launcher.feature.home.list.AppListScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -97,6 +102,8 @@ object HomeTestTags {
     const val SET_DEFAULT_BUTTON = "home_set_default_button"
     const val ALL_APPS = "home_all_apps"
     const val RESET_BANNER = "home_reset_banner"
+    const val THEME_BANNER = "home_theme_banner"
+    const val THEME_BANNER_DETAILS = "home_theme_banner_details"
     const val CLOCK = "home_clock"
     const val DATE = "home_date"
     const val FAVORITES = "home_favorites"
@@ -235,6 +242,8 @@ fun HomeRoute(
         modifier =
             modifier
                 .fillMaxSize()
+                // Home / list backdrop E(W) (VISUAL_SPEC §6), once under every layer.
+                .strataBackdrop(Strata.theme, Strata.colors, Strata.backdropFade)
                 .semantics { testTagsAsResourceId = true }
                 .onKeyEvent { event -> handleHomeKey(event, state, onAction) },
     ) {
@@ -248,6 +257,8 @@ fun HomeRoute(
                     .then(if (underSearch || !noModal) Modifier.clearAndSetSemantics {} else Modifier),
         ) {
             HomeScreen(
+                // The list layer replaces the rest page (INTERACTION_SPEC §3); it stays composed but unseen.
+                modifier = if (listShown) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier,
                 state = state,
                 showSetDefaultButton = showSetDefaultButton,
                 onSetDefault = onSetDefault,
@@ -422,12 +433,14 @@ fun HomeScreen(
                         end = sidePadding + if (atEnd) indexReserve else 0.dp,
                     ),
         ) {
-            if (state.showAppModeBanner || state.showResetBanner) {
+            val themeBanner = state.themeBanner
+            if (state.showAppModeBanner || state.showResetBanner || themeBanner != null) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (state.showAppModeBanner) {
                         AppModeBanner(showSetDefaultButton = showSetDefaultButton, onSetDefault = onSetDefault)
                     }
                     if (state.showResetBanner) ResetBanner { onAction(HomeAction.DismissResetBanner) }
+                    if (themeBanner != null) ThemeBannerCard(themeBanner) { onAction(HomeAction.DismissThemeBanner) }
                 }
             }
             val header: @Composable (Modifier) -> Unit = { m ->
@@ -741,6 +754,53 @@ private fun ResetBanner(onDismiss: () -> Unit) {
             )
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                 Text(text = stringResource(R.string.reset_banner_dismiss))
+            }
+        }
+    }
+}
+
+/** THEME_SYSTEM §12 step 2 (and safe mode, ARCHITECTURE §10). Non-blocking; [Choose theme] arrives with M5. */
+@Composable
+private fun ThemeBannerCard(
+    banner: ThemeBanner,
+    onDismiss: () -> Unit,
+) {
+    var details by rememberSaveable { mutableStateOf(false) }
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().testTag(HomeTestTags.THEME_BANNER),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text =
+                    stringResource(
+                        if (banner.kind ==
+                            ThemeBannerKind.SAFE_MODE
+                        ) {
+                            R.string.theme_banner_safe_mode
+                        } else {
+                            R.string.theme_banner
+                        },
+                    ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            if (details) {
+                Text(
+                    text = banner.details,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.testTag(HomeTestTags.THEME_BANNER_DETAILS),
+                )
+            }
+            Row(modifier = Modifier.align(Alignment.End)) {
+                if (!details) {
+                    TextButton(
+                        onClick = { details = true },
+                    ) { Text(text = stringResource(R.string.theme_banner_details)) }
+                }
+                TextButton(onClick = onDismiss) { Text(text = stringResource(R.string.reset_banner_dismiss)) }
             }
         }
     }

@@ -385,6 +385,9 @@ class SheetAndFavoritesTest {
             h.overrides.state.value[system.key]
                 ?.hidden,
         ).isTrue()
+        // The rest page is hidden from accessibility while the list covers it: return to rest first.
+        h.vm.onAction(HomeAction.HomePressed)
+        compose.waitForIdle()
         favNode.invokeCustomAction(compose, "Change icon") // M5: explains instead of doing nothing
     }
 

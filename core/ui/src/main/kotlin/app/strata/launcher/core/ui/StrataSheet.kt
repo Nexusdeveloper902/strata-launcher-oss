@@ -56,11 +56,13 @@ fun StrataSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = Strata.colors
-    val animate = Strata.theme.animation.enabled
+    // §4.11: base × theme scale (Compose adds the system animator scale); 0 = no animation.
+    val enterMs = Strata.theme.animation.durationMs(MEDIUM_MS)
+    val animate = enterMs > 0
     val enter = remember { Animatable(if (animate) 0f else 1f) }
     var back by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
-        if (animate) enter.animateTo(1f, tween(durationMillis = MEDIUM_MS, easing = EMPHASIZED_DECELERATE))
+        if (animate) enter.animateTo(1f, tween(durationMillis = enterMs, easing = EMPHASIZED_DECELERATE))
     }
     PredictiveBackHandler { progress ->
         try {
@@ -142,6 +144,8 @@ private val PADDING = 24.dp
 private const val SCRIM_ALPHA = 0.4f
 private const val BACK_TRAVEL = 0.3f
 
-/** `motion.medium` with the emphasized decelerate curve (VISUAL_SPEC §10). */
-private const val MEDIUM_MS = 250
+/** `motion.medium` (VISUAL_SPEC §10): the sheet's enter duration before the animation scales. */
+internal const val MEDIUM_MS = 250
+
+/** The emphasized decelerate curve of `motion.medium` (VISUAL_SPEC §10). */
 private val EMPHASIZED_DECELERATE = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)

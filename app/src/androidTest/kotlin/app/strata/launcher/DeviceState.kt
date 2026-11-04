@@ -12,6 +12,7 @@ import androidx.test.uiautomator.UiDevice
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
+import java.io.File
 
 /** Shared device-state helpers for the HomeActivity device tests (search, home). */
 private const val TAG = "DeviceState"
@@ -113,6 +114,9 @@ class DeviceStateRule : TestRule {
                 val previousScales = animationScales.associateWith { shell("settings get global $it") }
                 animationScales.forEach { shell("settings put global $it 0") }
                 closeSystemErrorDialog(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()))
+                // Each test is a short process that never lives the 10 s that mark a start good (ARCHITECTURE §10).
+                // Without this, the third test in a row would boot in safe mode with its banner.
+                File(InstrumentationRegistry.getInstrumentation().targetContext.noBackupFilesDir, "boot.state").delete()
                 try {
                     base.evaluate()
                 } finally {

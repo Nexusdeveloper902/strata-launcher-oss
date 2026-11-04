@@ -14,13 +14,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.appGraph
-import app.strata.launcher.core.ui.StrataDefaultTheme
 import app.strata.launcher.feature.onboarding.OnboardingStubScreen
 import app.strata.launcher.feature.settings.SettingsAction
 import app.strata.launcher.feature.settings.SettingsPage
 import app.strata.launcher.feature.settings.SettingsRoute
 import app.strata.launcher.feature.settings.SettingsViewModel
 import app.strata.launcher.home.HomeActivity
+import app.strata.launcher.theme.ThemeHost
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -52,6 +52,13 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 
+    private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
+
+    override fun onStop() {
+        themeHost.onStop()
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -63,8 +70,11 @@ class SettingsActivity : ComponentActivity() {
                 ?.getString(STATE_PAGE)
                 ?.let { name -> SettingsPage.entries.firstOrNull { it.name == name } }
                 ?: startPage
+        appGraph.startTheme()
+        // Same theme hooks as home: first-frame gate, first-frame and boot-success reports, LKG on onStop.
+        themeHost.holdFirstFrame(window.decorView)
         setContent {
-            StrataDefaultTheme {
+            themeHost.Content(window) {
                 when (screen) {
                     EntryRoute.ONBOARDING -> {
                         OnboardingStubScreen(onContinue = ::completeOnboarding)

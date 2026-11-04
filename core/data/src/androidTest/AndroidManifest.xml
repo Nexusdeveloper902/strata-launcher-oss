@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test APK only (never merged into the app): the T-THEME-45 writer runs in its own process so the test can kill it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service
+            android:name="app.strata.launcher.core.data.theme.ThemeWriterService"
+            android:exported="false"
+            android:process=":t45writer" />
+    </application>
+</manifest>

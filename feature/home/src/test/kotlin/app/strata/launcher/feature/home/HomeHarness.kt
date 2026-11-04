@@ -20,6 +20,7 @@ import app.strata.launcher.core.model.Catalog
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.resolve.ResolvedTheme
+import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.core.ui.StrataTheme
 import app.strata.launcher.testing.fakes.FakeAppCatalog
 import app.strata.launcher.testing.fakes.FakeAppLauncher
@@ -51,6 +52,7 @@ class HomeHarness(
     favorites: List<AppKey> = emptyList(),
     settings: Settings = Settings(onboardingDone = true),
     lockEnabled: Boolean = false,
+    themeRepository: ThemeRepository? = null,
 ) {
     val catalog = FakeAppCatalog(Catalog(apps, fromSnapshot = false))
     val overrides = FakeOverridesRepository()
@@ -90,6 +92,7 @@ class HomeHarness(
             systemIntents = systemIntents,
             lockService = lockService,
             logger = RecordingLogger(),
+            theme = themeRepository,
         )
 
     val state: HomeUiState get() = vm.state.value
@@ -109,8 +112,9 @@ class HomeHarness(
         compose.waitForIdle()
     }
 
+    /** The routed home without a theme (callers wrap it in their own [StrataTheme]). */
     @Composable
-    private fun Home() {
+    fun Home() {
         val s by vm.state.collectAsStateWithLifecycle()
         HomeRoute(
             state = s,

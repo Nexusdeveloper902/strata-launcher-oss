@@ -18,6 +18,7 @@ import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
+import app.strata.launcher.core.theme.store.ThemeRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -47,11 +48,20 @@ interface AppGraph {
     val timeTicks: TimeTicks
     val lockService: LockService
 
+    /** Active theme and library (ARCHITECTURE §4); [ThemeRepository.start] boots it off the main thread. */
+    val themeRepository: ThemeRepository
+
     /** BCP-47 tags of the current configuration's locales (sections, collation). */
     val locales: MutableStateFlow<List<String>>
 
     /** Reads the snapshot and subscribes to package changes (idempotent; ARCHITECTURE §10 step 2b). */
     fun startCatalog()
+
+    /** Starts the theme repository and its platform inputs (idempotent; ARCHITECTURE §10 step 2a). */
+    fun startTheme() = themeRepository.start()
+
+    /** Re-reads platform theme inputs (dynamic scheme, animator scale) after a configuration change or `onStart`. */
+    fun refreshThemeInputs() = Unit
 
     /** Lets view-bound services (haptics) use the home window; null detaches. */
     fun attachWindow(view: View?) = Unit

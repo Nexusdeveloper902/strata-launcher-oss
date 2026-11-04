@@ -1,5 +1,6 @@
 package app.strata.launcher.core.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -10,6 +11,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -20,8 +23,11 @@ import androidx.compose.ui.unit.sp
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.model.LabelCase
 import app.strata.launcher.core.theme.model.Variant
+import app.strata.launcher.core.theme.resolve.ResolvedAnimation
 import app.strata.launcher.core.theme.resolve.ResolvedTheme
+import app.strata.launcher.core.theme.store.ThemePair
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** Palette roles of THEME_SYSTEM §4.2 as Compose colours (VISUAL_SPEC §6). */
 @Immutable
@@ -73,7 +79,15 @@ fun StrataTheme(
     theme: ResolvedTheme,
     content: @Composable () -> Unit,
 ) {
-    val colors = remember(theme.colors) { colorsOf(theme) }
+    ProvideStrataTheme(theme = theme, colors = remember(theme.colors) { colorsOf(theme) }, content = content)
+}
+
+@Composable
+private fun ProvideStrataTheme(
+    theme: ResolvedTheme,
+    colors: StrataColors,
+    content: @Composable () -> Unit,
+) {
     val typography = remember(theme.typography, theme.alphabetIndex) { typographyOf(theme) }
     val scheme = remember(colors, theme.variant) { schemeOf(colors, dark = theme.variant != Variant.LIGHT) }
     CompositionLocalProvider(
@@ -85,12 +99,71 @@ fun StrataTheme(
     }
 }
 
-/** Strata Default for the system dark setting: the first-frame theme until the theme repository lands (M4). */
+/** Strata Default for the system dark setting (previews, tests and screens outside the themed app). */
 @Composable
 fun StrataDefaultTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     StrataTheme(theme = StrataDefault.resolved(systemDark = dark), content = content)
 }
+
+/**
+ * The active theme from the theme repository: picks the variant for the current system dark setting, so a
+ * dark-mode flip needs no new resolution (THEME_SYSTEM §5.1). Content colours switch at once; the backdrop
+ * cross-fades over [SWITCH_FADE_MS] × the animation scale when [crossFade] is true (§12; snaps with animations off).
+ * Callers pass `crossFade = false` until the first loaded theme was shown, so a cold start never fades from Default.
+ */
+@Composable
+fun StrataTheme(
+    themes: ThemePair,
+    crossFade: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    val theme = themes.forSystemDark(isSystemInDarkTheme())
+    val colors = remember(theme.colors) { colorsOf(theme) }
+    val fade = rememberBackdropFade(Backdrop.of(theme, colors), crossFade, theme.animation.durationMs(SWITCH_FADE_MS))
+    CompositionLocalProvider(LocalBackdropFade provides fade) {
+        ProvideStrataTheme(theme = theme, colors = colors, content = content)
+    }
+}
+
+/** The running backdrop fade, when the theme comes from [StrataTheme] with a [ThemePair]. */
+private val LocalBackdropFade = staticCompositionLocalOf<BackdropFade?> { null }
+
+/** The home and list backdrop for the current theme, cross-fading on theme switches (read in draw). */
+val Strata.backdropFade: BackdropFade?
+    @Composable get() = LocalBackdropFade.current
+
+/**
+ * The home and list backdrop, `E(W)` of THEME_SYSTEM §7.2 drawn over the system wallpaper (VISUAL_SPEC §6):
+ * `scrim` at `dim`, then `background` at `backgroundOpacity`; with `wallpaper.show` off, `background` opaque.
+ * With a [fade], the values are read in the draw phase, so a theme cross-fade only redraws.
+ */
+fun Modifier.strataBackdrop(
+    theme: ResolvedTheme,
+    colors: StrataColors,
+    fade: BackdropFade? = null,
+): Modifier {
+    if (fade != null) {
+        return drawBehind {
+            val b = fade.current
+            drawRect(b.scrim.copy(alpha = b.dim))
+            drawRect(b.background.copy(alpha = b.opacity))
+        }
+    }
+    return if (theme.wallpaper.show) {
+        background(colors.scrim.copy(alpha = theme.wallpaper.dim.toFloat()))
+            .background(colors.background.copy(alpha = theme.wallpaper.backgroundOpacity.toFloat()))
+    } else {
+        background(colors.background)
+    }
+}
+
+/**
+ * A UI animation duration for [baseMs] under the theme (THEME_SYSTEM §4.11): base × theme scale. Compose applies
+ * the system animator scale on top (`MotionDurationScale`), so the effective duration is base × theme × system.
+ * 0 when animations are off (system scale 0, "Remove animations", or theme scale 0).
+ */
+fun ResolvedAnimation.durationMs(baseMs: Int): Int = if (!enabled) 0 else (baseMs * themeDurationScale).roundToInt()
 
 /** THEME_SYSTEM `typography.labelCase`. */
 fun LabelCase.apply(
@@ -176,6 +249,9 @@ private fun schemeOf(
         scrim = c.scrim,
     )
 }
+
+/** Theme switch cross-fade (THEME_SYSTEM §12 step 1), before the animation scale. */
+const val SWITCH_FADE_MS = 300
 
 private const val LINE_HEIGHT = 1.3f
 private const val LABEL_SP = 16f

@@ -18,6 +18,7 @@ import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import app.strata.launcher.testing.fakes.FakeSystemIntents
 import app.strata.launcher.testing.fakes.FakeTextFolding
+import app.strata.launcher.testing.fakes.FakeThemeRepository
 import app.strata.launcher.testing.fakes.FakeTimeTicks
 import app.strata.launcher.testing.fakes.RecordingLogger
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +44,7 @@ class TestAppGraph(
     override val iconProvider: FakeIconProvider = FakeIconProvider(),
     override val timeTicks: FakeTimeTicks = FakeTimeTicks(),
     override val lockService: FakeLockService = FakeLockService(),
+    override val themeRepository: FakeThemeRepository = FakeThemeRepository(),
 ) : AppGraph {
     constructor(roleController: FakeRoleController = FakeRoleController(), onboarded: Boolean) :
         this(roleController, FakeSettingsRepository(Settings(onboardingDone = onboarded)))

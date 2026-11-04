@@ -1,7 +1,6 @@
 package app.strata.launcher.feature.home.list
 
 import android.os.Trace
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -119,15 +118,12 @@ fun AppListScreen(
     indexExclusion: IndexExclusion = IndexExclusion.NONE,
 ) {
     val theme = Strata.theme
-    val colors = Strata.colors
     val scope = rememberCoroutineScope()
-    val wallpaper = theme.wallpaper
+    // The backdrop E(W) is drawn once under every home layer (HomeRoute), so the list adds none of its own.
     BoxWithConstraints(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(colors.scrim.copy(alpha = wallpaper.dim.toFloat()))
-                .background(colors.background.copy(alpha = wallpaper.backgroundOpacity.toFloat()))
                 .testTag(AppListTestTags.LIST),
     ) {
         val twoColumns = twoColumnSetting && maxWidth >= TWO_COLUMN_MIN_WIDTH

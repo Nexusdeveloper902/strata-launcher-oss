@@ -18,6 +18,11 @@ import app.strata.launcher.core.data.list.AssembledAppListSource
 import app.strata.launcher.core.data.overrides.RoomFavoritesRepository
 import app.strata.launcher.core.data.overrides.RoomOverridesRepository
 import app.strata.launcher.core.data.settings.DataStoreSettingsRepository
+import app.strata.launcher.core.data.theme.AssetBuiltInThemeSource
+import app.strata.launcher.core.data.theme.AtomicFileThemeFileStore
+import app.strata.launcher.core.data.theme.BootAttempts
+import app.strata.launcher.core.data.theme.DataStoreThemeIndexStore
+import app.strata.launcher.core.data.theme.DefaultThemeRepository
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.AppListSource
@@ -33,18 +38,24 @@ import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
+import app.strata.launcher.core.theme.store.ThemeLibrary
+import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.diagnostics.LogcatSink
 import app.strata.launcher.platform.apps.AndroidProfileSource
 import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
 import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
 import app.strata.launcher.platform.icons.SystemIconProvider
+import app.strata.launcher.platform.system.AndroidAnimatorScaleSource
+import app.strata.launcher.platform.system.AndroidDynamicColorsSource
 import app.strata.launcher.platform.system.AndroidLockService
 import app.strata.launcher.platform.system.AndroidRoleController
 import app.strata.launcher.platform.system.AndroidSystemIntents
 import app.strata.launcher.platform.system.AndroidTextFolding
 import app.strata.launcher.platform.system.AndroidTimeTicks
+import app.strata.launcher.platform.system.AndroidWallpaperColorsSource
 import app.strata.launcher.platform.system.IcuCollation
 import app.strata.launcher.platform.system.ViewHaptics
+import app.strata.launcher.theme.PlatformThemeInputs
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -166,6 +177,54 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     override val haptics: Haptics get() = viewHaptics
 
+    /** Serialises every theme library call (files, index): the library is single-threaded (THEME_SYSTEM §11). */
+    private val themeDispatcher by lazy { dispatchers.io.limitedParallelism(1) }
+
+    private val themeFiles by lazy { AtomicFileThemeFileStore(root = { File(appContext.filesDir, THEMES_DIR) }) }
+
+    private val themeInputs by lazy {
+        PlatformThemeInputs(
+            wallpaper = AndroidWallpaperColorsSource(appContext),
+            dynamic = AndroidDynamicColorsSource(appContext),
+            animator = AndroidAnimatorScaleSource(appContext),
+            io = dispatchers.io,
+            scope = appScope,
+        )
+    }
+
+    override val themeRepository: ThemeRepository by lazy {
+        DefaultThemeRepository(
+            createLibrary = {
+                ThemeLibrary(
+                    files = themeFiles,
+                    indexStore =
+                        DataStoreThemeIndexStore.create(
+                            // DataStore I/O must not run on the theme dispatcher, which blocks on it.
+                            appContext,
+                            scope = CoroutineScope(SupervisorJob() + dispatchers.io),
+                        ),
+                    builtIns = AssetBuiltInThemeSource(appContext.assets),
+                    clock = Clock.System,
+                )
+            },
+            files = { themeFiles },
+            bootAttempts = BootAttempts({ File(appContext.noBackupFilesDir, BootAttempts.FILE_NAME) }, Clock.System),
+            platformInputs = themeInputs.inputs,
+            settings = settingsRepository.settings,
+            themeDispatcher = themeDispatcher,
+            resolveDispatcher = dispatchers.default,
+            scope = appScope,
+            logger = logger,
+        )
+    }
+
+    override fun startTheme() {
+        themeInputs.start()
+        themeRepository.start()
+    }
+
+    override fun refreshThemeInputs() = themeInputs.refresh()
+
     private val profileSource by lazy { AndroidProfileSource(appContext).also { it.start() } }
 
     override fun startCatalog() {
@@ -181,6 +240,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
     private companion object {
         const val TAG = "AppGraph"
         const val ICON_PARALLELISM = 4
+        const val THEMES_DIR = "themes"
     }
 }
 

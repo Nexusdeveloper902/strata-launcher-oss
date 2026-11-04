@@ -394,4 +394,15 @@ class ThemeLibraryTest {
         assertThat(text).isEqualTo(ThemeWriter.writeString(json(text)))
         assertThat(text).isEqualTo(JsonWriter.pretty(ThemeWriter.canonical(json(text))))
     }
+
+    /** §11.4: never deleted silently, so a second quarantined file of the same name does not replace the first. */
+    @Test
+    fun `quarantine keeps an earlier file of the same name`() {
+        files.files["user/garbage.strata-theme.json"] = "first".toByteArray()
+        process().boot()
+        files.files["user/garbage.strata-theme.json"] = "second".toByteArray()
+        process().boot()
+        assertThat(String(files.files["quarantine/garbage.strata-theme.json"]!!)).isEqualTo("first")
+        assertThat(String(files.files["quarantine/garbage.strata-theme.json.1"]!!)).isEqualTo("second")
+    }
 }

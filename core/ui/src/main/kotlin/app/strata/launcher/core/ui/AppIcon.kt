@@ -73,13 +73,13 @@ fun rememberAppIconState(
             val initial = req?.let { loader?.cached(it) }?.toImageBitmap()
             AppIconState(initial, Animatable(if (initial != null) 1f else 0f))
         }
-    val animate = Strata.theme.animation.enabled
+    val fadeMs = Strata.theme.animation.durationMs(FADE_MS)
     LaunchedEffect(state) {
         if (req == null || loader == null || state.bitmap != null) return@LaunchedEffect
         val result = loader.load(req)
         if (result is IconResult.Image) {
             state.bitmap = result.image.toImageBitmap()
-            if (animate) state.alpha.animateTo(1f, tween(FADE_MS)) else state.alpha.snapTo(1f)
+            if (fadeMs > 0) state.alpha.animateTo(1f, tween(fadeMs)) else state.alpha.snapTo(1f)
         }
     }
     return state

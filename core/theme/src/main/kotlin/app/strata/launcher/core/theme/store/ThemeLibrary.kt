@@ -274,7 +274,20 @@ class ThemeLibrary(
     /** Moves an invalid stored file to `themes/quarantine/` (never deleted silently, §11.4). */
     fun quarantine(name: String) {
         try {
-            files.move("$USER_DIR/$name", "$QUARANTINE_DIR/$name")
+            // An earlier quarantined file of the same name is kept: the new one gets a numbered suffix.
+            val taken = safeList(QUARANTINE_DIR).toSet()
+            val target =
+                generateSequence(0) { it + 1 }
+                    .map {
+                        if (it ==
+                            0
+                        ) {
+                            name
+                        } else {
+                            "$name.$it"
+                        }
+                    }.first { it !in taken }
+            files.move("$USER_DIR/$name", "$QUARANTINE_DIR/$target")
         } catch (e: java.io.IOException) {
             // Left in place; the next reconciliation tries again.
         }
@@ -354,8 +367,8 @@ class ThemeLibrary(
 
     // ---- helpers ----------------------------------------------------------------------------------
 
-    /** Built-in preset ids → asset names, read once (assets are immutable for the process lifetime). */
-    private val builtInIds: Map<String, String> by lazy {
+    /** Built-in preset ids → (asset name, display name), read once (assets are immutable for the process lifetime). */
+    private val builtInIds: Map<String, Pair<String, String>> by lazy {
         val names =
             try {
                 builtIns.names()
@@ -375,15 +388,39 @@ class ThemeLibrary(
                 (r as? Outcome.Ok)
                     ?.value
                     ?.document
-                    ?.id
-                    ?.lowercase()
-                    ?.let { it to name }
+                    ?.let { it.id.lowercase() to (name to it.name) }
             }.toMap()
     }
 
     fun isBuiltIn(id: String): Boolean = builtInName(id) != null
 
-    private fun builtInName(id: String): String? = builtInIds[id.lowercase()]
+    /**
+     * Strata Default, then the built-in presets (asset order), then stored themes by name. Stored themes that
+     * need an app update or caused a problem are listed as not applicable.
+     */
+    fun summaries(): List<ThemeSummary> {
+        val builtIn =
+            builtInIds.entries
+                .sortedBy { it.value.first }
+                .map { (id, v) -> ThemeSummary(id, v.second, builtIn = true, applicable = true) }
+        val stored =
+            index.entries
+                .filter { it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null }
+                .sortedBy { it.name.lowercase() }
+                .map {
+                    ThemeSummary(
+                        it.id,
+                        it.name,
+                        builtIn = false,
+                        applicable =
+                            !it.needsAppUpdate && !it.causedProblem,
+                    )
+                }
+        return listOf(ThemeSummary(StrataDefault.ID, StrataDefault.NAME, builtIn = true, applicable = true)) +
+            builtIn + stored
+    }
+
+    private fun builtInName(id: String): String? = builtInIds[id.lowercase()]?.first
 
     private fun rawBytes(id: String): ByteArray? = builtInName(id)?.let { builtIns.read(it) } ?: safeRead(userFile(id))
 
