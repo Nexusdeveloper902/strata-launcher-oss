@@ -20,6 +20,7 @@ import app.strata.launcher.core.platformapi.system.SharedFiles
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
+import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,9 @@ interface AppGraph {
 
     /** Library management, import and export (THEME_SYSTEM §10, §11.3); same instance as [themeRepository]. */
     val themeManager: ThemeManager
+
+    /** The theme editor's storage (THEME_SYSTEM §13: open, save, drafts, image seed); same instance as [themeRepository]. */
+    val themeEditor: ThemeEditorStore
 
     /** SAF document reads and writes (`content:` only). */
     val documents: DocumentIO

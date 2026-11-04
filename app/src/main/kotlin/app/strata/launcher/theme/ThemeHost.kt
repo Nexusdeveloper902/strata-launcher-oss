@@ -21,6 +21,7 @@ import app.strata.launcher.core.theme.resolve.ResolvedTheme
 import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.StrataTheme
+import app.strata.launcher.core.ui.ThemeApplyTrace
 
 /**
  * Connects an activity to the theme repository (THEME_SYSTEM §12, ARCHITECTURE §10):
@@ -92,6 +93,8 @@ class ThemeHost(
         pendingGeneration = generation
         val choreographer = Choreographer.getInstance()
         choreographer.postFrameCallback {
+            // The frame with the composition of [generation] has been drawn (T-THEME-53 trace end).
+            ThemeApplyTrace.frameDrawn(generation)
             choreographer.postFrameCallback {
                 if (pendingGeneration == generation) pendingGeneration = -1
                 onRendered(generation, awaiting)

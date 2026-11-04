@@ -3,6 +3,7 @@ package app.strata.launcher.feature.theme
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.strata.launcher.core.common.Outcome
+import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.SharedFiles
@@ -12,9 +13,11 @@ import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.store.DeleteTicket
 import app.strata.launcher.core.theme.store.ExportError
 import app.strata.launcher.core.theme.store.ExportFile
+import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.core.theme.store.ThemeSummary
+import app.strata.launcher.core.ui.ThemeApplyTrace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -62,7 +65,12 @@ data class LibraryUiState(
     val exportChoiceFor: ThemeSummary? = null,
     /** "Also set this theme's wallpaper?" for the theme just applied (§4.3, FR-THEME-34). */
     val wallpaperPromptFor: ThemeSummary? = null,
+    /** Unsaved editor drafts (§13), newest first: "Continue editing" or discard. */
+    val drafts: List<DraftRow> = emptyList(),
 )
+
+/** An editor draft in the library (THEME_SYSTEM §13: offered for recovery after process death). */
+data class DraftRow(val sessionId: String, val name: String)
 
 sealed interface LibraryAction {
     data class Apply(val id: String) : LibraryAction
@@ -95,6 +103,18 @@ sealed interface LibraryAction {
     data class Wallpaper(val accept: Boolean) : LibraryAction
 
     data object Import : LibraryAction
+
+    /** Open the editor (§13): a stored theme as itself, a built-in as an unsaved copy. */
+    data class Edit(val id: String) : LibraryAction
+
+    data object NewTheme : LibraryAction
+
+    /** Create a theme from an image picked with the system photo picker (FR-THEME-30). */
+    data object FromImage : LibraryAction
+
+    data class ContinueDraft(val sessionId: String) : LibraryAction
+
+    data class DiscardDraft(val sessionId: String) : LibraryAction
 }
 
 sealed interface LibraryEffect {
@@ -105,6 +125,9 @@ sealed interface LibraryEffect {
     data class CreateDocument(val suggestedName: String, val mimeType: String) : LibraryEffect
 
     data class Message(val message: LibraryMessage) : LibraryEffect
+
+    /** Start the editor for [request]. */
+    data class OpenEditor(val request: EditorRequest) : LibraryEffect
 }
 
 /**
@@ -123,6 +146,8 @@ class ThemeLibraryViewModel(
     private val appScope: CoroutineScope,
     private val shareTitle: String = "Share theme",
     private val undoWindowMs: Long = UNDO_WINDOW_MS,
+    /** Editor drafts listed in the library; null hides them (screens and tests without an editor). */
+    private val editor: ThemeEditorStore? = null,
 ) : ViewModel() {
     private val all = MutableStateFlow<List<ThemeSummary>?>(null)
     private val local = MutableStateFlow(LibraryUiState())
@@ -160,6 +185,17 @@ class ThemeLibraryViewModel(
 
     private suspend fun reload() {
         all.value = manager.entries()
+        val e = editor ?: return
+        val drafts =
+            e.drafts().map { d ->
+                DraftRow(d.sessionId, (d.tree["name"] as? JsonString)?.value ?: d.sessionId)
+            }
+        local.update { it.copy(drafts = drafts) }
+    }
+
+    /** Re-reads drafts when the screen comes back (the editor may have written or removed one). */
+    fun refresh() {
+        viewModelScope.launch { reload() }
     }
 
     fun onAction(action: LibraryAction) {
@@ -178,7 +214,25 @@ class ThemeLibraryViewModel(
             is LibraryAction.Share -> share(action.id)
             is LibraryAction.Wallpaper -> wallpaperAnswer(action.accept)
             LibraryAction.Import -> effectChannel.trySend(LibraryEffect.PickImport)
+            is LibraryAction.Edit -> openEditor(EditorRequest.Edit(action.id))
+            LibraryAction.NewTheme -> openEditor(EditorRequest.New)
+            LibraryAction.FromImage -> openEditor(EditorRequest.FromImage)
+            is LibraryAction.ContinueDraft -> openEditor(EditorRequest.Draft(action.sessionId))
+            is LibraryAction.DiscardDraft -> discardDraft(action.sessionId)
         }
+    }
+
+    private fun openEditor(request: EditorRequest) {
+        if (request is EditorRequest.Edit && summary(request.id)?.needsAppUpdate == true) {
+            emit(LibraryMessage.NOT_APPLICABLE)
+            return
+        }
+        effectChannel.trySend(LibraryEffect.OpenEditor(request))
+    }
+
+    private fun discardDraft(sessionId: String) {
+        local.update { s -> s.copy(drafts = s.drafts.filterNot { it.sessionId == sessionId }) }
+        launch { editor?.deleteDraft(sessionId) }
     }
 
     private fun launch(block: suspend () -> Unit) {
@@ -197,6 +251,7 @@ class ThemeLibraryViewModel(
             emit(LibraryMessage.NOT_APPLICABLE)
             return
         }
+        ThemeApplyTrace.begin(themes.state.value.applyGeneration)
         themes.apply(id)
         launch { if (wallpaper.available(id)) local.update { it.copy(wallpaperPromptFor = t) } }
     }

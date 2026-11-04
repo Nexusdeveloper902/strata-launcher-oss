@@ -36,6 +36,7 @@ class ThemesActivity : ComponentActivity() {
                     systemIntents = graph.systemIntents,
                     appScope = graph.appScope,
                     shareTitle = getString(R.string.theme_share_chooser),
+                    editor = graph.themeEditor,
                 )
             }
         }
@@ -75,9 +76,16 @@ class ThemesActivity : ComponentActivity() {
                         if (!started) viewModel.onAction(LibraryAction.ExportUnavailable)
                     },
                     onBack = ::finish,
+                    onOpenEditor = { startActivity(ThemeEditorActivity.intent(this, it)) },
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // The editor may have saved a theme or left (or removed) a draft.
+        viewModel.refresh()
     }
 
     override fun onStop() {

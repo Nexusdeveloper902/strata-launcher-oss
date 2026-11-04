@@ -2,11 +2,18 @@ package app.strata.launcher.core.data.theme
 
 import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.common.log.Logger
+import app.strata.launcher.core.json.JsonObject
+import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.model.AppearanceSetting
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.theme.StrataDefault
+import app.strata.launcher.core.theme.editor.EditorDraft
+import app.strata.launcher.core.theme.editor.SeedExtractor
+import app.strata.launcher.core.theme.importing.BundleCodec
 import app.strata.launcher.core.theme.importing.BundleProblem
 import app.strata.launcher.core.theme.importing.ConflictChoice
+import app.strata.launcher.core.theme.importing.ImageCheck
+import app.strata.launcher.core.theme.importing.ImageOutcome
 import app.strata.launcher.core.theme.importing.ImportCandidate
 import app.strata.launcher.core.theme.importing.ImportConflict
 import app.strata.launcher.core.theme.importing.ImportError
@@ -15,8 +22,10 @@ import app.strata.launcher.core.theme.importing.ThemeImage
 import app.strata.launcher.core.theme.importing.ThemeImporter
 import app.strata.launcher.core.theme.importing.ThemeMedia
 import app.strata.launcher.core.theme.model.IconPackRef
+import app.strata.launcher.core.theme.model.ImageMediaType
 import app.strata.launcher.core.theme.model.PackFallback
 import app.strata.launcher.core.theme.model.ThemeDocument
+import app.strata.launcher.core.theme.model.WallpaperImage
 import app.strata.launcher.core.theme.parse.ThemeError
 import app.strata.launcher.core.theme.parse.ThemeErrorText
 import app.strata.launcher.core.theme.resolve.AppearanceOverride
@@ -27,16 +36,23 @@ import app.strata.launcher.core.theme.store.BootResult
 import app.strata.launcher.core.theme.store.BootSource
 import app.strata.launcher.core.theme.store.BundleExport
 import app.strata.launcher.core.theme.store.DeleteTicket
+import app.strata.launcher.core.theme.store.EditTarget
+import app.strata.launcher.core.theme.store.EditorSaveError
 import app.strata.launcher.core.theme.store.ExportError
 import app.strata.launcher.core.theme.store.ExportFile
+import app.strata.launcher.core.theme.store.ImageSeedError
+import app.strata.launcher.core.theme.store.ImageSeedResult
 import app.strata.launcher.core.theme.store.ImportCommit
 import app.strata.launcher.core.theme.store.ImportPreview
 import app.strata.launcher.core.theme.store.PackNotice
+import app.strata.launcher.core.theme.store.PreviewEnvironment
 import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeBannerKind
+import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeFileStore
 import app.strata.launcher.core.theme.store.ThemeLibrary
 import app.strata.launcher.core.theme.store.ThemeManager
+import app.strata.launcher.core.theme.store.ThemeOrigin
 import app.strata.launcher.core.theme.store.ThemePair
 import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.core.theme.store.ThemeState
@@ -85,8 +101,16 @@ class DefaultThemeRepository(
     /** Platform font/image checks of imports (THEME_SYSTEM §10.3.3). */
     private val media: ThemeMedia = ThemeMedia.TRUSTING,
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    /**
+     * Where [state] is written. The app passes the main dispatcher: compositions collect [state] directly
+     * (`ThemeHost`), and a value set from a worker thread resumes them there. Under the Compose test clock that
+     * resumption runs the recomposition inline on the worker ("multithreaded access to SnapshotStateObserver",
+     * GMD API 34). Tests that need synchronous results keep the default.
+     */
+    private val publishDispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
 ) : ThemeRepository,
-    ThemeManager {
+    ThemeManager,
+    ThemeEditorStore {
     /** The document to render and what the boot said about it. */
     private data class Active(
         val document: ThemeDocument,
@@ -131,16 +155,20 @@ class DefaultThemeRepository(
 
     private fun pendingRemove(token: String) = synchronized(pendingImports) { pendingImports.remove(token) }
 
+    /** Images stored by create-from-image in this process; kept until a draft or a saved theme references them. */
+    private val editorImages: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
+
     private fun pendingMedia(): Set<String> =
-        synchronized(pendingImports) {
-            pendingImports.values.flatMapTo(HashSet()) { (c, _) ->
-                ThemeImporter.userFonts(c.parsed) +
-                    listOfNotNull(
-                        c.parsed.document.wallpaper.image
-                            ?.sha256,
-                    )
+        editorImages.toSet() +
+            synchronized(pendingImports) {
+                pendingImports.values.flatMapTo(HashSet()) { (c, _) ->
+                    ThemeImporter.userFonts(c.parsed) +
+                        listOfNotNull(
+                            c.parsed.document.wallpaper.image
+                                ?.sha256,
+                        )
+                }
             }
-        }
 
     /** Pack notices already shown and dismissed: `generation|package|unusable` (once per apply, FR-THEME-25). */
     private val dismissedPackNotices = MutableStateFlow<Set<String>>(emptySet())
@@ -153,7 +181,7 @@ class DefaultThemeRepository(
     override fun start() {
         if (!started.compareAndSet(false, true)) return
         scope.launch(themeDispatcher) { boot() }
-        scope.launch {
+        scope.launch(publishDispatcher) {
             val globals = settings.map(::globalsOf).catch { emit(ThemeGlobals()) }.distinctUntilChanged()
             val resolved =
                 combine(active.filterNotNull(), platformInputs.filterNotNull(), globals) { a, p, g -> Triple(a, p, g) }
@@ -559,6 +587,175 @@ class DefaultThemeRepository(
 
     override suspend fun wallpaperImage(id: String): ThemeImage? = withLibrary { it.wallpaperImage(id) }
 
+    // ---- ThemeEditorStore (THEME_SYSTEM §13) ------------------------------------------------------
+
+    override suspend fun openForEdit(id: String): EditTarget? =
+        withLibrary { lib ->
+            try {
+                if (lib.isBuiltIn(id) || id.equals(StrataDefault.ID, ignoreCase = true)) {
+                    val copyId = newId()
+                    lib.copyTree(id, copyId)?.let { EditTarget(copyId, id, it, saved = null) }
+                } else {
+                    (lib.loadTheme(id) as? Outcome.Ok)?.value?.let {
+                        EditTarget(it.document.id, it.document.id, it.tree, saved = it.tree)
+                    }
+                }
+            } catch (e: Exception) {
+                logger.w(TAG, "open for editing failed", e)
+                null
+            }
+        }
+
+    override suspend fun newTheme(name: String): EditTarget =
+        withLibrary { lib ->
+            val id = newId()
+            val unique =
+                try {
+                    lib.uniqueName(name)
+                } catch (e: Exception) {
+                    name
+                }
+            EditTarget(
+                id,
+                null,
+                StrataDefault.tree.with("id", JsonString(id)).with("name", JsonString(unique)),
+                saved = null,
+            )
+        }
+
+    override suspend fun themeTree(id: String): JsonObject? =
+        withLibrary { lib ->
+            try {
+                (lib.loadTheme(id) as? Outcome.Ok)?.value?.tree
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+    override suspend fun saveEdited(tree: JsonObject): Outcome<JsonObject, EditorSaveError> =
+        withLibrary { lib ->
+            try {
+                val saved = lib.save(tree, ThemeOrigin.USER)
+                changed()
+                if (lib.currentIndex.activeThemeId.equals(saved.document.id, ignoreCase = true)) {
+                    showActive(saved.document)
+                }
+                Outcome.Ok(saved.tree)
+            } catch (e: java.io.IOException) {
+                logger.w(TAG, "theme save failed", e)
+                Outcome.Err(EditorSaveError.NOT_ENOUGH_STORAGE)
+            } catch (e: Exception) {
+                logger.e(TAG, "theme save refused", e)
+                Outcome.Err(EditorSaveError.INVALID)
+            }
+        }
+
+    override suspend fun writeDraft(draft: EditorDraft): Boolean =
+        withLibrary { lib ->
+            try {
+                lib.writeDraft(draft)
+                true
+            } catch (e: Exception) {
+                logger.w(TAG, "draft write failed", e)
+                false
+            }
+        }
+
+    override suspend fun readDraft(sessionId: String): EditorDraft? =
+        withLibrary { lib ->
+            try {
+                lib.readDraft(sessionId)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+    override suspend fun deleteDraft(sessionId: String) {
+        withLibrary { lib ->
+            try {
+                lib.deleteDraft(sessionId)
+                changed()
+            } catch (e: Exception) {
+                logger.w(TAG, "draft delete failed", e)
+            }
+        }
+    }
+
+    override suspend fun drafts(): List<EditorDraft> =
+        withLibrary { lib ->
+            try {
+                lib.drafts()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+
+    override suspend fun imageSeed(
+        bytes: ByteArray,
+        keepAsWallpaper: Boolean,
+    ): Outcome<ImageSeedResult, ImageSeedError> {
+        val header = ImageCheck.header(bytes) ?: return Outcome.Err(ImageSeedError.UNSUPPORTED)
+        // Decoding and re-encoding run off the library's serial dispatcher (they can take a while on a large photo);
+        // only the write into the image store holds it.
+        val decoded: Pair<Int?, ByteArray?> =
+            try {
+                withContext(resolveDispatcher) {
+                    // The seed comes from a sampled decode, so a photo beyond the wallpaper pixel limits still works.
+                    val seed = media.samplePixels(bytes, header, SEED_SAMPLE_SIDE)?.let(SeedExtractor::seed)
+                    val wallpaperOk = bytes.size <= ImageCheck.MAX_BYTES && ImageCheck.withinLimits(header)
+                    val stored =
+                        if (seed == null || !keepAsWallpaper || !wallpaperOk) {
+                            null
+                        } else {
+                            when (val out = media.prepareImage(bytes, header)) {
+                                ImageOutcome.AsIs -> bytes
+                                is ImageOutcome.Reencoded -> out.webp
+                                ImageOutcome.Rejected -> null
+                            }
+                        }
+                    seed to stored
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.e(TAG, "image seed failed", e)
+                return Outcome.Err(ImageSeedError.UNREADABLE)
+            } catch (e: OutOfMemoryError) {
+                return Outcome.Err(ImageSeedError.UNSUPPORTED)
+            }
+        val seed = decoded.first ?: return Outcome.Err(ImageSeedError.UNREADABLE)
+        val stored = decoded.second
+        var image: WallpaperImage? = null
+        if (stored != null) {
+            val sha = BundleCodec.sha256(stored)
+            editorImages += sha
+            val ok =
+                withLibrary { lib ->
+                    try {
+                        lib.storeImage(ThemeImage(sha, ImageMediaType.WEBP, stored))
+                        true
+                    } catch (e: Exception) {
+                        logger.w(TAG, "image store failed", e)
+                        false
+                    }
+                }
+            if (ok) image = WallpaperImage(sha, ImageMediaType.WEBP)
+        }
+        return Outcome.Ok(ImageSeedResult(seed, image, wallpaperSkipped = keepAsWallpaper && image == null))
+    }
+
+    override fun previewEnvironment(): PreviewEnvironment {
+        val a = active.value
+        val base = latestInputs ?: PlatformInputs(apiLevel = 0)
+        return PreviewEnvironment(
+            base.copy(
+                userFonts = a?.userFonts ?: base.userFonts,
+                images = (a?.images ?: base.images) + editorImages.toSet(),
+            ),
+            latestGlobals,
+        )
+    }
+
     private fun fileName(
         lib: ThemeLibrary,
         id: String,
@@ -602,6 +799,9 @@ class DefaultThemeRepository(
         const val ZIP_SUFFIX = ".strata-theme.zip"
         const val MIME_JSON = "application/json"
         const val MIME_ZIP = "application/zip"
+
+        /** Longer side of the decoded image the seed is taken from (Proposed; colour, not detail, matters). */
+        const val SEED_SAMPLE_SIDE = 128
 
         /** A suggested export name (§10.1): characters file systems reject become `_`; never empty. */
         fun safeFileName(name: String): String =

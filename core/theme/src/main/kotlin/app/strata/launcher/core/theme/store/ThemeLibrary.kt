@@ -7,6 +7,7 @@ import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.contrast.Contrast
 import app.strata.launcher.core.theme.contrast.ContrastStatus
+import app.strata.launcher.core.theme.editor.EditorDraft
 import app.strata.launcher.core.theme.importing.BundleCodec
 import app.strata.launcher.core.theme.importing.FontCheck
 import app.strata.launcher.core.theme.importing.FontFormat
@@ -402,17 +403,67 @@ class ThemeLibrary(
         id: String,
         newId: String,
     ): String? {
-        val source = (loadTheme(id) as? Outcome.Ok)?.value ?: return null
-        val taken = summaries().map { it.name.lowercase() }.toSet()
-        val name = ThemeImporter.uniqueName(copyName(source.document.name), taken)
-        val tree =
-            source.tree
-                .without("createdAt")
-                .without("modifiedAt")
-                .with("id", JsonString(newId))
-                .with("name", JsonString(name))
-                .with("basedOn", JsonString(source.document.id))
+        val tree = copyTree(id, newId) ?: return null
         return save(tree, ThemeOrigin.USER).document.id
+    }
+
+    /**
+     * The tree of a copy of [id] ("Name (copy)", new [newId], `basedOn` = the source), not written. The editor saves it
+     * on Save only, so opening a built-in for editing leaves the library unchanged (§11.3).
+     */
+    fun copyTree(
+        id: String,
+        newId: String,
+    ): JsonObject? {
+        val source = (loadTheme(id) as? Outcome.Ok)?.value ?: return null
+        val name = uniqueName(copyName(source.document.name))
+        return source.tree
+            .without("createdAt")
+            .without("modifiedAt")
+            .with("id", JsonString(newId))
+            .with("name", JsonString(name))
+            .with("basedOn", JsonString(source.document.id))
+    }
+
+    /** [name], numbered if any theme already has it (case-insensitive, built-ins included). */
+    fun uniqueName(
+        name: String,
+    ): String = ThemeImporter.uniqueName(name, summaries().map { it.name.lowercase() }.toSet())
+
+    // ---- M5 part 2b: editor drafts and images (THEME_SYSTEM §13) ------------------------------------
+
+    /** Writes a draft atomically (`themes/drafts/<sessionId>.json`). */
+    fun writeDraft(draft: EditorDraft) {
+        files.write(EditorDraft.fileName(draft.sessionId), EditorDraft.encode(draft))
+    }
+
+    /** The draft of [sessionId], or null; an unreadable draft is deleted. */
+    fun readDraft(sessionId: String): EditorDraft? {
+        if (!EditorDraft.isValidId(sessionId)) return null
+        val name = EditorDraft.fileName(sessionId)
+        val bytes = safeReadMedia(name, EditorDraft.LIMITS.maxBytes) ?: return null
+        val draft = EditorDraft.decode(bytes)?.takeIf { it.sessionId.equals(sessionId, ignoreCase = true) }
+        if (draft == null || parser.validate(draft.tree) !is Outcome.Ok) {
+            safeDelete(name)
+            return null
+        }
+        return draft
+    }
+
+    fun deleteDraft(sessionId: String) {
+        if (EditorDraft.isValidId(sessionId)) safeDelete(EditorDraft.fileName(sessionId))
+    }
+
+    /** Every readable draft, newest first. */
+    fun drafts(): List<EditorDraft> =
+        safeList(EditorDraft.DIR)
+            .filter { it.endsWith(EditorDraft.SUFFIX) }
+            .mapNotNull { readDraft(it.removeSuffix(EditorDraft.SUFFIX)) }
+            .sortedByDescending { it.savedAtMillis }
+
+    /** Stores a prepared (stripped WebP) wallpaper image in the content-addressed image store. */
+    fun storeImage(image: ThemeImage) {
+        writeMediaIfAbsent("$IMAGES_DIR/${image.sha256}.$IMAGE_EXT", image.bytes)
     }
 
     /** Hides or shows a built-in in the picker (§11.3). Stored themes are deleted instead. */
@@ -515,6 +566,8 @@ class ThemeLibrary(
                 ?.let { referencedImages += it }
         }
         for (name in trees) (readParsed(name) as? Outcome.Ok)?.value?.let(::reference)
+        // Drafts (§13) may reference an image stored by create-from-image before the theme is first saved.
+        for (d in drafts()) (parser.validate(d.tree) as? Outcome.Ok)?.value?.let(::reference)
         // Versions an Undo may restore, and media of prepared imports, are still in use.
         for (bytes in replacedVersions.values) (parser.parse(bytes) as? Outcome.Ok)?.value?.let(::reference)
         val pinned = pinnedMedia()

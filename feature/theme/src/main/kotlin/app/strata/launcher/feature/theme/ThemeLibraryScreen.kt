@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.theme.StrataDefault
@@ -69,6 +70,12 @@ object ThemeTestTags {
     const val IMPORT_KEEP_BOTH = "theme_import_keep_both"
     const val IMPORT_DONE = "theme_import_done"
     const val IMPORT_NOTE = "theme_import_note"
+    const val NEW_THEME = "theme_new"
+    const val FROM_IMAGE = "theme_from_image"
+
+    fun draft(sessionId: String) = "theme_draft_${sessionId.lowercase()}"
+
+    fun draftDiscard(sessionId: String) = "theme_draft_discard_${sessionId.lowercase()}"
 
     fun row(id: String) = "theme_row_${id.lowercase()}"
 
@@ -92,8 +99,10 @@ fun ThemeLibraryRoute(
     onPickImport: () -> Unit,
     onCreateDocument: (name: String, mime: String) -> Unit,
     onBack: () -> Unit,
+    onOpenEditor: (EditorRequest) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val openEditor by rememberUpdatedState(onOpenEditor)
     val pick by rememberUpdatedState(onPickImport)
     val create by rememberUpdatedState(onCreateDocument)
     LaunchedEffect(effects) {
@@ -109,6 +118,10 @@ fun ThemeLibraryRoute(
 
                 is LibraryEffect.Message -> {
                     Toast.makeText(context, messageText(e.message), Toast.LENGTH_SHORT).show()
+                }
+
+                is LibraryEffect.OpenEditor -> {
+                    openEditor(e.request)
                 }
             }
         }
@@ -140,6 +153,7 @@ fun ThemeLibraryScreen(
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .semantics { testTagsAsResourceId = true }
                 .testTag(ThemeTestTags.LIBRARY),
     ) {
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -172,7 +186,21 @@ fun ThemeLibraryScreen(
                     modifier = Modifier.testTag(ThemeTestTags.IMPORT_BUTTON),
                 ) { Text(stringResource(R.string.theme_import)) }
             }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                TextButton(
+                    onClick = { onAction(LibraryAction.NewTheme) },
+                    modifier = Modifier.testTag(ThemeTestTags.NEW_THEME),
+                ) { Text(stringResource(R.string.theme_new)) }
+                TextButton(
+                    onClick = { onAction(LibraryAction.FromImage) },
+                    modifier = Modifier.testTag(ThemeTestTags.FROM_IMAGE),
+                ) { Text(stringResource(R.string.theme_from_image)) }
+            }
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                items(state.drafts, key = { "draft_" + it.sessionId }) { d -> DraftRowView(d, onAction) }
                 items(state.rows, key = { it.id.lowercase() }) { t ->
                     ThemeRow(t, active = t.id.equals(state.activeId, ignoreCase = true), onAction)
                 }
@@ -254,6 +282,7 @@ private fun ThemeRow(
                     }
                 if (t.applicable) item("apply", R.string.theme_apply, LibraryAction.Apply(t.id))()
                 if (!t.needsAppUpdate) {
+                    item("edit", R.string.theme_edit, LibraryAction.Edit(t.id))()
                     item("duplicate", R.string.theme_duplicate, LibraryAction.Duplicate(t.id))()
                     item("export", R.string.theme_export, LibraryAction.Export(t.id))()
                     item("share", R.string.theme_share, LibraryAction.Share(t.id))()
@@ -277,6 +306,40 @@ private fun ThemeRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DraftRowView(
+    d: DraftRow,
+    onAction: (LibraryAction) -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .clickable { onAction(LibraryAction.ContinueDraft(d.sessionId)) }
+                .padding(start = 16.dp)
+                .testTag(ThemeTestTags.draft(d.sessionId)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(
+                stringResource(R.string.theme_draft_row, d.name),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                stringResource(R.string.theme_draft_continue),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(
+            onClick = { onAction(LibraryAction.DiscardDraft(d.sessionId)) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag(ThemeTestTags.draftDiscard(d.sessionId)),
+        ) { Text(stringResource(R.string.editor_draft_discard)) }
     }
 }
 

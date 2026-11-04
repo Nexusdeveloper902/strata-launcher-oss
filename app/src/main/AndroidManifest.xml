@@ -100,6 +100,15 @@
             android:label="@string/themes_label"
             android:taskAffinity="app.strata.launcher.settings" />
 
+        <!-- Theme editor (FR-THEME-29/30), started from the theme library. Not exported. Create-from-image uses the
+             system photo picker, which needs no storage permission. -->
+        <activity
+            android:name=".theme.ThemeEditorActivity"
+            android:exported="false"
+            android:label="@string/theme_editor_label"
+            android:taskAffinity="app.strata.launcher.settings"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- S-ICON, the per-app icon chooser (FR-APPS-06), started from the options sheet. Not exported. -->
         <activity
             android:name=".theme.IconChooserActivity"
