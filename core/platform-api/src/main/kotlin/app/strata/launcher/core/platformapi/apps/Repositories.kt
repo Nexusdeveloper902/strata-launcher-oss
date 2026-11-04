@@ -4,6 +4,7 @@ import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppList
 import app.strata.launcher.core.model.AppOverride
 import app.strata.launcher.core.model.Catalog
+import app.strata.launcher.core.model.IconOverride
 import app.strata.launcher.core.model.ProfileKind
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -76,6 +77,13 @@ interface OverridesRepository {
         key: AppKey,
         profileKind: ProfileKind,
         label: String?,
+    )
+
+    /** FR-APPS-06: the per-app icon; null resets to the theme's icon. PRIVATE-profile writes are dropped. */
+    suspend fun setIconOverride(
+        key: AppKey,
+        profileKind: ProfileKind,
+        icon: IconOverride?,
     )
 }
 

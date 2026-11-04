@@ -388,7 +388,10 @@ class SheetAndFavoritesTest {
         // The rest page is hidden from accessibility while the list covers it: return to rest first.
         h.vm.onAction(HomeAction.HomePressed)
         compose.waitForIdle()
-        favNode.invokeCustomAction(compose, "Change icon") // M5: explains instead of doing nothing
+        favNode.invokeCustomAction(compose, "Change icon")
+        compose.waitForIdle()
+        // FR-APPS-06: S-ICON opens for that app.
+        assertThat(h.navigations).contains(HomeEffect.OpenIconChooser(user.key))
     }
 
     /** T-A11Y-02: with the index `never`, "Jump to letter…" → R moves focus to the first R app; empty letters skipped. */

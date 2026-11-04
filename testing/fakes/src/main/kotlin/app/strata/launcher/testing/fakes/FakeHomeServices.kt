@@ -3,8 +3,12 @@ package app.strata.launcher.testing.fakes
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppOverride
 import app.strata.launcher.core.model.IconImage
+import app.strata.launcher.core.model.IconOverride
+import app.strata.launcher.core.model.IconPackInfo
+import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
+import app.strata.launcher.core.model.PackDrawables
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.apps.AddFavoriteResult
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
@@ -44,12 +48,21 @@ class FakeOverridesRepository(initial: Map<AppKey, AppOverride> = emptyMap()) : 
         edit(key) { it.copy(customLabel = label?.let(LabelRules::normalize)) }
     }
 
+    override suspend fun setIconOverride(
+        key: AppKey,
+        profileKind: ProfileKind,
+        icon: IconOverride?,
+    ) {
+        if (profileKind == ProfileKind.PRIVATE) return
+        edit(key) { it.copy(icon = icon) }
+    }
+
     private fun edit(
         key: AppKey,
         transform: (AppOverride) -> AppOverride,
     ) = state.update { map ->
         val next = transform(map[key] ?: AppOverride(key))
-        if (!next.hidden && next.customLabel == null) map - key else map + (key to next)
+        if (!next.hidden && next.customLabel == null && next.icon == null) map - key else map + (key to next)
     }
 }
 
@@ -139,9 +152,24 @@ class FakeLockService(
     }
 }
 
-/** Always the monogram (pure JVM: no bitmaps); counts requests. */
-class FakeIconProvider : IconProvider {
+/**
+ * Always the monogram (pure JVM: no bitmaps); counts requests. [iconPacks] and [drawables] are set by tests; the icon
+ * chooser and the pack inputs of the theme read them.
+ */
+class FakeIconProvider(
+    packs: IconPacks = IconPacks(discovered = true),
+) : IconProvider {
     val requests = mutableListOf<IconRequest>()
+
+    override val iconPacks = MutableStateFlow(packs)
+
+    override val revision = MutableStateFlow(0L)
+
+    /** pack → (drawables, component → suggested). */
+    val drawables = mutableMapOf<String, Pair<List<String>, Map<String, String>>>()
+
+    var refreshes: Int = 0
+        private set
 
     override fun cached(req: IconRequest): IconImage? = null
 
@@ -151,4 +179,32 @@ class FakeIconProvider : IconProvider {
     }
 
     override fun trim(critical: Boolean) = Unit
+
+    override fun start() = Unit
+
+    override fun refreshPacks() {
+        refreshes++
+    }
+
+    override suspend fun packDrawables(
+        pack: String,
+        component: String?,
+    ): PackDrawables? {
+        if (iconPacks.value.find(pack)?.usable != true) return null
+        val (names, mapping) = drawables[pack] ?: return PackDrawables(pack, emptyList())
+        return PackDrawables(pack, names, component?.let { mapping[it] })
+    }
+
+    override suspend fun packIcon(
+        pack: String,
+        drawable: String,
+        sizePx: Int,
+        densityDpi: Int,
+    ): IconResult = IconResult.Monogram
+
+    /** Simulates installing or removing packs. */
+    fun setPacks(vararg packs: IconPackInfo) {
+        iconPacks.value = IconPacks(packs.toList(), discovered = true)
+        revision.value++
+    }
 }

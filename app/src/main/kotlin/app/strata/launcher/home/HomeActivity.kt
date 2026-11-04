@@ -49,6 +49,7 @@ import app.strata.launcher.feature.search.SearchRoute
 import app.strata.launcher.feature.search.SearchViewModel
 import app.strata.launcher.platform.system.SystemIntentFactory
 import app.strata.launcher.settings.SettingsActivity
+import app.strata.launcher.theme.IconChooserActivity
 import app.strata.launcher.theme.ThemeHost
 import app.strata.launcher.theme.ThemesActivity
 
@@ -78,6 +79,7 @@ class HomeActivity : ComponentActivity() {
                     logger = graph.logger,
                     theme = graph.themeRepository,
                     themesAvailable = true,
+                    iconPacks = graph.iconProvider.iconPacks,
                 )
             }
         }
@@ -267,6 +269,11 @@ class HomeActivity : ComponentActivity() {
 
                 HomeEffect.OpenThemes -> {
                     startActivity(Intent(this, ThemesActivity::class.java))
+                    return
+                }
+
+                is HomeEffect.OpenIconChooser -> {
+                    startActivity(IconChooserActivity.intent(this, effect.key))
                     return
                 }
 

@@ -63,11 +63,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.Velocity
@@ -104,6 +106,8 @@ object HomeTestTags {
     const val RESET_BANNER = "home_reset_banner"
     const val THEME_BANNER = "home_theme_banner"
     const val THEME_BANNER_DETAILS = "home_theme_banner_details"
+    const val ICON_NOTICE = "home_icon_notice"
+    const val ICON_NOTICE_STORE = "home_icon_notice_store"
     const val CLOCK = "home_clock"
     const val DATE = "home_date"
     const val FAVORITES = "home_favorites"
@@ -196,7 +200,6 @@ fun HomeRoute(
                         when (effect.feature) {
                             LaterFeature.WIDGETS -> R.string.later_widgets
                             LaterFeature.THEMES -> R.string.later_themes
-                            LaterFeature.ICONS -> R.string.later_icons
                         }
                     launch { snackbar.showSnackbar(resources.getString(text)) }
                 }
@@ -434,13 +437,15 @@ fun HomeScreen(
                     ),
         ) {
             val themeBanner = state.themeBanner
-            if (state.showAppModeBanner || state.showResetBanner || themeBanner != null) {
+            val iconNotice = state.iconNotice
+            if (state.showAppModeBanner || state.showResetBanner || themeBanner != null || iconNotice != null) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (state.showAppModeBanner) {
                         AppModeBanner(showSetDefaultButton = showSetDefaultButton, onSetDefault = onSetDefault)
                     }
                     if (state.showResetBanner) ResetBanner { onAction(HomeAction.DismissResetBanner) }
                     if (themeBanner != null) ThemeBannerCard(themeBanner) { onAction(HomeAction.DismissThemeBanner) }
+                    if (iconNotice != null) IconNoticeCard(iconNotice, onAction)
                 }
             }
             val header: @Composable (Modifier) -> Unit = { m ->
@@ -801,6 +806,55 @@ private fun ThemeBannerCard(
                     ) { Text(text = stringResource(R.string.theme_banner_details)) }
                 }
                 TextButton(onClick = onDismiss) { Text(text = stringResource(R.string.reset_banner_dismiss)) }
+            }
+        }
+    }
+}
+
+/** FR-THEME-25 / FR-APPS-06: one-time icon-pack notice with the store button (THEME_SYSTEM §4.6). */
+@Composable
+private fun IconNoticeCard(
+    notice: IconNotice,
+    onAction: (HomeAction) -> Unit,
+) {
+    val text =
+        when (notice) {
+            is IconNotice.ThemePack -> {
+                val name = notice.displayName ?: notice.packageName
+                if (notice.unusable) {
+                    stringResource(R.string.icon_notice_pack_unusable, name)
+                } else {
+                    stringResource(R.string.icon_notice_pack_missing, name)
+                }
+            }
+
+            is IconNotice.OverridePackGone -> {
+                stringResource(R.string.icon_notice_override_gone, notice.packageName)
+            }
+        }
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(HomeTestTags.ICON_NOTICE)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Row(modifier = Modifier.align(Alignment.End)) {
+                TextButton(
+                    onClick = { onAction(HomeAction.IconNoticeStore) },
+                    modifier = Modifier.testTag(HomeTestTags.ICON_NOTICE_STORE),
+                ) { Text(text = stringResource(R.string.icon_notice_store)) }
+                TextButton(onClick = { onAction(HomeAction.DismissIconNotice) }) {
+                    Text(text = stringResource(R.string.reset_banner_dismiss))
+                }
             }
         }
     }

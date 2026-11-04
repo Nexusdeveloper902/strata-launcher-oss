@@ -53,7 +53,6 @@
     <string name="menu_edit_favorites">Edit favourites</string>
     <string name="later_widgets">Widgets arrive in a later version</string>
     <string name="later_themes">Themes arrive in a later version</string>
-    <string name="later_icons">Custom icons arrive in a later version</string>
 
     <!-- App sheet (FR-APPS-03…07) -->
     <string name="sheet_add_favorite">Add to favourites</string>
@@ -62,6 +61,13 @@
     <string name="sheet_reset_name">Reset name</string>
     <string name="sheet_name_label">Name</string>
     <string name="sheet_change_icon">Change icon</string>
+    <!-- FR-THEME-25 (THEME_SYSTEM §4.6): %1$s is the icon pack's name. -->
+    <string name="icon_notice_pack_missing">This theme uses the icon pack %1$s, which is not installed.</string>
+    <!-- NFR-COMPAT-04: the pack is installed but its icon list could not be read safely. %1$s = pack name. -->
+    <string name="icon_notice_pack_unusable">This theme uses the icon pack %1$s, which can\'t be read. System icons are shown instead.</string>
+    <!-- FR-APPS-06: %1$s = the pack's package name. -->
+    <string name="icon_notice_override_gone">Some app icons came from %1$s, which is no longer installed. Those apps show their usual icon.</string>
+    <string name="icon_notice_store">Open in store</string>
     <string name="sheet_hide">Hide from list</string>
     <string name="sheet_unhide">Show in list</string>
     <string name="sheet_app_info">App info</string>

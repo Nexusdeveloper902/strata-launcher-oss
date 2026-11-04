@@ -100,6 +100,13 @@
             android:label="@string/themes_label"
             android:taskAffinity="app.strata.launcher.settings" />
 
+        <!-- S-ICON, the per-app icon chooser (FR-APPS-06), started from the options sheet. Not exported. -->
+        <activity
+            android:name=".theme.IconChooserActivity"
+            android:exported="false"
+            android:label="@string/icon_chooser_label"
+            android:taskAffinity="app.strata.launcher.settings" />
+
         <!-- Theme import from other apps (FR-THEME-21). MIME list = THEME_SYSTEM §3.1 (canonical).
              VIEW carries the URI in getData, so the filter pins scheme="content".
              SEND carries it in EXTRA_STREAM (no data URI), so its filter has no scheme;

@@ -5,6 +5,7 @@ import app.strata.launcher.core.data.db.StrataDatabase
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppList
 import app.strata.launcher.core.model.AppOverride
+import app.strata.launcher.core.model.IconOverride
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppListSource
 import app.strata.launcher.core.platformapi.system.Collation
@@ -32,9 +33,33 @@ fun overridesFlow(database: LazyResource<StrataDatabase>): Flow<Map<AppKey, AppO
         .map { rows ->
             rows.associate { r ->
                 val key = AppKey(r.component, r.userSerial)
-                key to AppOverride(key, hidden = r.hidden, customLabel = r.customLabel, missingSince = r.missingSince)
+                key to
+                    AppOverride(
+                        key,
+                        hidden = r.hidden,
+                        customLabel = r.customLabel,
+                        icon = iconOverrideOf(r.iconKind, r.iconPack, r.iconDrawable),
+                        missingSince = r.missingSince,
+                    )
             }
         }
+
+/** `app_override.icon_kind` value of a pack icon (ARCHITECTURE §4.1, §12.1 `"kind": "pack"`). */
+const val ICON_KIND_PACK = "pack"
+
+/** The stored icon columns as an [IconOverride]; anything incomplete or of another kind reads as "no override". */
+fun iconOverrideOf(
+    kind: String?,
+    pack: String?,
+    drawable: String?,
+): IconOverride? =
+    if (kind == ICON_KIND_PACK && !pack.isNullOrEmpty() &&
+        !drawable.isNullOrEmpty()
+    ) {
+        IconOverride(pack, drawable)
+    } else {
+        null
+    }
 
 /**
  * The single [AppListAssembler] pipeline shared by home, list and search: recomputed on

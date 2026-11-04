@@ -32,6 +32,8 @@ data class VisibleApp(
     val lastUpdateTime: Long = 0L,
     /** A custom label is set (FR-APPS-05: the sheet offers "Reset name"). */
     val renamed: Boolean = false,
+    /** FR-APPS-06: the per-app icon chosen in S-ICON (part of the icon request). */
+    val iconOverride: IconOverride? = null,
 ) {
     fun hasFlag(flag: Int): Boolean = flags and flag != 0
 

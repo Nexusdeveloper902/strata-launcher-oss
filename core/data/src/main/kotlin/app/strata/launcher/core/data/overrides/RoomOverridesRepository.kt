@@ -2,9 +2,11 @@ package app.strata.launcher.core.data.overrides
 
 import app.strata.launcher.core.data.LazyResource
 import app.strata.launcher.core.data.db.StrataDatabase
+import app.strata.launcher.core.data.list.ICON_KIND_PACK
 import app.strata.launcher.core.data.list.overridesFlow
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppOverride
+import app.strata.launcher.core.model.IconOverride
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.apps.AddFavoriteResult
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
@@ -43,6 +45,21 @@ class RoomOverridesRepository(
         if (profileKind == ProfileKind.PRIVATE) return
         val normalized = label?.let { LabelRules.normalize(it) }
         database.get().overrideDao().edit(key.component, key.userSerial) { it.copy(customLabel = normalized) }
+    }
+
+    override suspend fun setIconOverride(
+        key: AppKey,
+        profileKind: ProfileKind,
+        icon: IconOverride?,
+    ) {
+        if (profileKind == ProfileKind.PRIVATE) return
+        database.get().overrideDao().edit(key.component, key.userSerial) {
+            it.copy(
+                iconKind = icon?.let { ICON_KIND_PACK },
+                iconPack = icon?.packPackage,
+                iconDrawable = icon?.drawable,
+            )
+        }
     }
 }
 

@@ -15,6 +15,7 @@ import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.contrast.ContrastStatus
 import app.strata.launcher.core.theme.importing.ImportConflict
 import app.strata.launcher.core.theme.importing.ImportMessage
+import app.strata.launcher.core.theme.resolve.PlatformInputs
 import app.strata.launcher.core.theme.resolve.WallpaperColorsInput
 import app.strata.launcher.core.ui.StrataDefaultTheme
 import app.strata.launcher.testing.fixtures.BundleFixtures
@@ -92,6 +93,22 @@ class ThemeImportTest {
                 .filter { !it.builtIn }
                 .map { it.id }
         }
+
+    /** T-THEME-33 (import summary): a theme whose icon pack is not installed names it; an installed one does not. */
+    @Test
+    fun tTheme33_summaryNamesTheMissingIconPack() {
+        val extra = ""","icons":{"pack":{"package":"fixture.pack.ok","displayName":"OK Pack"}}"""
+        open(ThemeHarness.theme(idA, "Packed", extra))
+        compose.onNodeWithText("This theme uses the icon pack OK Pack, which is not installed").assertExists()
+    }
+
+    @Test
+    fun installedPackIsNotNamed() {
+        h.inputs.value = PlatformInputs(apiLevel = 34, installedIconPacks = setOf("fixture.pack.ok"))
+        val extra = ""","icons":{"pack":{"package":"fixture.pack.ok","displayName":"OK Pack"}}"""
+        open(ThemeHarness.theme(idA, "Packed", extra))
+        compose.onNodeWithText("This theme uses the icon pack OK Pack, which is not installed").assertDoesNotExist()
+    }
 
     // ---- T-THEME-27 (R half) / FR-THEME-21 --------------------------------------------------------
 

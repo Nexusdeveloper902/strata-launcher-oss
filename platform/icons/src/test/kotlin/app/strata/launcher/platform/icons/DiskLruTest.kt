@@ -102,7 +102,7 @@ class DiskLruTest {
     fun hexMatchesFormatPerByte() {
         val digest = MessageDigest.getInstance("SHA-1").digest("v1|a/b|0|1|144|420".toByteArray())
         val expected = digest.joinToString("") { "%02x".format(it) }
-        assertThat(SystemIconProvider.hex(digest)).isEqualTo(expected)
-        assertThat(SystemIconProvider.hex(byteArrayOf(0, 15, -1, -128, 127))).isEqualTo("000fff807f")
+        assertThat(AndroidIconProvider.hex(digest)).isEqualTo(expected)
+        assertThat(AndroidIconProvider.hex(byteArrayOf(0, 15, -1, -128, 127))).isEqualTo("000fff807f")
     }
 }

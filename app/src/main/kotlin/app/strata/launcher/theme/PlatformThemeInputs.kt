@@ -1,6 +1,7 @@
 package app.strata.launcher.theme
 
 import android.os.Build
+import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.platformapi.system.AnimatorScale
 import app.strata.launcher.core.platformapi.system.AnimatorScaleSource
 import app.strata.launcher.core.platformapi.system.DynamicColorsModel
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -32,6 +34,8 @@ class PlatformThemeInputs(
     private val wallpaper: WallpaperColorsSource,
     private val dynamic: DynamicColorsSource,
     private val animator: AnimatorScaleSource,
+    /** Discovered icon packs (FR-THEME-10/25); inputs wait for the first discovery so no false "missing" shows. */
+    private val iconPacks: Flow<IconPacks> = flowOf(IconPacks(discovered = true)),
     private val io: CoroutineDispatcher,
     private val scope: CoroutineScope,
     private val apiLevel: Int = Build.VERSION.SDK_INT,
@@ -42,8 +46,12 @@ class PlatformThemeInputs(
     private val local = MutableStateFlow<Local?>(null)
 
     val inputs: Flow<PlatformInputs?> =
-        combine(local, wallpaper.colors, wallpaper.loaded) { l, w, loaded ->
-            if (l == null || !loaded) null else toInputs(l, w)
+        combine(local, wallpaper.colors, wallpaper.loaded, iconPacks) { l, w, loaded, packs ->
+            if (l == null || !loaded || !packs.discovered) {
+                null
+            } else {
+                toInputs(l, w).copy(installedIconPacks = packs.usable, unusableIconPacks = packs.unusable)
+            }
         }.distinctUntilChanged()
 
     /** Starts the wallpaper listener and the first read; idempotent. */

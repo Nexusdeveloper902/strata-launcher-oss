@@ -186,6 +186,8 @@ object ThemeResolver {
                         packFallback = pack?.fallback ?: app.strata.launcher.core.theme.model.PackFallback.SYSTEM,
                         missingPackPackage = if (pack != null && !packInstalled) pack.packageName else null,
                         missingPackDisplayName = if (pack != null && !packInstalled) pack.displayName else null,
+                        missingPackUnusable =
+                            pack != null && !packInstalled && pack.packageName in platform.unusableIconPacks,
                         tint = i.tint,
                         legacyIconPlate = i.legacyIconPlate,
                         labelsVisible = i.labelsVisible || !i.visible,

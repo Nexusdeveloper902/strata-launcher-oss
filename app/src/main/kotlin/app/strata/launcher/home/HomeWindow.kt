@@ -6,6 +6,7 @@ import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.ui.IconLoader
+import kotlinx.coroutines.flow.StateFlow
 
 /** Window rules of the home activity (FR-HOME-08), pure for unit tests. */
 object HomeWindow {
@@ -32,4 +33,6 @@ class ProviderIconLoader(private val provider: IconProvider) : IconLoader {
     override fun cached(req: IconRequest): IconImage? = provider.cached(req)
 
     override suspend fun load(req: IconRequest): IconResult = provider.icon(req)
+
+    override val revision: StateFlow<Long> get() = provider.revision
 }

@@ -158,6 +158,14 @@ class FakeThemeRepository(
         stableRenders++
     }
 
+    var packNoticeDismissals = 0
+        private set
+
+    override fun dismissPackNotice() {
+        packNoticeDismissals++
+        state.update { it.copy(packNotice = null) }
+    }
+
     override fun dismissBanner() {
         state.update { it.copy(banner = null) }
     }
