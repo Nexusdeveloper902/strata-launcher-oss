@@ -30,9 +30,10 @@ import java.nio.file.Files
  */
 class ThemeHarness(
     wallpaper: WallpaperColorsInput? = null,
+    /** Pass another harness's stores to simulate a new process over the same storage. */
+    val files: InMemoryThemeFileStore = InMemoryThemeFileStore(),
+    val index: InMemoryThemeIndexStore = InMemoryThemeIndexStore(),
 ) {
-    val files = InMemoryThemeFileStore()
-    val index = InMemoryThemeIndexStore()
     val clock = FakeClock(1_800_000_000_000)
     val documents = FakeDocumentIO()
     val shared = FakeSharedFiles()

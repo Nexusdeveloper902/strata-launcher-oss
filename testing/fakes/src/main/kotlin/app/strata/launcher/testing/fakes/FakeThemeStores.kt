@@ -1,16 +1,27 @@
 package app.strata.launcher.testing.fakes
 
 import app.strata.launcher.core.common.Outcome
+import app.strata.launcher.core.json.JsonObject
+import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.theme.StrataDefault
+import app.strata.launcher.core.theme.editor.EditorDraft
 import app.strata.launcher.core.theme.importing.ConflictChoice
 import app.strata.launcher.core.theme.importing.ImportError
 import app.strata.launcher.core.theme.importing.ThemeImage
+import app.strata.launcher.core.theme.resolve.PlatformInputs
+import app.strata.launcher.core.theme.resolve.ThemeGlobals
 import app.strata.launcher.core.theme.store.BuiltInThemeSource
 import app.strata.launcher.core.theme.store.DeleteTicket
+import app.strata.launcher.core.theme.store.EditTarget
+import app.strata.launcher.core.theme.store.EditorSaveError
 import app.strata.launcher.core.theme.store.ExportError
 import app.strata.launcher.core.theme.store.ExportFile
+import app.strata.launcher.core.theme.store.ImageSeedError
+import app.strata.launcher.core.theme.store.ImageSeedResult
 import app.strata.launcher.core.theme.store.ImportCommit
 import app.strata.launcher.core.theme.store.ImportPreview
+import app.strata.launcher.core.theme.store.PreviewEnvironment
+import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeFileStore
 import app.strata.launcher.core.theme.store.ThemeIndex
 import app.strata.launcher.core.theme.store.ThemeIndexStore
@@ -220,4 +231,61 @@ class FakeThemeManager : ThemeManager {
     override suspend fun exportBundle(id: String): Outcome<ExportFile, ExportError> = Outcome.Err(ExportError.NOT_FOUND)
 
     override suspend fun wallpaperImage(id: String): ThemeImage? = null
+}
+
+/**
+ * Inert [ThemeEditorStore] for tests that do not exercise the editor (the real one
+ * is the theme repository). Nothing opens; drafts are kept in memory.
+ */
+class FakeThemeEditorStore : ThemeEditorStore {
+    val drafts = LinkedHashMap<String, EditorDraft>()
+
+    override suspend fun openForEdit(id: String): EditTarget? = null
+
+    override suspend fun newTheme(name: String): EditTarget =
+        EditTarget(
+            NEW_ID,
+            null,
+            StrataDefault.tree
+                .with("id", JsonString(NEW_ID))
+                .with("name", JsonString(name)),
+            saved = null,
+        )
+
+    override suspend fun themeTree(id: String): JsonObject? = null
+
+    override suspend fun saveEdited(
+        tree: JsonObject,
+    ): Outcome<JsonObject, EditorSaveError> =
+        Outcome.Ok(tree)
+
+    override suspend fun writeDraft(draft: EditorDraft): Boolean {
+        drafts[draft.sessionId] = draft
+        return true
+    }
+
+    override suspend fun readDraft(sessionId: String): EditorDraft? =
+        drafts[sessionId]
+
+    override suspend fun deleteDraft(sessionId: String) {
+        drafts.remove(sessionId)
+    }
+
+    override suspend fun drafts(): List<EditorDraft> = drafts.values.toList()
+
+    override suspend fun imageSeed(
+        bytes: ByteArray,
+        keepAsWallpaper: Boolean,
+    ): Outcome<ImageSeedResult, ImageSeedError> =
+        Outcome.Err(ImageSeedError.UNREADABLE)
+
+    override fun previewEnvironment(): PreviewEnvironment =
+        PreviewEnvironment(
+            PlatformInputs(apiLevel = 34),
+            ThemeGlobals(),
+        )
+
+    private companion object {
+        const val NEW_ID = "00000000-0000-4000-8000-00000000e417"
+    }
 }

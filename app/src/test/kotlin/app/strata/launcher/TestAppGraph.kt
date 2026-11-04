@@ -3,6 +3,7 @@ package app.strata.launcher
 import androidx.test.core.app.ApplicationProvider
 import app.strata.launcher.core.common.AppDispatchers
 import app.strata.launcher.core.model.Settings
+import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.di.AppGraph
 import app.strata.launcher.testing.fakes.FakeAppCatalog
@@ -21,6 +22,7 @@ import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import app.strata.launcher.testing.fakes.FakeSharedFiles
 import app.strata.launcher.testing.fakes.FakeSystemIntents
 import app.strata.launcher.testing.fakes.FakeTextFolding
+import app.strata.launcher.testing.fakes.FakeThemeEditorStore
 import app.strata.launcher.testing.fakes.FakeThemeManager
 import app.strata.launcher.testing.fakes.FakeThemeRepository
 import app.strata.launcher.testing.fakes.FakeTimeTicks
@@ -50,6 +52,7 @@ class TestAppGraph(
     override val lockService: FakeLockService = FakeLockService(),
     override val themeRepository: FakeThemeRepository = FakeThemeRepository(),
     override val themeManager: ThemeManager = FakeThemeManager(),
+    override val themeEditor: ThemeEditorStore = FakeThemeEditorStore(),
     override val documents: FakeDocumentIO = FakeDocumentIO(),
     override val sharedFiles: FakeSharedFiles = FakeSharedFiles(),
 ) : AppGraph {

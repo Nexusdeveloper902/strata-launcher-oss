@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The theme editor (THEME_SYSTEM §13) and its contrast UI (§7.6). -->
+<resources>
+    <string name="editor_title">Edit theme</string>
+    <string name="editor_back">Back</string>
+    <string name="editor_undo">Undo</string>
+    <string name="editor_redo">Redo</string>
+    <string name="editor_save">Save</string>
+    <string name="editor_apply">Apply</string>
+    <string name="editor_json">Edit as JSON</string>
+    <string name="editor_unsaved">Unsaved changes</string>
+    <string name="editor_preview">Preview</string>
+    <string name="editor_preview_dark">Dark</string>
+    <string name="editor_preview_wallpaper">Wallpaper</string>
+    <string name="editor_preview_problems">Show contrast problems</string>
+    <string name="editor_preview_sample">Sample apps</string>
+    <string name="editor_preview_problem_mark">Hard to read</string>
+    <string name="editor_reset">Reset</string>
+    <!-- %1$s = the field's name. -->
+    <string name="editor_reset_field">Reset %1$s to default</string>
+    <!-- %1$s = the group's name. -->
+    <string name="editor_reset_group">Reset %1$s</string>
+    <!-- %1$s = the preset's name. -->
+    <string name="editor_reset_preset">Reset to %1$s</string>
+    <string name="editor_reset_default">Reset to Strata Default</string>
+    <string name="editor_reset_theme_title">Reset the whole theme</string>
+    <string name="editor_light">light</string>
+    <string name="editor_dark">dark</string>
+    <!-- %1$s = colour role, %2$s = light or dark. -->
+    <string name="editor_colour_label">%1$s (%2$s)</string>
+    <string name="editor_hex">Hex colour</string>
+    <string name="editor_hue">Hue</string>
+    <string name="editor_chroma">Colourfulness</string>
+    <string name="editor_tone">Lightness</string>
+    <string name="editor_swatches">From the wallpaper and system colours</string>
+    <string name="editor_from_image">Colours from image…</string>
+    <string name="editor_keep_image">Also use the image as this theme\'s wallpaper</string>
+    <!-- Contrast chip (§7.6): %1$s = ratio such as 4.8. Pass/fail is told by text and the icon, not by colour. -->
+    <string name="editor_chip_pass">✓ %1$s : 1 AA</string>
+    <string name="editor_chip_fail">✗ %1$s : 1, hard to read</string>
+    <!-- Contrast banner (§7.6). -->
+    <string name="editor_banner_title">Some colours are hard to read</string>
+    <string name="editor_banner_ok">All colours are readable on any wallpaper</string>
+    <string name="editor_fix">Fix</string>
+    <string name="editor_show_me">Show me</string>
+    <string name="editor_pair_p1">App names on the background are hard to read</string>
+    <string name="editor_pair_p2">Secondary text on the background is hard to read</string>
+    <string name="editor_pair_p3">The accent colour on the background is hard to see</string>
+    <string name="editor_pair_p4">Text on the search bar is hard to read</string>
+    <string name="editor_pair_p5">Secondary text on the search bar is hard to read</string>
+    <string name="editor_pair_p6">The accent colour on the search bar is hard to see</string>
+    <string name="editor_pair_p7">Text on pressed rows is hard to read</string>
+    <string name="editor_pair_p8">Text on the accent colour is hard to read</string>
+    <!-- %1$s = a banner line, %2$s = light or dark. -->
+    <string name="editor_pair_variant">%1$s (%2$s)</string>
+    <string name="editor_enforce_note">While “Enforce contrast” is on, these colours are adjusted on your home screen.</string>
+    <!-- Drafts (§13). -->
+    <string name="editor_draft_offer">Unsaved changes from your last session were found.</string>
+    <string name="editor_draft_restore">Restore</string>
+    <string name="editor_draft_discard">Discard</string>
+    <!-- Leaving with unsaved changes (§13). -->
+    <string name="editor_leave_title">Save your changes?</string>
+    <string name="editor_leave_save">Save</string>
+    <string name="editor_leave_discard">Discard</string>
+    <string name="editor_leave_keep">Keep editing</string>
+    <!-- JSON view (§13 "Edit as JSON"). -->
+    <string name="editor_json_title">Edit as JSON</string>
+    <string name="editor_json_apply">Apply</string>
+    <string name="editor_json_copy">Copy JSON</string>
+    <string name="editor_json_close">Close</string>
+    <string name="editor_json_valid">No problems found.</string>
+    <!-- %1$s = JSON pointer such as /colors/light/accent, %2$s = the problem. -->
+    <string name="editor_json_issue">%1$s: %2$s</string>
+    <string name="editor_json_copied">JSON copied</string>
+    <!-- Messages. -->
+    <string name="editor_saved">Theme saved</string>
+    <string name="editor_applied">Theme saved and applied</string>
+    <string name="editor_save_failed">The theme couldn\'t be saved.</string>
+    <string name="editor_json_applied">JSON applied</string>
+    <string name="editor_json_id_kept">JSON applied. The theme kept its own id.</string>
+    <string name="editor_image_unsupported">This image type isn\'t supported, or the image is too large.</string>
+    <string name="editor_image_unreadable">The image couldn\'t be read.</string>
+    <string name="editor_image_too_large">The image is too large.</string>
+    <string name="editor_image_applied">Colours taken from the image</string>
+    <string name="editor_nothing_to_fix">Nothing to fix</string>
+    <string name="editor_fixed">Colours adjusted. Undo restores them.</string>
+    <string name="editor_new_theme_name">New theme</string>
+    <string name="editor_image_theme_name">Theme from image</string>
+    <!-- Library entries (FR-THEME-27, -29, -30). -->
+    <string name="theme_edit">Edit</string>
+    <string name="theme_new">New theme</string>
+    <string name="theme_from_image">Create from image</string>
+    <!-- %1$s = the theme's name. -->
+    <string name="theme_draft_row">Unsaved changes to %1$s</string>
+    <string name="theme_draft_continue">Continue editing</string>
+</resources>

@@ -127,6 +127,9 @@ class EditorSession(
     /** Replaces the whole tree (Fix, create-from-image) as one step; the session's identity is kept. */
     fun replace(next: JsonObject): Boolean = commit(next)
 
+    /** The document of [candidate] when it validates (Fix re-checks each candidate tree); null otherwise. */
+    fun documentOf(candidate: JsonObject): ThemeDocument? = (parser.validate(candidate) as? Outcome.Ok)?.value?.document
+
     /** Validates [text] exactly as an import would (§8) without changing anything. */
     fun checkJson(text: String): Outcome<ParsedTheme, ThemeError> = parser.parse(text.toByteArray(Charsets.UTF_8))
 

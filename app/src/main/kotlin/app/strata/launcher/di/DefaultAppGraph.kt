@@ -41,6 +41,7 @@ import app.strata.launcher.core.platformapi.system.SharedFiles
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
+import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeLibrary
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
@@ -203,6 +204,8 @@ class DefaultAppGraph(context: Context) : AppGraph {
     override val themeRepository: ThemeRepository get() = defaultThemeRepository
 
     override val themeManager: ThemeManager get() = defaultThemeRepository
+
+    override val themeEditor: ThemeEditorStore get() = defaultThemeRepository
 
     override val documents: DocumentIO by lazy { AndroidDocumentIO(appContext, dispatchers.io) }
 
