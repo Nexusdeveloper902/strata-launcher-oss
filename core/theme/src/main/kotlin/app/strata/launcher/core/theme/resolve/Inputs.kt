@@ -30,7 +30,10 @@ data class PlatformInputs(
     val animatorDurationScale: Double = 1.0,
     /** `ValueAnimator.areAnimatorsEnabled()`. */
     val animatorsEnabled: Boolean = true,
+    /** Installed icon packs whose `appfilter.xml` was accepted (or is still being read). */
     val installedIconPacks: Set<String> = emptySet(),
+    /** Installed icon packs that were refused (limits, malformed): treated as missing, with their own notice. */
+    val unusableIconPacks: Set<String> = emptySet(),
     /** SHA-256 names present in `themes/fonts/`. */
     val userFonts: Set<String> = emptySet(),
     /** SHA-256 names present in `themes/images/`. */

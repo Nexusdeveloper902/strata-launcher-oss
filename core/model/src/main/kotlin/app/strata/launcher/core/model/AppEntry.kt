@@ -53,6 +53,8 @@ data class AppOverride(
     val key: AppKey,
     val hidden: Boolean = false,
     val customLabel: String? = null,
+    /** FR-APPS-06 per-app icon, or null for the theme's icon. */
+    val icon: IconOverride? = null,
     /** Epoch ms since the app disappeared, or null while it is installed (FR-LIFE-03). */
     val missingSince: Long? = null,
 )

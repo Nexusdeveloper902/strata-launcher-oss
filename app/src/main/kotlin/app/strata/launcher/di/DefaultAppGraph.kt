@@ -48,7 +48,7 @@ import app.strata.launcher.diagnostics.LogcatSink
 import app.strata.launcher.platform.apps.AndroidProfileSource
 import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
 import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
-import app.strata.launcher.platform.icons.SystemIconProvider
+import app.strata.launcher.platform.icons.AndroidIconProvider
 import app.strata.launcher.platform.system.AndroidAnimatorScaleSource
 import app.strata.launcher.platform.system.AndroidDocumentIO
 import app.strata.launcher.platform.system.AndroidDynamicColorsSource
@@ -165,7 +165,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     /** Icon render work: `Default.limitedParallelism(4)` (ARCHITECTURE §6). */
     override val iconProvider: IconProvider by lazy {
-        SystemIconProvider(
+        AndroidIconProvider(
             context = appContext,
             renderDispatcher = dispatchers.default.limitedParallelism(ICON_PARALLELISM),
             ioDispatcher = dispatchers.io,
@@ -194,6 +194,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
             wallpaper = AndroidWallpaperColorsSource(appContext),
             dynamic = AndroidDynamicColorsSource(appContext),
             animator = AndroidAnimatorScaleSource(appContext),
+            iconPacks = iconProvider.iconPacks,
             io = dispatchers.io,
             scope = appScope,
         )
@@ -249,6 +250,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
             .AtomicBoolean(false)
 
     override fun startTheme() {
+        iconProvider.start()
         themeInputs.start()
         themeRepository.start()
         // THEME_SYSTEM §10.1: share copies older than 24 h are deleted at process start.
@@ -271,7 +273,11 @@ class DefaultAppGraph(context: Context) : AppGraph {
         }
     }
 
-    override fun refreshThemeInputs() = themeInputs.refresh()
+    override fun refreshThemeInputs() {
+        themeInputs.refresh()
+        // A pack may have been installed or removed while the process was in the background.
+        iconProvider.refreshPacks()
+    }
 
     private val profileSource by lazy { AndroidProfileSource(appContext).also { it.start() } }
 

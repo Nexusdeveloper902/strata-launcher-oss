@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PACK_OK fixture (TEST_PLAN §0): the test APK doubles as an icon pack. Compiled res/xml with @drawable references,
+     as most real packs ship it: the parser must resolve the references to entry names. Authored for these tests. -->
+<resources>
+    <iconback img1="@drawable/strata_fixture_pack_icon" />
+    <scale factor="0.9" />
+    <item component="ComponentInfo{fixture.mapped/fixture.mapped.MainActivity}" drawable="@drawable/strata_fixture_pack_icon" />
+    <item component="ComponentInfo{fixture.other/.Main}" drawable="@drawable/strata_fixture_pack_icon_alt" />
+    <item component="ComponentInfo{fixture.plain/fixture.plain.Main}" drawable="strata_fixture_pack_icon" />
+    <calendar component="ComponentInfo{fixture.calendar/fixture.calendar.Main}" prefix="strata_fixture_cal_" />
+</resources>

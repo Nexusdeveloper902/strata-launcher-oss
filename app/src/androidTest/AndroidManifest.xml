@@ -1,11 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Test APK only (never merged into the app). CoverActivity: a plain, opaque activity the home device tests put in
-     front of HomeActivity instances their compose rule does not own before the rule tears down (DeviceState.kt). -->
+     front of HomeActivity instances their compose rule does not own before the rule tears down (DeviceState.kt).
+     FixturePackActivity: makes the test APK an icon pack (ADW THEMES action) with a compiled res/xml/appfilter.xml, the PACK_OK
+     fixture of the icon device tests (IconDeviceTest.kt). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity
             android:name="app.strata.launcher.CoverActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity
+            android:name="app.strata.launcher.theme.FixturePackActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="org.adw.ActivityStarter.THEMES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

@@ -323,7 +323,7 @@ private fun ListRow(
         onClick = { callbacks.onLaunch(app, coordinates[0]?.let { originOf(it, view) }) },
         onLongClick = callbacks.onLongPress?.let { { it(app) } },
         actions = actions,
-        icon = IconRequestKey(app.key, app.lastUpdateTime),
+        icon = IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride),
         dimIcon = app.suspended,
         tag = if (app.suspended) stringResource(R.string.row_suspended) else null,
         modifier =

@@ -446,6 +446,65 @@ class ThemeRepositoryTest {
         assertThat(lkgName()).isEqualTo("Harbor")
     }
 
+    private val packId = "dddddddd-0000-4000-8000-000000000004"
+    private val pack = "fixture.pack.ok"
+
+    private fun packTheme(): JsonObject =
+        (
+            JsonParser.parse(
+                (
+                    """{"schemaVersion":1,"id":"$packId","name":"Packed",""" +
+                        """"icons":{"pack":{"package":"$pack","displayName":"OK Pack","fallback":"monochrome"}}}"""
+                ).toByteArray(),
+            ) as app.strata.launcher.core.common.Outcome.Ok
+        ).value as JsonObject
+
+    /**
+     * T-THEME-33 (R) and T-THEME-11 (R half): a theme whose pack is missing shows the notice once per apply; Dismiss
+     * hides it until the next apply; installing the pack removes it and uses the pack; uninstalling it switches to the
+     * fallback without a restart and shows the notice again. No intent and no network here: the store button is home's.
+     */
+    @Test
+    fun tTheme33_missingPackNoticeOncePerApply() {
+        process {
+            boot()
+            runBlocking { withContext(Dispatchers.IO) { library.save(packTheme()) } }
+            repo.apply(packId)
+            var s = await { it.activeId == packId && it.packNotice != null }
+            assertThat(s.packNotice?.packageName).isEqualTo(pack)
+            assertThat(s.packNotice?.displayName).isEqualTo("OK Pack")
+            assertThat(s.packNotice?.unusable).isFalse()
+            assertThat(s.themes.light.icons.packPackage).isNull()
+
+            repo.dismissPackNotice()
+            s = await { it.packNotice == null }
+            // An unrelated re-resolution (wallpaper change) does not bring it back.
+            platform.value = PlatformInputs(apiLevel = 34, animatorDurationScale = 0.5)
+            s = await { it.themes.light.animation.durationScale == 0.5 }
+            assertThat(s.packNotice).isNull()
+
+            // Apply again: shown once more.
+            repo.apply(packId)
+            s = await { it.applyGeneration == 2 && it.packNotice != null }
+
+            // The pack gets installed: used, no notice.
+            platform.value = PlatformInputs(apiLevel = 34, installedIconPacks = setOf(pack))
+            s = await { it.themes.light.icons.packPackage == pack }
+            assertThat(s.packNotice).isNull()
+
+            // Uninstalled while active: fallback without restart, notice again (same generation, not dismissed yet).
+            platform.value = PlatformInputs(apiLevel = 34)
+            s = await { it.themes.light.icons.packPackage == null && it.packNotice != null }
+            assertThat(s.themes.light.icons.packFallback)
+                .isEqualTo(app.strata.launcher.core.theme.model.PackFallback.MONOCHROME)
+
+            // Installed but unreadable (NFR-COMPAT-04): its own notice.
+            platform.value = PlatformInputs(apiLevel = 34, unusableIconPacks = setOf(pack))
+            s = await { it.packNotice?.unusable == true }
+            assertThat(s.themes.light.icons.packPackage).isNull()
+        }
+    }
+
     private companion object {
         const val TIMEOUT_MS = 10_000L
     }

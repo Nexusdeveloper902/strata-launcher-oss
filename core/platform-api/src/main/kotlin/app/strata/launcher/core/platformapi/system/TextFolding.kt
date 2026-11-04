@@ -23,6 +23,12 @@ interface SystemIntents {
     /** Starts `ACTION_VIEW market://search?q=<query>`. Strata itself makes no network request (NFR-PRIV-01). */
     fun storeSearch(query: String): LaunchResult
 
+    /**
+     * FR-THEME-25: `ACTION_VIEW market://details?id=<packageName>`, built from the package name only. A name that is not
+     * a valid package name is refused (`NOT_FOUND`). Strata itself fetches nothing (NFR-PRIV-01).
+     */
+    fun storeListing(packageName: String): LaunchResult
+
     /** FR-HOME-03: `AlarmClock.ACTION_SHOW_ALARMS` (the clock app). */
     fun showAlarms(): LaunchResult
 

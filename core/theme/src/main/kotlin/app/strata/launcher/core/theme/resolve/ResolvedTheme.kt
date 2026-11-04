@@ -93,6 +93,8 @@ data class ResolvedIcons(
     /** The pack the theme asks for when it is not installed (one-time notice, FR-THEME-25). */
     val missingPackPackage: String?,
     val missingPackDisplayName: String?,
+    /** The missing pack is installed but could not be read (NFR-COMPAT-04), so it is ignored. */
+    val missingPackUnusable: Boolean = false,
     val tint: IconTint,
     val legacyIconPlate: Boolean,
     /** Forced on when icons are hidden. */

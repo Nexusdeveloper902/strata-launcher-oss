@@ -3,5 +3,6 @@
     <string name="app_name">Strata</string>
     <string name="theme_share_chooser">Share theme</string>
     <string name="themes_label">Themes</string>
+    <string name="icon_chooser_label">App icon</string>
     <string name="theme_import_label">Import theme</string>
 </resources>

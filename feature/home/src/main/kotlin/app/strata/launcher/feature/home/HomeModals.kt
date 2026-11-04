@@ -168,7 +168,7 @@ private fun AppSheet(
     ) {
         AppIcon(
             label = app.displayLabel,
-            state = rememberAppIconState(IconRequestKey(app.key, app.lastUpdateTime), SHEET_ICON),
+            state = rememberAppIconState(IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride), SHEET_ICON),
             size = SHEET_ICON,
             shape = androidx.compose.foundation.shape.CircleShape,
         )

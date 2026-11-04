@@ -89,4 +89,14 @@
     <string name="theme_error_unreadable">The file couldn\'t be opened.</string>
     <string name="theme_error_storage">Not enough storage.</string>
     <string name="theme_error_source">Strata can only import files shared by another app.</string>
+    <!-- S-ICON, the per-app icon chooser (FR-APPS-06). %1$s = the app's name. -->
+    <string name="icon_chooser_title">Icon for %1$s</string>
+    <string name="icon_chooser_title_plain">Choose an icon</string>
+    <string name="icon_chooser_theme_icon">Theme icon</string>
+    <string name="icon_chooser_no_packs">No icon packs are installed. Icon packs you install from a store appear here.</string>
+    <!-- %1$s = the pack's name; the pack's icon list broke a safety limit (NFR-COMPAT-04). -->
+    <string name="icon_chooser_pack_unusable">%1$s (can\'t be read)</string>
+    <string name="icon_chooser_search">Search icons</string>
+    <string name="icon_chooser_empty">No icons found in this pack.</string>
+    <string name="icon_chooser_write_failed">The icon couldn\'t be saved.</string>
 </resources>

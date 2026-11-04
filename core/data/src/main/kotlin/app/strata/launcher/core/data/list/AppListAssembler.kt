@@ -87,6 +87,7 @@ object AppListAssembler {
             flags = flags,
             lastUpdateTime = lastUpdateTime,
             renamed = custom != null,
+            iconOverride = override?.icon,
         )
     }
 

@@ -8,6 +8,7 @@ import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppList
 import app.strata.launcher.core.model.BadgeStyle
+import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.VisibleApp
@@ -81,6 +82,21 @@ data class ListJump(val letter: Int, val seq: Int, val focus: Boolean = false)
 /** FAVEDIT announcement for the polite live region (T-FAV-03): [label] is now at [position] (1-based). */
 data class FavoriteMoved(val label: String, val position: Int, val count: Int)
 
+/** Icon-pack notices on home (FR-THEME-25, FR-APPS-06); each shows once and offers the pack's store listing. */
+sealed interface IconNotice {
+    val packageName: String
+
+    /** The active theme's pack is not installed, or [unusable] (NFR-COMPAT-04). Once per apply. */
+    data class ThemePack(
+        override val packageName: String,
+        val displayName: String?,
+        val unusable: Boolean,
+    ) : IconNotice
+
+    /** Per-app icons come from a pack that was removed (or became unusable); those apps show the theme icon. */
+    data class OverridePackGone(override val packageName: String) : IconNotice
+}
+
 data class HomeUiState(
     /** `null` until the stored flag has been read. */
     val onboardingDone: Boolean? = null,
@@ -97,6 +113,8 @@ data class HomeUiState(
     val showResetBanner: Boolean = false,
     /** THEME_SYSTEM §12: "Your theme couldn't be loaded…" (or safe mode). */
     val themeBanner: ThemeBanner? = null,
+    /** FR-THEME-25 / FR-APPS-06 icon-pack notice, or null. */
+    val iconNotice: IconNotice? = null,
     val settings: Settings = Settings.DEFAULT,
     /** Shown favourites in order: present and not hidden (FR-APPS-04 keeps the slot of a hidden one). */
     val favorites: List<VisibleApp> = emptyList(),
@@ -184,6 +202,11 @@ sealed interface HomeAction {
     /** THEME_SYSTEM §12 step 2 banner. */
     data object DismissThemeBanner : HomeAction
 
+    /** The icon-pack notice's store button (`market://details?id=<pkg>`). */
+    data object IconNoticeStore : HomeAction
+
+    data object DismissIconNotice : HomeAction
+
     // Long-press menus (FR-GEST-02) and the sheet (FR-APPS-03…07).
     data class OpenSheet(val app: VisibleApp, val rename: Boolean = false) : HomeAction
 
@@ -248,7 +271,7 @@ sealed interface HomeAction {
 }
 
 /** Features that arrive in a later milestone; the menu item explains that instead of doing nothing. */
-enum class LaterFeature { WIDGETS, THEMES, ICONS }
+enum class LaterFeature { WIDGETS, THEMES }
 
 sealed interface HomeEffect {
     /** Collapse open layers and return to HOME_REST (favourites to start). */
@@ -275,11 +298,29 @@ sealed interface HomeEffect {
     /** The theme switch (debug builds only until the M5 theme library). */
     data object OpenThemes : HomeEffect
 
+    /** FR-APPS-06: S-ICON for [key]. */
+    data class OpenIconChooser(val key: AppKey) : HomeEffect
+
     /** FR-GEST-03: hint (once) when the lock is on in Strata but the service is off in the system. */
     data object LockHint : HomeEffect
 
     /** A storage write failed (disk full, corrupt database); the change was not saved. */
     data object WriteFailed : HomeEffect
+}
+
+/** FR-APPS-06: the first pack used by a per-app icon that is no longer usable and was not noticed yet. */
+private fun overrideNotice(
+    packs: IconPacks,
+    list: AppList?,
+    dismissed: Set<String>,
+): IconNotice? {
+    if (!packs.discovered || list == null || list.fromSnapshot) return null
+    val usable = packs.usable
+    return list.allApps
+        .asSequence()
+        .mapNotNull { it.iconOverride?.packPackage }
+        .firstOrNull { it !in usable && it !in dismissed }
+        ?.let { IconNotice.OverridePackGone(it) }
 }
 
 private data class Local(
@@ -312,7 +353,11 @@ class HomeViewModel(
     private val theme: ThemeRepository? = null,
     /** The home menu's "Themes" opens [HomeEffect.OpenThemes] (debug builds' internal switch until M5). */
     private val themesAvailable: Boolean = false,
+    /** Installed icon packs: per-app icons from a removed pack get a one-time notice (FR-APPS-06). */
+    private val iconPacks: StateFlow<IconPacks>? = null,
 ) : ViewModel() {
+    /** Override packs whose notice was dismissed (or used) in this process: shown once each. */
+    private val dismissedOverridePacks = MutableStateFlow<Set<String>>(emptySet())
     private val isDefaultHome = MutableStateFlow<Boolean?>(null)
     private val local = MutableStateFlow(Local())
     private var searchSessions = 0
@@ -346,7 +391,19 @@ class HomeViewModel(
         val favorites: List<AppKey>,
         val lockEnabled: Boolean,
         val themeBanner: ThemeBanner?,
+        val iconNotice: IconNotice?,
     )
+
+    private val iconNotice: Flow<IconNotice?> =
+        combine(
+            theme?.state?.map { it.packNotice }?.distinctUntilChanged() ?: flowOf(null),
+            iconPacks ?: flowOf(IconPacks()),
+            currentList,
+            dismissedOverridePacks,
+        ) { packNotice, packs, list, dismissed ->
+            packNotice?.let { IconNotice.ThemePack(it.packageName, it.displayName, it.unusable) }
+                ?: overrideNotice(packs, list, dismissed)
+        }.distinctUntilChanged()
 
     val state: StateFlow<HomeUiState> =
         combine(
@@ -354,10 +411,10 @@ class HomeViewModel(
             currentList,
             isDefaultHome,
             local,
-            combine(resetNotices.causes, favoriteKeys, lockService.enabled, themeBanner) { r, f, l, b ->
-                Extras(r, f, l, b)
+            combine(resetNotices.causes, favoriteKeys, lockService.enabled, themeBanner, iconNotice) { r, f, l, b, n ->
+                Extras(r, f, l, b, n)
             },
-        ) { s, list, isDefault, ui, (resets, favKeys, lockEnabled, banner) ->
+        ) { s, list, isDefault, ui, (resets, favKeys, lockEnabled, banner, notice) ->
             val shown =
                 list
                     ?.sections
@@ -376,6 +433,7 @@ class HomeViewModel(
                 badgeStyle = s?.badgeStyle ?: BadgeStyle.DOT,
                 showResetBanner = resets.isNotEmpty(),
                 themeBanner = banner,
+                iconNotice = notice,
                 settings = s ?: Settings.DEFAULT,
                 favorites = favKeys.mapNotNull { shown[it] },
                 favoriteKeys = favKeys.toSet(),
@@ -473,6 +531,18 @@ class HomeViewModel(
                 theme?.dismissBanner()
             }
 
+            HomeAction.IconNoticeStore -> {
+                val notice = state.value.iconNotice ?: return
+                dismissIconNotice(notice)
+                if (systemIntents.storeListing(notice.packageName) is Outcome.Err) {
+                    effectChannel.trySend(HomeEffect.NoHandler)
+                }
+            }
+
+            HomeAction.DismissIconNotice -> {
+                state.value.iconNotice?.let(::dismissIconNotice)
+            }
+
             is HomeAction.OpenSheet -> {
                 openSheet(action.app, action.rename)
             }
@@ -518,7 +588,7 @@ class HomeViewModel(
             }
 
             is HomeAction.ChangeIcon -> {
-                closeModalThen(HomeEffect.NotYetAvailable(LaterFeature.ICONS))
+                closeModalThen(HomeEffect.OpenIconChooser(action.key))
             }
 
             is HomeAction.Uninstall -> {
@@ -774,6 +844,13 @@ class HomeViewModel(
     ) {
         setModal(HomeModal.None)
         launcher.openAppInfo(key, origin)
+    }
+
+    private fun dismissIconNotice(notice: IconNotice) {
+        when (notice) {
+            is IconNotice.ThemePack -> theme?.dismissPackNotice()
+            is IconNotice.OverridePackGone -> dismissedOverridePacks.update { it + notice.packageName }
+        }
     }
 
     private fun handOff(start: () -> LaunchResult) {

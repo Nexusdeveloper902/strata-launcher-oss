@@ -14,6 +14,8 @@ import app.strata.launcher.core.theme.importing.ImportPlan
 import app.strata.launcher.core.theme.importing.ThemeImage
 import app.strata.launcher.core.theme.importing.ThemeImporter
 import app.strata.launcher.core.theme.importing.ThemeMedia
+import app.strata.launcher.core.theme.model.IconPackRef
+import app.strata.launcher.core.theme.model.PackFallback
 import app.strata.launcher.core.theme.model.ThemeDocument
 import app.strata.launcher.core.theme.parse.ThemeError
 import app.strata.launcher.core.theme.parse.ThemeErrorText
@@ -29,6 +31,7 @@ import app.strata.launcher.core.theme.store.ExportError
 import app.strata.launcher.core.theme.store.ExportFile
 import app.strata.launcher.core.theme.store.ImportCommit
 import app.strata.launcher.core.theme.store.ImportPreview
+import app.strata.launcher.core.theme.store.PackNotice
 import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeBannerKind
 import app.strata.launcher.core.theme.store.ThemeFileStore
@@ -139,6 +142,9 @@ class DefaultThemeRepository(
             }
         }
 
+    /** Pack notices already shown and dismissed: `generation|package|unusable` (once per apply, FR-THEME-25). */
+    private val dismissedPackNotices = MutableStateFlow<Set<String>>(emptySet())
+
     private val revisionFlow = MutableStateFlow(0)
     override val revision: StateFlow<Int> = revisionFlow.asStateFlow()
 
@@ -149,14 +155,17 @@ class DefaultThemeRepository(
         scope.launch(themeDispatcher) { boot() }
         scope.launch {
             val globals = settings.map(::globalsOf).catch { emit(ThemeGlobals()) }.distinctUntilChanged()
-            combine(active.filterNotNull(), platformInputs.filterNotNull(), globals) { a, p, g -> Triple(a, p, g) }
-                .mapLatest { (a, p, g) ->
-                    latestInputs = p
-                    latestGlobals = g
-                    a to resolvePair(a, p, g)
-                }.flowOn(resolveDispatcher)
-                .collect { (a, resolved) ->
-                    val (pair, fellBack) = resolved
+            val resolved =
+                combine(active.filterNotNull(), platformInputs.filterNotNull(), globals) { a, p, g -> Triple(a, p, g) }
+                    .mapLatest { (a, p, g) ->
+                        latestInputs = p
+                        latestGlobals = g
+                        a to resolvePair(a, p, g)
+                    }.flowOn(resolveDispatcher)
+            combine(resolved, dismissedPackNotices) { r, d -> r to d }
+                .collect { (ar, dismissed) ->
+                    val (a, resolvedPair) = ar
+                    val (pair, fellBack) = resolvedPair
                     stateFlow.value =
                         ThemeState(
                             themes = pair,
@@ -173,6 +182,7 @@ class DefaultThemeRepository(
                             awaitingFirstFrame = a.awaitingFirstFrame,
                             safeMode = a.safeMode,
                             fallback = a.fallback || fellBack,
+                            packNotice = packNoticeOf(pair, a.generation, dismissed),
                         )
                 }
         }
@@ -286,6 +296,12 @@ class DefaultThemeRepository(
         }
     }
 
+    override fun dismissPackNotice() {
+        val notice = stateFlow.value.packNotice ?: return
+        val generation = stateFlow.value.applyGeneration
+        dismissedPackNotices.update { it + noticeKey(generation, notice) }
+    }
+
     override fun dismissBanner() {
         active.update { it?.copy(bannerDismissed = true) }
         stateFlow.update { it.copy(banner = null) }
@@ -387,8 +403,10 @@ class DefaultThemeRepository(
             conflict = plan.conflict,
             contrast = statuses.maxBy { it.ordinal },
             newerSettingsKept = ThemeImporter.newerSettings(c.parsed),
-            // Installed icon packs are discovered with the icon work (M5 part 2): until then no pack notice.
-            missingIconPack = null,
+            missingIconPack =
+                light.icons.missingPackPackage?.let {
+                    IconPackRef(it, light.icons.missingPackDisplayName, doc.icons.pack?.fallback ?: PackFallback.SYSTEM)
+                },
             missingFonts = missingFonts,
             fromBundle = c.fromBundle,
             hasWallpaperImage = c.image != null,
@@ -601,6 +619,23 @@ class DefaultThemeRepository(
             ThemeSummary(StrataDefault.ID, StrataDefault.NAME, builtIn = true, applicable = true)
 
         private val RESOLUTION_FAILED = ThemeBanner(ThemeBannerKind.LOAD_FAILED, "The theme could not be resolved.")
+
+        private fun noticeKey(
+            generation: Int,
+            n: PackNotice,
+        ): String = "$generation|${n.packageName}|${n.unusable}"
+
+        /** FR-THEME-25: the notice of [pair]'s missing pack, unless dismissed for this apply. */
+        fun packNoticeOf(
+            pair: ThemePair,
+            generation: Int,
+            dismissed: Set<String>,
+        ): PackNotice? {
+            val icons = pair.light.icons
+            val pkg = icons.missingPackPackage ?: return null
+            val notice = PackNotice(pkg, icons.missingPackDisplayName, icons.missingPackUnusable)
+            return notice.takeUnless { noticeKey(generation, it) in dismissed }
+        }
 
         fun globalsOf(s: Settings): ThemeGlobals =
             ThemeGlobals(

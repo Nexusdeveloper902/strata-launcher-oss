@@ -17,6 +17,7 @@ import app.strata.launcher.core.data.list.AssembledAppListSource
 import app.strata.launcher.core.model.AppEntry
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.Catalog
+import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.resolve.ResolvedTheme
@@ -53,6 +54,8 @@ class HomeHarness(
     settings: Settings = Settings(onboardingDone = true),
     lockEnabled: Boolean = false,
     themeRepository: ThemeRepository? = null,
+    /** Installed icon packs (FR-APPS-06 notices). */
+    val iconPacks: MutableStateFlow<IconPacks> = MutableStateFlow(IconPacks(discovered = true)),
 ) {
     val catalog = FakeAppCatalog(Catalog(apps, fromSnapshot = false))
     val overrides = FakeOverridesRepository()
@@ -93,6 +96,7 @@ class HomeHarness(
             lockService = lockService,
             logger = RecordingLogger(),
             theme = themeRepository,
+            iconPacks = iconPacks,
         )
 
     val state: HomeUiState get() = vm.state.value

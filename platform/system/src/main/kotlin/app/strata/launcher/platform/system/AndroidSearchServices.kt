@@ -75,6 +75,9 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
 
     override fun storeSearch(query: String): LaunchResult = start(storeIntent(query))
 
+    override fun storeListing(packageName: String): LaunchResult =
+        listingIntent(packageName)?.let(::start) ?: Outcome.Err(LaunchError.NOT_FOUND)
+
     override fun showAlarms(): LaunchResult = start(Intent(AlarmClock.ACTION_SHOW_ALARMS))
 
     override fun openCalendar(atMillis: Long): LaunchResult = start(calendarIntent(atMillis))
@@ -143,6 +146,19 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
         /** `market://search?q=<query>` (FR-SEARCH-07). */
         fun storeIntent(query: String): Intent =
             Intent(Intent.ACTION_VIEW, "market://search".toUri().buildUpon().appendQueryParameter("q", query).build())
+
+        private val PACKAGE_NAME = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")
+
+        /** FR-THEME-25: `market://details?id=<pkg>`, or null when [packageName] is not a package name. */
+        fun listingIntent(packageName: String): Intent? =
+            if (packageName.length <= 255 && PACKAGE_NAME.matches(packageName)) {
+                Intent(
+                    Intent.ACTION_VIEW,
+                    "market://details".toUri().buildUpon().appendQueryParameter("id", packageName).build(),
+                )
+            } else {
+                null
+            }
 
         /** FR-HOME-03: `content://com.android.calendar/time/<ms>` (`CalendarContract.CONTENT_URI` + `time`). */
         fun calendarIntent(atMillis: Long): Intent =

@@ -48,6 +48,15 @@ class FakeSystemIntents(
         return Outcome.Ok(Unit)
     }
 
+    /** Package names of every store listing opened (FR-THEME-25). */
+    val storeListings = mutableListOf<String>()
+
+    override fun storeListing(packageName: String): LaunchResult {
+        if (!storeHandler) return Outcome.Err(LaunchError.NOT_FOUND)
+        storeListings += packageName
+        return Outcome.Ok(Unit)
+    }
+
     override fun showAlarms(): LaunchResult = start(ALARMS)
 
     override fun openCalendar(atMillis: Long): LaunchResult = start(CALENDAR)

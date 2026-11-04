@@ -35,6 +35,16 @@ data class ThemeBanner(
     val details: String,
 )
 
+/**
+ * THEME_SYSTEM §4.6 / FR-THEME-25: the active theme's icon pack is not installed (or [unusable]). Shown once per
+ * apply; [ThemeRepository.dismissPackNotice] hides it until the next apply or until the pack state changes.
+ */
+data class PackNotice(
+    val packageName: String,
+    val displayName: String?,
+    val unusable: Boolean,
+)
+
 /** One row of the theme library (THEME_SYSTEM §11, FR-THEME-27). */
 data class ThemeSummary(
     val id: String,
@@ -66,6 +76,8 @@ data class ThemeState(
     val safeMode: Boolean = false,
     /** A substitute is rendered (boot fallback or failed resolution): never promoted to last-known-good. */
     val fallback: Boolean = false,
+    /** The one-time missing-pack notice of the current apply, or null. */
+    val packNotice: PackNotice? = null,
 )
 
 /**
@@ -95,6 +107,9 @@ interface ThemeRepository {
     fun onStableRender()
 
     fun dismissBanner()
+
+    /** Hides [ThemeState.packNotice] for the current apply (Dismiss, or after the store button). */
+    fun dismissPackNotice()
 
     /** Built-in and stored themes, built-ins first. */
     suspend fun library(): List<ThemeSummary>

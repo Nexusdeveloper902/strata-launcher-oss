@@ -18,7 +18,7 @@ import java.io.File
 
 /** System icon cache (ARCHITECTURE §9), Robolectric. Rendering a real icon is covered on the device. */
 @RunWith(AndroidJUnit4::class)
-class SystemIconProviderTest {
+class AndroidIconProviderTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val key = AppKey("fixture.maps/fixture.maps.MainActivity", 0)
 
@@ -26,13 +26,11 @@ class SystemIconProviderTest {
     @Test
     fun tLife06_cacheKeyChangesWithUpdate() {
         val v1 = IconRequest(key, lastUpdateTime = 1L, sizePx = 96, densityDpi = 420)
-        assertThat(SystemIconProvider.cacheKey(v1)).isEqualTo(SystemIconProvider.cacheKey(v1.copy()))
-        assertThat(
-            SystemIconProvider.cacheKey(v1.copy(lastUpdateTime = 2L)),
-        ).isNotEqualTo(SystemIconProvider.cacheKey(v1))
-        assertThat(SystemIconProvider.cacheKey(v1.copy(densityDpi = 480))).isNotEqualTo(SystemIconProvider.cacheKey(v1))
-        assertThat(SystemIconProvider.cacheKey(v1.copy(key = key.copy(userSerial = 10))))
-            .isNotEqualTo(SystemIconProvider.cacheKey(v1))
+        val p = provider()
+        assertThat(p.cacheKey(v1)).isEqualTo(p.cacheKey(v1.copy()))
+        assertThat(p.cacheKey(v1.copy(lastUpdateTime = 2L))).isNotEqualTo(p.cacheKey(v1))
+        assertThat(p.cacheKey(v1.copy(densityDpi = 480))).isNotEqualTo(p.cacheKey(v1))
+        assertThat(p.cacheKey(v1.copy(key = key.copy(userSerial = 10)))).isNotEqualTo(p.cacheKey(v1))
     }
 
     /** INTERACTION_SPEC §8: an icon that cannot be loaded falls back to the monogram, never an exception. */
@@ -62,7 +60,7 @@ class SystemIconProviderTest {
                 }
             }
         val provider =
-            SystemIconProvider(
+            AndroidIconProvider(
                 context = counting,
                 renderDispatcher = Dispatchers.Unconfined,
                 ioDispatcher = Dispatchers.Unconfined,
@@ -77,13 +75,13 @@ class SystemIconProviderTest {
     /** NFR-PERF-04: the L1 budget is 1/8 of the memory class. */
     @Test
     fun memoryBudgetIsAnEighth() {
-        val budget = SystemIconProvider.defaultMemoryBudget(app)
+        val budget = AndroidIconProvider.defaultMemoryBudget(app)
         val am = app.getSystemService(android.app.ActivityManager::class.java)
         assertThat(budget).isEqualTo(am.memoryClass * 1024 * 1024 / 8)
     }
 
     private fun provider() =
-        SystemIconProvider(
+        AndroidIconProvider(
             context = app,
             renderDispatcher = Dispatchers.Unconfined,
             ioDispatcher = Dispatchers.Unconfined,

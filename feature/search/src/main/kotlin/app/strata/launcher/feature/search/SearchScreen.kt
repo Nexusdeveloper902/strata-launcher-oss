@@ -456,7 +456,7 @@ private fun ResultRow(
         onClick = { onLaunch(app, coordinates[0]?.let { originOf(it, view) }) },
         onLongClick = { onLongPress(app) },
         actions = actions,
-        icon = IconRequestKey(app.key, app.lastUpdateTime),
+        icon = IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride),
         modifier =
             Modifier
                 .onGloballyPositioned { coordinates[0] = it }

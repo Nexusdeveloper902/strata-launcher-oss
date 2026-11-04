@@ -148,7 +148,7 @@ fun FavoriteRow(
         var systemIcon = false
         if (favorites.showIcons) {
             val size = (theme.icons.sizeDp * FAVORITE_ICON_SCALE).roundToInt().dp
-            val iconState = rememberAppIconState(IconRequestKey(app.key, app.lastUpdateTime), size)
+            val iconState = rememberAppIconState(IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride), size)
             AppIcon(
                 label = app.displayLabel,
                 state = iconState,
