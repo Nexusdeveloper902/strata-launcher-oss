@@ -15,6 +15,7 @@ import android.window.SplashScreen
 import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.model.AppKey
+import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
@@ -66,28 +67,32 @@ class LauncherAppsAppLauncher(
         block: (ComponentName, UserHandle) -> Unit,
     ): LaunchResult {
         val component = ComponentName.unflattenFromString(key.component) ?: return Outcome.Err(LaunchError.NOT_FOUND)
+        var private = false
         return try {
             val user = resolver.userOf(key.userSerial) ?: return Outcome.Err(LaunchError.NOT_FOUND)
+            private = resolver.kindOf(user) == ProfileKind.PRIVATE
             if (resolver.quiet(user)) return Outcome.Err(LaunchError.PROFILE_PAUSED)
             block(component, user)
             Outcome.Ok(Unit)
         } catch (e: ActivityNotFoundException) {
-            fail(what, LaunchError.NOT_FOUND, e)
+            fail(what, LaunchError.NOT_FOUND, e, private)
         } catch (e: SecurityException) {
-            fail(what, LaunchError.SECURITY, e)
+            fail(what, LaunchError.SECURITY, e, private)
         } catch (e: IllegalStateException) {
-            fail(what, LaunchError.UNKNOWN, e)
+            fail(what, LaunchError.UNKNOWN, e, private)
         } catch (e: IllegalArgumentException) {
-            fail(what, LaunchError.NOT_FOUND, e)
+            fail(what, LaunchError.NOT_FOUND, e, private)
         }
     }
 
+    /** Platform messages can name the component and user: for a private-space app only the error kind is logged (P-5). */
     private fun fail(
         what: String,
         error: LaunchError,
         e: Exception,
+        private: Boolean,
     ): LaunchResult {
-        logger.w(TAG, "$what failed: $error", e)
+        logger.w(TAG, "$what failed: $error", e.takeUnless { private })
         return Outcome.Err(error)
     }
 

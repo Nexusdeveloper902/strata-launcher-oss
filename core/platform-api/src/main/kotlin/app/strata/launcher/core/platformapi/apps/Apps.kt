@@ -15,12 +15,71 @@ data class Profile(
     val available: Boolean,
 )
 
+/** Outcome of [ProfileSource.requestQuietMode]. */
+enum class QuietModeResult {
+    /** The profile changed (the broadcasts follow). */
+    DONE,
+
+    /** The system shows its credential screen; the change follows if the user confirms. */
+    NEEDS_CREDENTIAL,
+
+    /** Strata is not the foreground default launcher (`SecurityException`, ANDROID_PLATFORM §3.2). */
+    NOT_ALLOWED,
+
+    /** Below API 28 (no `requestQuietModeEnabled`). */
+    UNSUPPORTED,
+
+    /** The profile is gone or the call failed otherwise. */
+    FAILED,
+}
+
 /**
- * Profiles from `LauncherApps.getProfiles()`, refreshed by runtime-registered profile broadcasts.
- * M1 covers discovery of the main and work profiles; quiet mode and private space arrive in M6.
+ * Profiles from `LauncherApps.getProfiles()`, refreshed by runtime-registered profile broadcasts (ARCHITECTURE §3):
+ * main, work (pause/resume, FR-APPS-09) and private space (lock/unlock, FR-APPS-10; API 35+, needs ROLE_HOME and
+ * `ACCESS_HIDDEN_PROFILES`).
  */
 interface ProfileSource {
     val profiles: StateFlow<List<Profile>>
+
+    /** `UserManager.requestQuietModeEnabled([enable], user)`: pause/resume work, lock/unlock private space. Main-safe. */
+    suspend fun requestQuietMode(
+        serial: Long,
+        enable: Boolean,
+    ): QuietModeResult = QuietModeResult.UNSUPPORTED
+
+    /** API 36 `PRIVATE_SPACE_ENTRYPOINT_HIDDEN`: no "Unlock" entry while locked. False below 36. */
+    fun privateSpaceEntryHidden(serial: Long): Boolean = false
+
+    /** Re-reads the profiles (activity `onStart`: broadcasts are not delivered while the process is frozen). */
+    fun refresh() = Unit
+}
+
+/** One static (manifest) or dynamic app shortcut (FR-APPS-08, ANDROID_PLATFORM §6). Memory only. */
+data class AppShortcut(
+    val id: String,
+    val packageName: String,
+    val userSerial: Long,
+    val label: String,
+    val dynamic: Boolean,
+    val rank: Int,
+)
+
+/**
+ * App shortcuts through `LauncherApps` (ARCHITECTURE §3 `ShortcutSource`). Only the current default launcher holds the
+ * shortcut-host permission; without it the sheet shows no shortcut section.
+ */
+interface ShortcutSource {
+    /** `LauncherApps.hasShortcutHostPermission()`. Binder call: off main. */
+    fun hasHostPermission(): Boolean
+
+    /** Manifest and dynamic shortcuts of the key's activity (manifest first, by rank); empty without the permission. */
+    suspend fun shortcutsFor(key: AppKey): List<AppShortcut>
+
+    /** `LauncherApps.startShortcut` with the row bounds. A removed or disabled shortcut is `NOT_FOUND`. */
+    fun launch(
+        shortcut: AppShortcut,
+        origin: LaunchOrigin?,
+    ): LaunchResult
 }
 
 /** What changed on the platform side (`LauncherApps.Callback`, profile broadcasts). */

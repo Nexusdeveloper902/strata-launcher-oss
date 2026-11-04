@@ -101,4 +101,23 @@
     <!-- Double-tap lock (FR-GEST-03) -->
     <string name="lock_hint">Turn on screen lock in settings</string>
     <string name="lock_hint_action">Settings</string>
+    <!-- M6: work profile (FR-APPS-09), private space (FR-APPS-10), shortcuts (FR-APPS-08) -->
+    <string name="work_resume_title">Turn on work apps?</string>
+    <string name="work_resume_body">Your work apps are paused. Turn them on to open this app.</string>
+    <string name="work_resume_confirm">Turn on</string>
+    <string name="work_bar_all">All</string>
+    <string name="work_bar_work">Work</string>
+    <string name="work_bar_switch">Work apps</string>
+    <string name="row_paused">Paused</string>
+    <string name="private_space_title">Private space</string>
+    <string name="private_space_unlock">Private space — Unlock</string>
+    <string name="private_space_lock">Lock</string>
+    <string name="private_space_hide">Hide</string>
+    <string name="private_space_empty">No apps in private space</string>
+    <string name="sheet_shortcuts">Shortcuts</string>
+    <string name="sheet_private_note">Strata keeps nothing about private space apps, so they can\'t be renamed, hidden, made favourites or given another icon.</string>
+    <string name="shortcut_removed">This shortcut was removed by its app</string>
+    <string name="profile_not_default">Only the default home app can do this. Set Strata as default first.</string>
+    <string name="profile_unsupported">Turn work apps on or off in your phone\'s settings.</string>
+    <string name="profile_failed">That didn\'t work. Try again.</string>
 </resources>

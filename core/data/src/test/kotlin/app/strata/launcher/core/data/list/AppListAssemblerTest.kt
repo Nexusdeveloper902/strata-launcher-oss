@@ -1,9 +1,11 @@
 package app.strata.launcher.core.data.list
 
+import app.strata.launcher.core.model.AppFlags
 import app.strata.launcher.core.model.AppOverride
 import app.strata.launcher.core.model.Catalog
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.SecondaryLine
+import app.strata.launcher.core.platformapi.apps.Profile
 import app.strata.launcher.testing.fakes.FakeCollation
 import app.strata.launcher.testing.fixtures.AppFixtures
 import app.strata.launcher.testing.fixtures.AppFixtures.app
@@ -103,5 +105,66 @@ class AppListAssemblerTest {
     fun snapshotFlagIsCarried() {
         assertThat(assemble(Catalog(emptyList(), fromSnapshot = true)).fromSnapshot).isTrue()
         assertThat(assemble(Catalog(emptyList(), fromSnapshot = false)).fromSnapshot).isFalse()
+    }
+
+    /** T-APPS-15 (data half): private-space apps form their own container, outside the A–Z list, index and search input. */
+    @Test
+    fun tApps15_privateAppsInOwnContainer() {
+        val a = app("Alpha")
+        val p1 = app("Zeta vault", serial = 99, kind = ProfileKind.PRIVATE)
+        val p2 = app("Bank", serial = 99, kind = ProfileKind.PRIVATE)
+        val list = assemble(Catalog(listOf(a, p1, p2), false))
+        assertThat(list.sections.flatMap { it.apps }.map { it.displayLabel }).containsExactly("Alpha")
+        assertThat(list.index.sumOf { it.appCount }).isEqualTo(1)
+        assertThat(list.allApps.map { it.displayLabel }).containsExactly("Alpha")
+        assertThat(list.privateApps.map { it.displayLabel }).containsExactly("Bank", "Zeta vault").inOrder()
+        assertThat(list.privateApps.all { it.isPrivate }).isTrue()
+    }
+
+    /**
+     * T-LIFE-08 / T-LIFE-09 (data half): the profiles' current state wins over the catalog's load-time flags: a paused
+     * work profile marks its rows QUIET, a resumed one clears it, a locked private space contributes nothing.
+     */
+    @Test
+    fun profileStateMarksPausedAndDropsLockedPrivate() {
+        val main = app("Alpha")
+        val work = app("Mail", serial = 10)
+        val private = app("Bank", serial = 99, kind = ProfileKind.PRIVATE)
+        val catalog = Catalog(listOf(main, work, private), false)
+
+        fun withProfiles(vararg profiles: Profile) =
+            AppListAssembler.assemble(
+                catalog,
+                emptyMap(),
+                collation.sections(listOf("en")),
+                collation.comparator(listOf("en")),
+                ProfileState.of(profiles.toList()),
+            )
+        val paused =
+            withProfiles(
+                Profile(0, ProfileKind.MAIN, quietMode = false, available = true),
+                Profile(10, ProfileKind.WORK, quietMode = true, available = false),
+                Profile(99, ProfileKind.PRIVATE, quietMode = true, available = false),
+            )
+        assertThat(paused.allApps.first { it.displayLabel == "Mail" }.paused).isTrue()
+        assertThat(paused.allApps.first { it.displayLabel == "Alpha" }.paused).isFalse()
+        assertThat(paused.privateApps).isEmpty()
+
+        val resumed =
+            AppListAssembler.assemble(
+                Catalog(listOf(main, work.copy(flags = AppFlags.QUIET), private), false),
+                emptyMap(),
+                collation.sections(listOf("en")),
+                collation.comparator(listOf("en")),
+                ProfileState.of(
+                    listOf(
+                        Profile(10, ProfileKind.WORK, quietMode = false, available = true),
+                        Profile(99, ProfileKind.PRIVATE, quietMode = false, available = true),
+                    ),
+                ),
+            )
+        assertThat(resumed.allApps.first { it.displayLabel == "Mail" }.paused).isFalse()
+        assertThat(resumed.privateApps.map { it.displayLabel }).containsExactly("Bank")
+        assertThat(resumed.privateApps.single().paused).isFalse()
     }
 }

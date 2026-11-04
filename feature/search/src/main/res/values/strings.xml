@@ -12,4 +12,6 @@
     <!-- Launch failure (FR-APPS-02, INTERACTION_SPEC §8) -->
     <string name="search_launch_failed">Couldn\'t open %1$s</string>
     <string name="search_launch_failed_app_info">App info</string>
+    <string name="search_private_tag">Private space</string>
+    <string name="search_paused_tag">Paused</string>
 </resources>

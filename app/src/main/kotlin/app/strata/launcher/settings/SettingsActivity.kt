@@ -1,6 +1,7 @@
 package app.strata.launcher.settings
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -57,6 +58,7 @@ class SettingsActivity : ComponentActivity() {
                     logger = graph.logger,
                     roleController = graph.roleController,
                     ioDispatcher = graph.dispatchers.io,
+                    privateSpaceSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM,
                 )
             }
         }

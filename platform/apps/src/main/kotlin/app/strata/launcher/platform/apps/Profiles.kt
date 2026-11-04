@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.LauncherApps
+import android.content.pm.LauncherUserInfo
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -16,8 +17,12 @@ import androidx.core.content.ContextCompat
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.apps.Profile
 import app.strata.launcher.core.platformapi.apps.ProfileSource
+import app.strata.launcher.core.platformapi.apps.QuietModeResult
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /** The `strata-platform` thread for LauncherApps and profile callbacks (ARCHITECTURE §6). */
 object PlatformThread {
@@ -109,10 +114,14 @@ internal fun registerProfileReceiver(
 }
 
 /**
- * [ProfileSource] for M1: main and work profiles from `LauncherApps.getProfiles()`, refreshed by the
- * runtime profile broadcasts. Quiet-mode requests and private space arrive in M6.
+ * [ProfileSource]: main, work and private-space profiles from `LauncherApps.getProfiles()` (a private space is listed
+ * only while Strata holds ROLE_HOME and `ACCESS_HIDDEN_PROFILES`), refreshed by the runtime profile broadcasts.
+ * Quiet-mode requests pause/resume work and lock/unlock the private space (ANDROID_PLATFORM §3.2, §3.3).
  */
-class AndroidProfileSource(context: Context) : ProfileSource {
+class AndroidProfileSource(
+    context: Context,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) : ProfileSource {
     private val app = context.applicationContext
     private val resolver = ProfileResolver(app)
     private val state = MutableStateFlow<List<Profile>>(emptyList())
@@ -121,11 +130,55 @@ class AndroidProfileSource(context: Context) : ProfileSource {
 
     /** Reads the profiles off main and keeps them current; call once. */
     fun start() {
-        PlatformThread.handler.post { refresh() }
-        registerProfileReceiver(app) { refresh() }
+        PlatformThread.handler.post { read() }
+        registerProfileReceiver(app) { read() }
     }
 
-    private fun refresh() {
+    private fun read() {
         state.value = runCatching { resolver.snapshot() }.getOrDefault(state.value)
+    }
+
+    override fun refresh() {
+        PlatformThread.handler.post { read() }
+    }
+
+    override suspend fun requestQuietMode(
+        serial: Long,
+        enable: Boolean,
+    ): QuietModeResult {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return QuietModeResult.UNSUPPORTED
+        return withContext(io) {
+            val user = resolver.userOf(serial) ?: return@withContext QuietModeResult.FAILED
+            val result =
+                try {
+                    // "false" = the system shows its credential screen first (ANDROID_PLATFORM §3.2).
+                    if (resolver.userManager.requestQuietModeEnabled(enable, user)) {
+                        QuietModeResult.DONE
+                    } else {
+                        QuietModeResult.NEEDS_CREDENTIAL
+                    }
+                } catch (e: SecurityException) {
+                    QuietModeResult.NOT_ALLOWED
+                } catch (e: IllegalArgumentException) {
+                    QuietModeResult.FAILED
+                } catch (e: IllegalStateException) {
+                    QuietModeResult.FAILED
+                }
+            read()
+            result
+        }
+    }
+
+    override fun privateSpaceEntryHidden(serial: Long): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return false
+        return try {
+            val user = resolver.userOf(serial) ?: return false
+            resolver.launcherApps
+                .getLauncherUserInfo(user)
+                ?.userConfig
+                ?.getBoolean(LauncherUserInfo.PRIVATE_SPACE_ENTRYPOINT_HIDDEN, false) == true
+        } catch (e: RuntimeException) {
+            false
+        }
     }
 }

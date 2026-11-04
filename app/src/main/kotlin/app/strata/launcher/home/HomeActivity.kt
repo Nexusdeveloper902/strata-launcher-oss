@@ -80,6 +80,8 @@ class HomeActivity : ComponentActivity() {
                     theme = graph.themeRepository,
                     themesAvailable = true,
                     iconPacks = graph.iconProvider.iconPacks,
+                    profiles = graph.profiles,
+                    shortcuts = graph.shortcuts,
                 )
             }
         }
@@ -183,6 +185,7 @@ class HomeActivity : ComponentActivity() {
                                 onLongPress = { viewModel.onAction(HomeAction.OpenSheet(it)) },
                                 rowActions = appActions,
                                 closeLog = searchCloseLog,
+                                onProfilePaused = { viewModel.onAction(HomeAction.Launch(it, null)) },
                             )
                         },
                     )
@@ -262,6 +265,7 @@ class HomeActivity : ComponentActivity() {
         appGraph.refreshThemeInputs()
         // Callbacks are missed while not registered: reconcile on every start (ANDROID_PLATFORM §3.1).
         appGraph.appCatalog.requestReconcile()
+        appGraph.profiles.refresh()
     }
 
     override fun onStop() {

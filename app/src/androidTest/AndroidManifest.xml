@@ -2,7 +2,9 @@
 <!-- Test APK only (never merged into the app). CoverActivity: a plain, opaque activity the home device tests put in
      front of HomeActivity instances their compose rule does not own before the rule tears down (DeviceState.kt).
      FixturePackActivity: makes the test APK an icon pack (ADW THEMES action) with a compiled res/xml/appfilter.xml, the PACK_OK
-     fixture of the icon device tests (IconDeviceTest.kt). -->
+     fixture of the icon device tests (IconDeviceTest.kt).
+     ShortcutFixtureActivity: a launcher activity of the test APK with two static shortcuts, the T-APPS-12 fixture
+     (ProfilesDeviceTest.kt). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity
@@ -17,6 +19,19 @@
                 <action android:name="org.adw.ActivityStarter.THEMES" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+        </activity>
+        <activity
+            android:name="app.strata.launcher.home.ShortcutFixtureActivity"
+            android:exported="true"
+            android:label="@string/fixture_shortcut_app"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/fixture_shortcuts" />
         </activity>
     </application>
 </manifest>

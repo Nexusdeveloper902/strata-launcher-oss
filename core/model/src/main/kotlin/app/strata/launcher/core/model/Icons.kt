@@ -46,6 +46,8 @@ data class IconRequest(
     val densityDpi: Int,
     val style: IconStyle = IconStyle.SYSTEM,
     val override: IconOverride? = null,
+    /** FR-APPS-10: a private-space icon is rendered for the caller only: never cached in L1/L2 and never logged. */
+    val ephemeral: Boolean = false,
 )
 
 /**

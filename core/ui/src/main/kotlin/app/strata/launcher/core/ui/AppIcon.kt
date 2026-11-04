@@ -30,6 +30,7 @@ import app.strata.launcher.core.model.IconResult
 import app.strata.launcher.core.model.IconShapeKind
 import app.strata.launcher.core.model.IconStyle
 import app.strata.launcher.core.model.IconTintMode
+import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.theme.model.IconShape
 import app.strata.launcher.core.theme.model.IconTint
 import app.strata.launcher.core.theme.model.PackFallback
@@ -45,7 +46,12 @@ data class IconRequestKey(
     val key: AppKey,
     val lastUpdateTime: Long,
     val override: IconOverride? = null,
+    /** FR-APPS-10: private-space icons are never cached (see `IconRequest.ephemeral`). */
+    val ephemeral: Boolean = false,
 )
+
+/** The icon request of a visible app; private-space apps are ephemeral (FR-APPS-10). */
+fun VisibleApp.iconKey(): IconRequestKey = IconRequestKey(key, lastUpdateTime, iconOverride, ephemeral = isPrivate)
 
 /**
  * Icon source for [AppIcon] (`:app` adapts `IconProvider` of `:platform:icons`; `:core:ui` may not see
@@ -122,7 +128,8 @@ fun rememberAppIconState(
     val densityDpi = (density.density * DENSITY_BASELINE).toInt()
     val theme = Strata.theme
     val style = remember(theme.icons, theme.colors) { iconStyleOf(theme) }
-    val req = request?.let { IconRequest(it.key, it.lastUpdateTime, sizePx, densityDpi, style, it.override) }
+    val req =
+        request?.let { IconRequest(it.key, it.lastUpdateTime, sizePx, densityDpi, style, it.override, it.ephemeral) }
     val revision by (loader?.revision ?: NO_REVISION).collectAsState()
     val state =
         remember(request?.key, loader) {

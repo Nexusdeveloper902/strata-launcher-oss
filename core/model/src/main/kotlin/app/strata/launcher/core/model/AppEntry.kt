@@ -12,6 +12,9 @@ object AppFlags {
 
     /** Platform-synthesized "app details" entry for an app without a launcher activity (ANDROID_PLATFORM §3.1). */
     const val SYNTHESIZED: Int = 1 shl 4
+
+    /** The app's profile is in quiet mode: a paused work profile (FR-APPS-09). Never set for private space. */
+    const val QUIET: Int = 1 shl 5
 }
 
 /**

@@ -215,6 +215,15 @@ private fun SettingsRoot(
                     onClick = onHiddenApps,
                 )
             }
+            if (state.privateSpaceSupported) {
+                toggle(
+                    Toggle.SHOW_PRIVATE_SPACE,
+                    R.string.settings_show_private_space,
+                    s,
+                    onAction,
+                    R.string.settings_show_private_space_summary,
+                )
+            }
         }
         group(R.string.settings_group_privacy) {
             item {

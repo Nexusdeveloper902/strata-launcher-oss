@@ -92,6 +92,7 @@ import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.backdropFade
 import app.strata.launcher.core.ui.strataBackdrop
 import app.strata.launcher.feature.home.list.AppListScreen
+import app.strata.launcher.feature.home.list.PrivateSpaceCommand
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -196,6 +197,20 @@ fun HomeRoute(
                     launch { snackbar.showSnackbar(resources.getString(R.string.app_removed)) }
                 }
 
+                HomeEffect.ShortcutRemoved -> {
+                    launch { snackbar.showSnackbar(resources.getString(R.string.shortcut_removed)) }
+                }
+
+                is HomeEffect.ProfileChangeFailed -> {
+                    val text =
+                        when (effect.problem) {
+                            ProfileChangeProblem.NOT_DEFAULT -> R.string.profile_not_default
+                            ProfileChangeProblem.UNSUPPORTED -> R.string.profile_unsupported
+                            ProfileChangeProblem.FAILED -> R.string.profile_failed
+                        }
+                    launch { snackbar.showSnackbar(resources.getString(text)) }
+                }
+
                 is HomeEffect.NotYetAvailable -> {
                     val text =
                         when (effect.feature) {
@@ -290,6 +305,18 @@ fun HomeRoute(
                     onJumpConsumed = { onAction(HomeAction.JumpConsumed(it.seq)) },
                     onJumpToLetterMenu = { letterGrid = true },
                     indexExclusion = if (search == null) exclusion else IndexExclusion.NONE,
+                    work = state.work,
+                    onWorkPaused = { onAction(HomeAction.SetWorkPaused(it)) },
+                    privateSpace = state.privateSpace,
+                    onPrivateSpace = { command ->
+                        onAction(
+                            when (command) {
+                                PrivateSpaceCommand.LOCK -> HomeAction.SetPrivateSpaceLocked(true)
+                                PrivateSpaceCommand.UNLOCK -> HomeAction.SetPrivateSpaceLocked(false)
+                                PrivateSpaceCommand.HIDE -> HomeAction.HidePrivateSpace
+                            },
+                        )
+                    },
                 )
             }
             if (state.layer == HomeLayer.FAV_EDIT) {

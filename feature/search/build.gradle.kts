@@ -12,6 +12,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
 
+    testImplementation(projects.core.data) // the real list pipeline with profile state (T-SEARCH-08)
     testImplementation(projects.testing.fakes)
     testImplementation(projects.testing.fixtures)
 }

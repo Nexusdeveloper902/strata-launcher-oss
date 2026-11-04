@@ -30,6 +30,8 @@ import app.strata.launcher.core.platformapi.apps.AppListSource
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.OverridesRepository
+import app.strata.launcher.core.platformapi.apps.ProfileSource
+import app.strata.launcher.core.platformapi.apps.ShortcutSource
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
@@ -47,6 +49,7 @@ import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.diagnostics.LogcatSink
 import app.strata.launcher.platform.apps.AndroidProfileSource
+import app.strata.launcher.platform.apps.AndroidShortcutSource
 import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
 import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
 import app.strata.launcher.platform.icons.AndroidIconProvider
@@ -141,6 +144,8 @@ class DefaultAppGraph(context: Context) : AppGraph {
             defaultDispatcher = dispatchers.default,
             scope = appScope,
             snapshotLoaded = catalogRepository.snapshotLoaded,
+            // Pause and lock show at once, before the catalog reload (T-LIFE-08/09).
+            profiles = profileSource.profiles,
         )
     }
 
@@ -283,7 +288,11 @@ class DefaultAppGraph(context: Context) : AppGraph {
         iconProvider.refreshPacks()
     }
 
-    private val profileSource by lazy { AndroidProfileSource(appContext).also { it.start() } }
+    private val profileSource by lazy { AndroidProfileSource(appContext, dispatchers.io).also { it.start() } }
+
+    override val profiles: ProfileSource get() = profileSource
+
+    override val shortcuts: ShortcutSource by lazy { AndroidShortcutSource(appContext, dispatchers.io, logger) }
 
     override fun startCatalog() {
         profileSource

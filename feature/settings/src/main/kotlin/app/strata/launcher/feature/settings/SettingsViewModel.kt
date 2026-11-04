@@ -40,6 +40,9 @@ enum class Toggle {
     RECENTS,
     KEEP_BACK_GESTURE,
     HAPTICS,
+
+    /** FR-APPS-10: settings field 20, inverted (on = the private-space container is shown in the list). */
+    SHOW_PRIVATE_SPACE,
     ;
 
     fun read(s: Settings): Boolean =
@@ -52,6 +55,7 @@ enum class Toggle {
             RECENTS -> s.recentsEnabled
             KEEP_BACK_GESTURE -> s.keepBackGestureOnIndexSide
             HAPTICS -> s.hapticsEnabled
+            SHOW_PRIVATE_SPACE -> !s.privateSpaceContainerHidden
         }
 
     fun write(
@@ -67,6 +71,7 @@ enum class Toggle {
             RECENTS -> s.copy(recentsEnabled = value)
             KEEP_BACK_GESTURE -> s.copy(keepBackGestureOnIndexSide = value)
             HAPTICS -> s.copy(hapticsEnabled = value)
+            SHOW_PRIVATE_SPACE -> s.copy(privateSpaceContainerHidden = !value)
         }
 }
 
@@ -82,6 +87,8 @@ data class SettingsUiState(
     val defaultHome: Boolean? = null,
     /** FR-SET-02: "switch the home app first" guidance before uninstalling Strata. */
     val showUninstallGuidance: Boolean = false,
+    /** FR-APPS-10: API 35+ (the "Show private space" row is absent below). */
+    val privateSpaceSupported: Boolean = false,
 )
 
 sealed interface SettingsAction {
@@ -151,6 +158,7 @@ class SettingsViewModel(
     private val logger: Logger,
     private val roleController: RoleController,
     private val ioDispatcher: CoroutineDispatcher,
+    private val privateSpaceSupported: Boolean = false,
 ) : ViewModel() {
     private val disclosure = MutableStateFlow(false)
     private val role = MutableStateFlow(RoleUi())
@@ -174,6 +182,7 @@ class SettingsViewModel(
                 showLockDisclosure = showDisclosure,
                 defaultHome = r.held,
                 showUninstallGuidance = r.guidance,
+                privateSpaceSupported = privateSpaceSupported,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState(lockSupported = lockService.supported))
 

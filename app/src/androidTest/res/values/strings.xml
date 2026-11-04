@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Test APK only: the T-APPS-12 shortcut fixture. -->
+    <string name="fixture_shortcut_app">Strata shortcut fixture</string>
+    <string name="fixture_shortcut_one">Fixture one</string>
+    <string name="fixture_shortcut_two">Fixture two</string>
+</resources>

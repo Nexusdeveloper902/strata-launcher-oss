@@ -55,4 +55,7 @@
     <string name="settings_uninstall_guidance_title">Choose another home app first</string>
     <string name="settings_uninstall_guidance_body">Strata is your home app. Pick another home app in the system settings, then come back here and Strata\'s uninstall dialog opens.</string>
     <string name="settings_uninstall_guidance_continue">Open home settings</string>
+    <!-- FR-APPS-10 -->
+    <string name="settings_show_private_space">Show private space</string>
+    <string name="settings_show_private_space_summary">Its container at the end of the app list. Nothing about it is stored by Strata.</string>
 </resources>

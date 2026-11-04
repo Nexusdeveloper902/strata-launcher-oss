@@ -180,4 +180,20 @@ class IconPipelineTest {
         assertThat(AndroidIconProvider.isTransientRemoval(Intent.ACTION_PACKAGE_REMOVED, replacing = false)).isFalse()
         assertThat(AndroidIconProvider.isTransientRemoval(Intent.ACTION_PACKAGE_ADDED, replacing = true)).isFalse()
     }
+
+    /**
+     * T-LIFE-09 / T-APPS-16 (icon half): a private-space icon is rendered but never cached, in memory or on disk, so
+     * nothing of the space is left once its rows are gone.
+     */
+    @Test
+    fun privateSpaceIconsAreNeverCached() =
+        runBlocking<Unit> {
+            install()
+            val private = req(override = IconOverride(FakePackSource.PACK_OK, "custom")).copy(ephemeral = true)
+            assertThat(provider.icon(private)).isInstanceOf(IconResult.Image::class.java)
+            assertThat(provider.cached(private)).isNull()
+            assertThat(provider.cached(private.copy(ephemeral = false))).isNull()
+            val disk = File(app.cacheDir, "icons-pipeline")
+            assertThat(disk.listFiles().orEmpty().toList()).isEmpty()
+        }
 }

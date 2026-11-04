@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- T-APPS-12 fixture: two static shortcuts of the test APK's launcher activity (the third, dynamic one is pushed by
+     the test when the platform allows it). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:shortcutId="fixture_static_one"
+        android:shortcutShortLabel="@string/fixture_shortcut_one">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="app.strata.launcher.home.ShortcutFixtureActivity"
+            android:targetPackage="app.strata.launcher.test" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:shortcutId="fixture_static_two"
+        android:shortcutShortLabel="@string/fixture_shortcut_two">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="app.strata.launcher.home.ShortcutFixtureActivity"
+            android:targetPackage="app.strata.launcher.test" />
+    </shortcut>
+</shortcuts>

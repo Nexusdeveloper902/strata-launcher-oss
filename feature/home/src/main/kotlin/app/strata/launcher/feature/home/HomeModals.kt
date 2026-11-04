@@ -42,13 +42,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.IndexLetter
 import app.strata.launcher.core.model.VisibleApp
+import app.strata.launcher.core.platformapi.apps.AppShortcut
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LabelRules
 import app.strata.launcher.core.ui.AppIcon
-import app.strata.launcher.core.ui.IconRequestKey
 import app.strata.launcher.core.ui.SheetItem
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.StrataSheet
+import app.strata.launcher.core.ui.iconKey
 import app.strata.launcher.core.ui.rememberAppIconState
 
 object SheetTestTags {
@@ -64,6 +65,10 @@ object SheetTestTags {
     const val HIDE = "app_sheet_hide"
     const val APP_INFO = "app_sheet_app_info"
     const val UNINSTALL = "app_sheet_uninstall"
+    const val SHORTCUTS = "app_sheet_shortcuts"
+    const val PRIVATE_NOTE = "app_sheet_private_note"
+    const val RESUME_WORK = "resume_work_dialog"
+    const val RESUME_WORK_CONFIRM = "resume_work_confirm"
     const val MENU = "home_menu"
     const val MENU_WIDGETS = "home_menu_widgets"
     const val MENU_THEMES = "home_menu_themes"
@@ -79,6 +84,8 @@ object SheetTestTags {
     fun replaceWith(app: VisibleApp) = "favorites_replace_${app.key.component}_${app.key.userSerial}"
 
     fun letter(label: String) = "letter_grid_$label"
+
+    fun shortcut(id: String) = "app_sheet_shortcut_$id"
 }
 
 /** The one modal of INTERACTION_SPEC §1.1: app sheet, home menu, the favourites cap dialog or its picker. */
@@ -96,7 +103,7 @@ fun HomeModals(
         is HomeModal.Sheet -> {
             val app = state.sheetApp ?: return
             StrataSheet(onDismiss = close, modifier = Modifier.testTag(SheetTestTags.SHEET)) {
-                AppSheet(app, app.key in state.favoriteKeys, modal.renaming, onAction)
+                AppSheet(app, app.key in state.favoriteKeys, modal.renaming, state.sheetShortcuts, onAction)
             }
         }
 
@@ -132,6 +139,31 @@ fun HomeModals(
             }
         }
 
+        is HomeModal.ResumeWork -> {
+            // INTERACTION_SPEC §8 "Work profile paused": the credential prompt, if any, is the system's.
+            StrataSheet(onDismiss = close, modifier = Modifier.testTag(SheetTestTags.RESUME_WORK)) {
+                Text(
+                    text = stringResource(R.string.work_resume_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Strata.colors.textPrimary,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    text = stringResource(R.string.work_resume_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Strata.colors.textSecondary,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = close) { Text(text = stringResource(R.string.cancel)) }
+                    TextButton(
+                        onClick = { onAction(HomeAction.ConfirmResumeWork) },
+                        modifier = Modifier.testTag(SheetTestTags.RESUME_WORK_CONFIRM),
+                    ) { Text(text = stringResource(R.string.work_resume_confirm)) }
+                }
+            }
+        }
+
         is HomeModal.ReplaceFavorite -> {
             StrataSheet(onDismiss = close, modifier = Modifier.testTag(SheetTestTags.REPLACE_PICKER)) {
                 Text(
@@ -152,12 +184,17 @@ fun HomeModals(
     }
 }
 
-/** S-SHEET (FR-APPS-03): header (icon, editable name), Favourite, Edit favourites, Rename, Change icon, Hide, App info, Uninstall. */
+/**
+ * S-SHEET (FR-APPS-03): header (icon, editable name), Favourite, Edit favourites, app shortcuts (FR-APPS-08), Rename,
+ * Change icon, Hide, App info, Uninstall. A private-space app (FR-APPS-10) keeps only App info and Uninstall, with
+ * Rename disabled and the reason (nothing about the space may be stored, T-APPS-16).
+ */
 @Composable
 private fun AppSheet(
     app: VisibleApp,
     favorite: Boolean,
     renaming: Boolean,
+    shortcuts: List<AppShortcut>,
     onAction: (HomeAction) -> Unit,
 ) {
     val colors = Strata.colors
@@ -168,7 +205,7 @@ private fun AppSheet(
     ) {
         AppIcon(
             label = app.displayLabel,
-            state = rememberAppIconState(IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride), SHEET_ICON),
+            state = rememberAppIconState(app.iconKey(), SHEET_ICON),
             size = SHEET_ICON,
             shape = androidx.compose.foundation.shape.CircleShape,
         )
@@ -186,12 +223,29 @@ private fun AppSheet(
                     Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)
-                        .clickable(role = Role.Button, onClickLabel = renameLabel) {
+                        .clickable(enabled = !app.isPrivate, role = Role.Button, onClickLabel = renameLabel) {
                             onAction(HomeAction.StartRename(app.key))
                         }.padding(vertical = 8.dp)
                         .testTag(SheetTestTags.NAME),
             )
         }
+    }
+    if (app.isPrivate) {
+        SheetShortcuts(shortcuts, onAction)
+        SheetItem(
+            text = stringResource(R.string.sheet_rename),
+            onClick = {},
+            enabled = false,
+            tag = SheetTestTags.RENAME,
+        )
+        Text(
+            text = stringResource(R.string.sheet_private_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textSecondary,
+            modifier = Modifier.padding(bottom = 8.dp).testTag(SheetTestTags.PRIVATE_NOTE),
+        )
+        SystemItems(app, onAction)
+        return
     }
     // FR-APPS-04: hidden apps are not favourites; they can only be removed (kept slot), never added.
     if (favorite || !app.hidden) {
@@ -208,6 +262,7 @@ private fun AppSheet(
             tag = SheetTestTags.EDIT_FAVORITES,
         )
     }
+    SheetShortcuts(shortcuts, onAction)
     SheetItem(
         text = stringResource(R.string.sheet_rename),
         onClick = { onAction(HomeAction.StartRename(app.key)) },
@@ -230,6 +285,39 @@ private fun AppSheet(
         onClick = { onAction(HomeAction.SetHidden(app.key, !app.hidden)) },
         tag = SheetTestTags.HIDE,
     )
+    SystemItems(app, onAction)
+}
+
+/** FR-APPS-08: one row per shortcut (static first, then dynamic); the section is absent when there are none. */
+@Composable
+private fun SheetShortcuts(
+    shortcuts: List<AppShortcut>,
+    onAction: (HomeAction) -> Unit,
+) {
+    if (shortcuts.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth().testTag(SheetTestTags.SHORTCUTS)) {
+        Text(
+            text = stringResource(R.string.sheet_shortcuts),
+            style = MaterialTheme.typography.labelLarge,
+            color = Strata.colors.textSecondary,
+            modifier = Modifier.padding(top = 8.dp).semantics { heading() },
+        )
+        shortcuts.forEach { shortcut ->
+            SheetItem(
+                text = shortcut.label,
+                onClick = { onAction(HomeAction.LaunchShortcut(shortcut, null)) },
+                tag = SheetTestTags.shortcut(shortcut.id),
+            )
+        }
+    }
+}
+
+/** App info and Uninstall (system flows; also offered for private-space apps). */
+@Composable
+private fun SystemItems(
+    app: VisibleApp,
+    onAction: (HomeAction) -> Unit,
+) {
     SheetItem(
         text = stringResource(R.string.sheet_app_info),
         onClick = { onAction(HomeAction.OpenAppInfo(app.key, null)) },
