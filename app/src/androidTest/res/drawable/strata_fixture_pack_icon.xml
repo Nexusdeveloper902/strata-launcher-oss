@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PACK_OK fixture icon: one solid colour, so a pixel check can tell it from any system icon. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FF00AA33" />
+</shape>
