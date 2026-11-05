@@ -39,6 +39,12 @@ data class VisibleApp(
 
     /** FR-LIST-08 / FR-APPS-03 helpers. */
     val suspended: Boolean get() = hasFlag(AppFlags.SUSPENDED)
+
+    /** FR-APPS-09: the work profile is paused; a tap offers "Turn on work apps". */
+    val paused: Boolean get() = hasFlag(AppFlags.QUIET)
+
+    /** FR-APPS-10: a private-space app. Never persisted, logged or backed up (P-5). */
+    val isPrivate: Boolean get() = profileKind == ProfileKind.PRIVATE
 }
 
 /** One non-empty section of the A–Z list. */
@@ -59,6 +65,11 @@ data class AppList(
     val fromSnapshot: Boolean,
     /** Hidden apps (not in [sections]), in collation order; search may show them (FR-SEARCH-03). */
     val hiddenApps: List<VisibleApp> = emptyList(),
+    /**
+     * FR-APPS-10: apps of an unlocked private space, in collation order, for its own container at the list end. Not in
+     * [sections], [index] or [allApps]; empty while the space is locked. Memory only.
+     */
+    val privateApps: List<VisibleApp> = emptyList(),
 ) {
     /** Every non-private app: shown sections first, then hidden ones (the search index input). */
     val allApps: List<VisibleApp> get() = sections.flatMap { it.apps } + hiddenApps

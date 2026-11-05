@@ -13,6 +13,21 @@ interface RoleController {
 
     /** Ordered settings chain to try when [requestIntent] cannot be started or was refused without UI. */
     fun fallbackIntents(): List<SystemIntent>
+
+    /** The device build, for the OEM help card's known-blocking note (FR-ONBOARD-03, U-016). Cheap; main-safe. */
+    fun deviceBuild(): DeviceBuild = DeviceBuild.UNKNOWN
+}
+
+/** `android.os.Build` fields the OEM help card reads (FR-ONBOARD-03). Never logged, stored or sent. */
+data class DeviceBuild(
+    val manufacturer: String,
+    val brand: String,
+    val fingerprint: String,
+    val incremental: String,
+) {
+    companion object {
+        val UNKNOWN = DeviceBuild("", "", "", "")
+    }
 }
 
 /** Framework-free description of a system screen; `:platform:system` turns it into an `Intent`. */

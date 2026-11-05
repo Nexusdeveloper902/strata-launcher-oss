@@ -96,6 +96,9 @@ sealed interface SearchEffect {
     data object Close : SearchEffect
 
     data class LaunchFailed(val label: String, val key: AppKey, val error: LaunchError) : SearchEffect
+
+    /** FR-APPS-09: a paused work app was chosen; home offers "Turn on work apps?". */
+    data class ProfilePaused(val app: VisibleApp) : SearchEffect
 }
 
 /**
@@ -119,6 +122,9 @@ class SearchViewModel(
     private val storeAvailable = MutableStateFlow(false)
     private val effectChannel = Channel<SearchEffect>(Channel.BUFFERED)
     private val translitCache = HashMap<String, String>()
+
+    /** The last index included private-space apps (their labels are then in [translitCache]). */
+    private var indexedPrivate = false
     private val transliterate = Transliterate { textFolding.transliterate(it) }
 
     val effects: Flow<SearchEffect> = effectChannel.receiveAsFlow()
@@ -148,12 +154,26 @@ class SearchViewModel(
             }
         }.distinctUntilChanged()
 
-    /** Index input = the assembled list (shown + hidden apps, collation order); never PRIVATE (FR-APPS-10). */
+    /** FR-APPS-10: private-space apps are searchable only while the container is shown (settings field 20). */
+    private val privateShown: Flow<Boolean> =
+        currentSettings.map { it?.privateSpaceContainerHidden != true }.distinctUntilChanged()
+
+    /**
+     * Index input = the assembled list (shown + hidden apps, collation order), then the apps of an unlocked private
+     * space (FR-SEARCH-03: a locked space has none, so it is never searchable). In memory only; private apps have no
+     * launch counts (the log never stores them).
+     */
     private val index: StateFlow<SearchIndex?> =
-        combine(appList.appList, counts) { list, c -> list to c }
-            .mapLatest { (list, c) ->
+        combine(appList.appList, counts, privateShown) { list, c, p -> Triple(list, c, p) }
+            .mapLatest { (list, c, private) ->
+                val withPrivate = private && list.privateApps.isNotEmpty()
+                // FR-APPS-10: transliterations of private labels must not outlive the unlocked space (memory only, and
+                // only while it is open). The cache refills from the remaining labels on this pass.
+                if (!withPrivate && indexedPrivate) translitCache.clear()
+                indexedPrivate = withPrivate
+                val apps = if (withPrivate) list.allApps + list.privateApps else list.allApps
                 // Tie order = the assembled list's collation order, so no comparator is needed here.
-                SearchIndex.build(list.allApps, c, comparator = null, transliterate, translitCache)
+                SearchIndex.build(apps, c, comparator = null, transliterate, translitCache)
             }.flowOn(defaultDispatcher)
             .catch { emit(SearchIndex.EMPTY) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -284,6 +304,10 @@ class SearchViewModel(
         app: VisibleApp,
         origin: LaunchOrigin?,
     ) {
+        if (app.paused) {
+            effectChannel.trySend(SearchEffect.ProfilePaused(app))
+            return
+        }
         when (val result = launcher.launch(app.key, origin)) {
             is Outcome.Ok -> {
                 viewModelScope.launch(ioDispatcher) { runCatching { launchLog.record(app.key, app.profileKind) } }
@@ -291,6 +315,10 @@ class SearchViewModel(
             }
 
             is Outcome.Err -> {
+                if (result.error == LaunchError.PROFILE_PAUSED) {
+                    effectChannel.trySend(SearchEffect.ProfilePaused(app))
+                    return
+                }
                 effectChannel.trySend(SearchEffect.LaunchFailed(app.displayLabel, app.key, result.error))
                 catalog.requestReconcile()
             }

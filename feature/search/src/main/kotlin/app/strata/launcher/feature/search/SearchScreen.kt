@@ -81,9 +81,9 @@ import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.ui.AppRow
-import app.strata.launcher.core.ui.IconRequestKey
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.iconKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -121,11 +121,14 @@ fun SearchRoute(
     /** The sheet's actions per result as accessibility custom actions (FR-A11Y-01). */
     rowActions: (VisibleApp) -> List<CustomAccessibilityAction> = { emptyList() },
     closeLog: (String) -> Unit = {},
+    /** FR-APPS-09: a paused work app was chosen; home shows "Turn on work apps?". */
+    onProfilePaused: (VisibleApp) -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val currentCloseLog by rememberUpdatedState(closeLog)
     val resources = LocalResources.current
     val currentOnAction by rememberUpdatedState(onAction)
+    val currentOnProfilePaused by rememberUpdatedState(onProfilePaused)
     val currentOnClose by rememberUpdatedState(onClose)
     LaunchedEffect(effects) {
         effects.collect { effect ->
@@ -133,6 +136,10 @@ fun SearchRoute(
                 SearchEffect.Close -> {
                     currentCloseLog("onClose")
                     currentOnClose()
+                }
+
+                is SearchEffect.ProfilePaused -> {
+                    currentOnProfilePaused(effect.app)
                 }
 
                 is SearchEffect.LaunchFailed -> {
@@ -451,12 +458,20 @@ private fun ResultRow(
         profileKind = app.profileKind,
         badge = app.badge,
         badgeStyle = badgeStyle,
-        tag = if (app.hidden) stringResource(R.string.search_hidden_tag) else null,
+        // FR-SEARCH-03: hidden apps are marked; private-space apps carry the container's name (T-SEARCH-08).
+        tag =
+            when {
+                app.isPrivate -> stringResource(R.string.search_private_tag)
+                app.paused -> stringResource(R.string.search_paused_tag)
+                app.hidden -> stringResource(R.string.search_hidden_tag)
+                else -> null
+            },
+        dimIcon = app.paused,
         selected = selected,
         onClick = { onLaunch(app, coordinates[0]?.let { originOf(it, view) }) },
         onLongClick = { onLongPress(app) },
         actions = actions,
-        icon = IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride),
+        icon = app.iconKey(),
         modifier =
             Modifier
                 .onGloballyPositioned { coordinates[0] = it }

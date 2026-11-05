@@ -10,6 +10,7 @@ import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppCatalogSource
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.AppListSource
+import app.strata.launcher.core.platformapi.apps.AppShortcut
 import app.strata.launcher.core.platformapi.apps.CatalogLoad
 import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
@@ -18,6 +19,8 @@ import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.apps.PackageChange
 import app.strata.launcher.core.platformapi.apps.Profile
 import app.strata.launcher.core.platformapi.apps.ProfileSource
+import app.strata.launcher.core.platformapi.apps.QuietModeResult
+import app.strata.launcher.core.platformapi.apps.ShortcutSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -117,6 +120,63 @@ class FakeProfileSource(
     initial: List<Profile> = listOf(Profile(0L, ProfileKind.MAIN, quietMode = false, available = true)),
 ) : ProfileSource {
     override val profiles: MutableStateFlow<List<Profile>> = MutableStateFlow(initial)
+
+    /** (serial, enable) of every quiet-mode request. */
+    val quietRequests = mutableListOf<Pair<Long, Boolean>>()
+
+    /** Answer of [requestQuietMode]; [QuietModeResult.DONE] also applies the change to [profiles]. */
+    var quietResult: QuietModeResult = QuietModeResult.DONE
+
+    /** Serials whose private-space entry point is hidden (API 36 config). */
+    val entryHidden = mutableSetOf<Long>()
+
+    override suspend fun requestQuietMode(
+        serial: Long,
+        enable: Boolean,
+    ): QuietModeResult {
+        quietRequests += serial to enable
+        if (quietResult == QuietModeResult.DONE) setQuiet(serial, enable)
+        return quietResult
+    }
+
+    override fun privateSpaceEntryHidden(serial: Long): Boolean = serial in entryHidden
+
+    /** What the profile broadcasts report: [serial] paused/locked or not. */
+    fun setQuiet(
+        serial: Long,
+        quiet: Boolean,
+    ) {
+        profiles.value =
+            profiles.value.map { if (it.serial == serial) it.copy(quietMode = quiet, available = !quiet) else it }
+    }
+}
+
+/** In-memory [ShortcutSource]: [byKey] are the shortcuts, [host] the shortcut-host permission. */
+class FakeShortcutSource(
+    var host: Boolean = true,
+    val byKey: MutableMap<AppKey, List<AppShortcut>> = mutableMapOf(),
+) : ShortcutSource {
+    val launched = mutableListOf<AppShortcut>()
+
+    /** Ids whose launch fails as removed by the app. */
+    val removed = mutableSetOf<String>()
+
+    /** Ids whose launch fails with SECURITY (the shortcut-host permission was lost meanwhile). */
+    val denied = mutableSetOf<String>()
+
+    override fun hasHostPermission(): Boolean = host
+
+    override suspend fun shortcutsFor(key: AppKey): List<AppShortcut> = if (host) byKey[key].orEmpty() else emptyList()
+
+    override fun launch(
+        shortcut: AppShortcut,
+        origin: LaunchOrigin?,
+    ): LaunchResult {
+        if (shortcut.id in removed) return Outcome.Err(LaunchError.NOT_FOUND)
+        if (shortcut.id in denied) return Outcome.Err(LaunchError.SECURITY)
+        launched += shortcut
+        return Outcome.Ok(Unit)
+    }
 }
 
 /** A catalog whose state tests set directly. */

@@ -19,11 +19,11 @@ import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.awaitWindowFocus
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
-import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.focusReport
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.openAllApps
+import app.strata.launcher.passOnboarding
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -48,9 +48,7 @@ class SearchDeviceTest {
     @Before
     fun skipOnboarding() {
         compose.waitForIdle()
-        if (compose.count(OnboardingTestTags.CONTINUE) > 0) {
-            compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
-        }
+        compose.passOnboarding()
         compose.waitUntil(timeoutMillis = 10_000) { compose.count(HomeTestTags.ALL_APPS) > 0 }
         // Key events and the IME go to the focused window; a system error dialog can hold focus (DeviceState.kt).
         compose.awaitWindowFocus(device)

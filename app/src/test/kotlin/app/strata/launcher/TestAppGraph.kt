@@ -16,10 +16,12 @@ import app.strata.launcher.testing.fakes.FakeIconProvider
 import app.strata.launcher.testing.fakes.FakeLaunchLogRepository
 import app.strata.launcher.testing.fakes.FakeLockService
 import app.strata.launcher.testing.fakes.FakeOverridesRepository
+import app.strata.launcher.testing.fakes.FakeProfileSource
 import app.strata.launcher.testing.fakes.FakeResetNotices
 import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import app.strata.launcher.testing.fakes.FakeSharedFiles
+import app.strata.launcher.testing.fakes.FakeShortcutSource
 import app.strata.launcher.testing.fakes.FakeSystemIntents
 import app.strata.launcher.testing.fakes.FakeTextFolding
 import app.strata.launcher.testing.fakes.FakeThemeEditorStore
@@ -55,6 +57,8 @@ class TestAppGraph(
     override val themeEditor: ThemeEditorStore = FakeThemeEditorStore(),
     override val documents: FakeDocumentIO = FakeDocumentIO(),
     override val sharedFiles: FakeSharedFiles = FakeSharedFiles(),
+    override val profiles: FakeProfileSource = FakeProfileSource(),
+    override val shortcuts: FakeShortcutSource = FakeShortcutSource(),
 ) : AppGraph {
     constructor(roleController: FakeRoleController = FakeRoleController(), onboarded: Boolean) :
         this(roleController, FakeSettingsRepository(Settings(onboardingDone = onboarded)))

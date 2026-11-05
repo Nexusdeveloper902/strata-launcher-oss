@@ -6,4 +6,10 @@ plugins {
 dependencies {
     implementation(projects.core.ui)
     implementation(projects.core.platformApi)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+
+    testImplementation(projects.testing.fakes)
+    testImplementation(projects.testing.fixtures)
 }

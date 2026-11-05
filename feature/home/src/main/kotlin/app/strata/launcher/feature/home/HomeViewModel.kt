@@ -16,12 +16,17 @@ import app.strata.launcher.core.platformapi.apps.AddFavoriteResult
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.AppListSource
+import app.strata.launcher.core.platformapi.apps.AppShortcut
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.apps.OverridesRepository
+import app.strata.launcher.core.platformapi.apps.Profile
+import app.strata.launcher.core.platformapi.apps.ProfileSource
+import app.strata.launcher.core.platformapi.apps.QuietModeResult
+import app.strata.launcher.core.platformapi.apps.ShortcutSource
 import app.strata.launcher.core.platformapi.settings.ResetCause
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
@@ -34,6 +39,8 @@ import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +51,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -74,6 +83,36 @@ sealed interface HomeModal {
 
     /** "Replace…": pick the favourite that [candidate] replaces. */
     data class ReplaceFavorite(val candidate: AppKey) : HomeModal
+
+    /** FR-APPS-09: a paused work app was tapped: "Turn on work apps?" for profile [serial]. */
+    data class ResumeWork(val serial: Long) : HomeModal
+}
+
+/** FR-APPS-09: the work profile's pause/resume control (list bar). */
+data class WorkProfileUi(
+    val serial: Long,
+    val paused: Boolean,
+)
+
+/**
+ * FR-APPS-10: the private-space container at the list end. [locked]: no rows, and the "Unlock" entry unless
+ * [entryHidden] (API 36). [apps] are memory-only.
+ */
+data class PrivateSpaceUi(
+    val serial: Long,
+    val locked: Boolean,
+    val entryHidden: Boolean,
+    val apps: List<VisibleApp>,
+)
+
+/** Why a pause/resume or lock/unlock request did not go through (snackbar text). */
+enum class ProfileChangeProblem {
+    /** `SecurityException`: only the foreground default launcher may change quiet mode. */
+    NOT_DEFAULT,
+
+    /** Below API 28: the system settings or quick settings do it. */
+    UNSUPPORTED,
+    FAILED,
 }
 
 /** A request to show the list at index letter [letter]; [seq] makes repeated jumps to one letter distinct. */
@@ -95,6 +134,15 @@ sealed interface IconNotice {
 
     /** Per-app icons come from a pack that was removed (or became unusable); those apps show the theme icon. */
     data class OverridePackGone(override val packageName: String) : IconNotice
+}
+
+/** The APP_MODE banner (FR-ONBOARD-02 "Not now", FR-ONBOARD-04 lost default). */
+enum class DefaultHomeBanner {
+    /** Strata has not been the home app in this process: "Strata isn't your home app" [Set as default]. */
+    NOT_DEFAULT,
+
+    /** Strata was the home app earlier in this process: "Strata is no longer your home app" [Set again]. */
+    LOST,
 }
 
 data class HomeUiState(
@@ -131,9 +179,20 @@ data class HomeUiState(
     val lockGestureOn: Boolean = false,
     /** The lock service is enabled in the system settings. */
     val lockServiceEnabled: Boolean = false,
+    /**
+     * INTERACTION_SPEC APP_MODE banner: the role is not held, onboarding is over and the banner was not dismissed in the
+     * last 24 h (FR-ONBOARD-04; settings field 19). Null when hidden.
+     */
+    val defaultBanner: DefaultHomeBanner? = null,
+    /** FR-APPS-09: the work profile, when one exists. */
+    val work: WorkProfileUi? = null,
+    /** FR-APPS-10: the private-space container, when a space exists and the container is not hidden. */
+    val privateSpace: PrivateSpaceUi? = null,
+    /** FR-APPS-08: shortcut rows of the open sheet's app (empty when not the default launcher). */
+    val sheetShortcuts: List<AppShortcut> = emptyList(),
 ) {
-    /** INTERACTION_SPEC APP_MODE: same UI plus a banner while the role is not held (FR-ONBOARD-02). */
-    val showAppModeBanner: Boolean get() = isDefaultHome == false
+    /** INTERACTION_SPEC APP_MODE: same UI plus a dismissible banner while the role is not held (FR-ONBOARD-02/04). */
+    val showAppModeBanner: Boolean get() = defaultBanner != null
 
     /** D-008: onboarding is the first layer of home until `onboarding_done` is set. */
     val showOnboarding: Boolean get() = onboardingDone == false
@@ -155,6 +214,24 @@ data class HomeUiState(
 sealed interface HomeAction {
     /** `onResume`: the user may have changed the home app in Settings (FR-ONBOARD-04). */
     data object RefreshRole : HomeAction
+
+    /** The APP_MODE banner's Dismiss: hidden for 24 h (FR-ONBOARD-04). */
+    data object DismissDefaultBanner : HomeAction
+
+    /** FR-APPS-09: the work bar's switch (paused = true pauses work apps). */
+    data class SetWorkPaused(val paused: Boolean) : HomeAction
+
+    /** "Turn on" in the "Turn on work apps?" dialog. */
+    data object ConfirmResumeWork : HomeAction
+
+    /** FR-APPS-10: lock / unlock the private space (the system may ask for the credential). */
+    data class SetPrivateSpaceLocked(val locked: Boolean) : HomeAction
+
+    /** FR-APPS-10: hide the container (settings field 20; Settings shows it again). */
+    data object HidePrivateSpace : HomeAction
+
+    /** FR-APPS-08: a shortcut row of the sheet. */
+    data class LaunchShortcut(val shortcut: AppShortcut, val origin: LaunchOrigin?) : HomeAction
 
     /** `onNewIntent(MAIN + HOME)` while home is in front (ANDROID_PLATFORM §1, INTERACTION_SPEC §6). */
     data object HomePressed : HomeAction
@@ -306,6 +383,12 @@ sealed interface HomeEffect {
 
     /** A storage write failed (disk full, corrupt database); the change was not saved. */
     data object WriteFailed : HomeEffect
+
+    /** INTERACTION_SPEC §8: "This shortcut was removed by its app". */
+    data object ShortcutRemoved : HomeEffect
+
+    /** A pause/resume or lock/unlock request did not go through. */
+    data class ProfileChangeFailed(val problem: ProfileChangeProblem) : HomeEffect
 }
 
 /** FR-APPS-06: the first pack used by a per-app icon that is no longer usable and was not noticed yet. */
@@ -333,6 +416,7 @@ private data class Local(
 )
 
 /** One VM for home, list, sheet, home menu and FAVEDIT, so the layers share state (ARCHITECTURE §5). */
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val roleController: RoleController,
     private val settings: SettingsRepository,
@@ -355,10 +439,29 @@ class HomeViewModel(
     private val themesAvailable: Boolean = false,
     /** Installed icon packs: per-app icons from a removed pack get a one-time notice (FR-APPS-06). */
     private val iconPacks: StateFlow<IconPacks>? = null,
+    /** Work profile and private space (FR-APPS-09/10); null = none (tests, previews). */
+    private val profiles: ProfileSource? = null,
+    /** App shortcuts in the sheet (FR-APPS-08); null = none. */
+    private val shortcuts: ShortcutSource? = null,
 ) : ViewModel() {
+    private data class SheetShortcuts(
+        val key: AppKey,
+        val shortcuts: List<AppShortcut>,
+    )
+
+    private val sheetShortcuts = MutableStateFlow<SheetShortcuts?>(null)
+    private var shortcutJob: Job? = null
+
     /** Override packs whose notice was dismissed (or used) in this process: shown once each. */
     private val dismissedOverridePacks = MutableStateFlow<Set<String>>(emptySet())
     private val isDefaultHome = MutableStateFlow<Boolean?>(null)
+
+    /** Strata held the role at some check in this process (the banner then says "no longer", FR-ONBOARD-04). */
+    private var wasDefault = false
+    private val lostDefault = MutableStateFlow(false)
+
+    /** Clock time of the last role check: the banner's 24 h dismissal is compared against it. */
+    private val roleCheckedAt = MutableStateFlow(clock.nowMillis())
     private val local = MutableStateFlow(Local())
     private var searchSessions = 0
     private var jumps = 0
@@ -394,6 +497,68 @@ class HomeViewModel(
         val iconNotice: IconNotice?,
     )
 
+    private data class RoleView(
+        val isDefault: Boolean?,
+        val lost: Boolean,
+        val checkedAt: Long,
+    )
+
+    private val roleView: Flow<RoleView> =
+        combine(isDefaultHome, lostDefault, roleCheckedAt) { d, l, t -> RoleView(d, l, t) }
+
+    private data class ProfileView(
+        val work: WorkProfileUi?,
+        val privateSpace: PrivateSpaceUi?,
+        val shortcuts: SheetShortcuts?,
+    )
+
+    /** Work bar and private container (FR-APPS-09/10). The entry-hidden config is a binder call: read on [ioDispatcher]. */
+    private val profileView: Flow<ProfileView> =
+        combine(
+            profiles?.profiles ?: flowOf(emptyList()),
+            currentList,
+            currentSettings.map { it?.privateSpaceContainerHidden == true }.distinctUntilChanged(),
+            sheetShortcuts,
+        ) { all, list, containerHidden, sheet -> PrivateInput(all, list, containerHidden, sheet) }
+            .mapLatest { input ->
+                val work =
+                    input.profiles.firstOrNull { it.kind == ProfileKind.WORK }?.let {
+                        WorkProfileUi(
+                            it.serial,
+                            it.quietMode,
+                        )
+                    }
+                val space = input.profiles.firstOrNull { it.kind == ProfileKind.PRIVATE }
+                val privateUi =
+                    if (space == null || input.containerHidden) {
+                        null
+                    } else {
+                        val entryHidden =
+                            space.quietMode &&
+                                withContext(ioDispatcher) {
+                                    runCatching {
+                                        profiles?.privateSpaceEntryHidden(
+                                            space.serial,
+                                        ) == true
+                                    }.getOrDefault(false)
+                                }
+                        PrivateSpaceUi(
+                            serial = space.serial,
+                            locked = space.quietMode,
+                            entryHidden = entryHidden,
+                            apps = if (space.quietMode) emptyList() else input.list?.privateApps.orEmpty(),
+                        )
+                    }
+                ProfileView(work, privateUi, input.sheet)
+            }.distinctUntilChanged()
+
+    private data class PrivateInput(
+        val profiles: List<Profile>,
+        val list: AppList?,
+        val containerHidden: Boolean,
+        val sheet: SheetShortcuts?,
+    )
+
     private val iconNotice: Flow<IconNotice?> =
         combine(
             theme?.state?.map { it.packNotice }?.distinctUntilChanged() ?: flowOf(null),
@@ -409,12 +574,12 @@ class HomeViewModel(
         combine(
             currentSettings,
             currentList,
-            isDefaultHome,
-            local,
+            roleView,
+            combine(local, profileView.onStart { emit(ProfileView(null, null, null)) }) { l, p -> l to p },
             combine(resetNotices.causes, favoriteKeys, lockService.enabled, themeBanner, iconNotice) { r, f, l, b, n ->
                 Extras(r, f, l, b, n)
             },
-        ) { s, list, isDefault, ui, (resets, favKeys, lockEnabled, banner, notice) ->
+        ) { s, list, role, (ui, profileUi), (resets, favKeys, lockEnabled, banner, notice) ->
             val shown =
                 list
                     ?.sections
@@ -422,10 +587,10 @@ class HomeViewModel(
                     ?.associateBy { it.key }
                     .orEmpty()
             val sheetKey = (ui.modal as? HomeModal.Sheet)?.key
-            val sheetApp = sheetKey?.let { key -> list?.allApps?.firstOrNull { it.key == key } }
+            val sheetApp = sheetKey?.let { key -> list?.let { findApp(it, key) } }
             HomeUiState(
                 onboardingDone = s?.onboardingDone,
-                isDefaultHome = isDefault,
+                isDefaultHome = role.isDefault,
                 layer = ui.layer,
                 search = ui.search.takeIf { ui.layer == HomeLayer.SEARCH },
                 list = list,
@@ -445,17 +610,36 @@ class HomeViewModel(
                 listJump = ui.jump,
                 lockGestureOn = lockService.supported && s?.lockGestureEnabled == true,
                 lockServiceEnabled = lockEnabled,
+                defaultBanner = defaultBanner(s, role),
+                work = profileUi.work,
+                privateSpace = profileUi.privateSpace,
+                sheetShortcuts =
+                    profileUi.shortcuts
+                        ?.takeIf { it.key == sheetKey }
+                        ?.shortcuts
+                        .orEmpty(),
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
 
     init {
-        // INTERACTION_SPEC §8 "App removed while shown": an open sheet closes with a snackbar.
+        // INTERACTION_SPEC §8 "App removed while shown": an open sheet closes with a snackbar. A private-space app
+        // that vanished because the space was locked is not "removed": its sheet closes without a message.
         viewModelScope.launch {
             currentList.collect { list ->
                 val sheet = local.value.modal as? HomeModal.Sheet ?: return@collect
-                if (list != null && !list.fromSnapshot && list.allApps.none { it.key == sheet.key }) {
+                if (list != null && !list.fromSnapshot && findApp(list, sheet.key) == null) {
+                    val private = isPrivate(sheet.key)
                     local.update { it.copy(modal = HomeModal.None) }
-                    effectChannel.trySend(HomeEffect.AppRemoved)
+                    if (!private) effectChannel.trySend(HomeEffect.AppRemoved)
+                }
+            }
+        }
+        // The sheet's shortcut labels live only while its sheet is open (a private app's ones included).
+        viewModelScope.launch {
+            local.map { (it.modal as? HomeModal.Sheet)?.key }.distinctUntilChanged().collect { key ->
+                if (key == null) {
+                    shortcutJob?.cancel()
+                    sheetShortcuts.value = null
                 }
             }
         }
@@ -465,6 +649,35 @@ class HomeViewModel(
         when (action) {
             HomeAction.RefreshRole -> {
                 refreshRole()
+            }
+
+            is HomeAction.SetWorkPaused -> {
+                state.value.work?.let { requestQuietMode(it.serial, enable = action.paused) }
+            }
+
+            HomeAction.ConfirmResumeWork -> {
+                val modal = local.value.modal as? HomeModal.ResumeWork ?: return
+                setModal(HomeModal.None)
+                requestQuietMode(modal.serial, enable = false)
+            }
+
+            is HomeAction.SetPrivateSpaceLocked -> {
+                state.value.privateSpace?.let { requestQuietMode(it.serial, enable = action.locked) }
+            }
+
+            HomeAction.HidePrivateSpace -> {
+                guardedWrite("hide private space") { settings.update { it.copy(privateSpaceContainerHidden = true) } }
+            }
+
+            is HomeAction.LaunchShortcut -> {
+                launchShortcut(action.shortcut, action.origin)
+            }
+
+            HomeAction.DismissDefaultBanner -> {
+                val until = clock.nowMillis() + BANNER_SNOOZE_MS
+                guardedWrite("dismiss default banner") {
+                    settings.update { it.copy(defaultHomeBannerDismissedUntil = until) }
+                }
             }
 
             HomeAction.HomePressed -> {
@@ -588,7 +801,14 @@ class HomeViewModel(
             }
 
             is HomeAction.ChangeIcon -> {
-                closeModalThen(HomeEffect.OpenIconChooser(action.key))
+                if (isPrivate(
+                        action.key,
+                    )
+                ) {
+                    setModal(HomeModal.None)
+                } else {
+                    closeModalThen(HomeEffect.OpenIconChooser(action.key))
+                }
             }
 
             is HomeAction.Uninstall -> {
@@ -661,9 +881,25 @@ class HomeViewModel(
 
     private fun refreshRole() {
         lockService.refresh()
+        // T-LIFE-10: a sheet open while the default home changed re-reads its shortcuts (none without the role).
+        (local.value.modal as? HomeModal.Sheet)?.let { loadShortcuts(it.key) }
         viewModelScope.launch {
-            isDefaultHome.value = withContext(ioDispatcher) { roleController.isDefaultHome() }
+            val held = withContext(ioDispatcher) { roleController.isDefaultHome() }
+            if (held) wasDefault = true
+            lostDefault.value = !held && wasDefault
+            roleCheckedAt.value = clock.nowMillis()
+            isDefaultHome.value = held
         }
+    }
+
+    /** FR-ONBOARD-02/04: shown while the role is not held, after onboarding, unless dismissed in the last 24 h. */
+    private fun defaultBanner(
+        s: Settings?,
+        role: RoleView,
+    ): DefaultHomeBanner? {
+        if (s == null || !s.onboardingDone || role.isDefault != false) return null
+        if (role.checkedAt < s.defaultHomeBannerDismissedUntil) return null
+        return if (role.lost) DefaultHomeBanner.LOST else DefaultHomeBanner.NOT_DEFAULT
     }
 
     /**
@@ -747,9 +983,91 @@ class HomeViewModel(
         app: VisibleApp,
         rename: Boolean,
     ) {
-        if (app.profileKind == ProfileKind.PRIVATE) return
         tick(HapticKind.LONG_PRESS)
-        setModal(HomeModal.Sheet(app.key, renaming = rename))
+        // A private-space app gets a reduced sheet (no rename, hide, favourite or icon: nothing may be stored).
+        setModal(HomeModal.Sheet(app.key, renaming = rename && !app.isPrivate))
+        loadShortcuts(app.key)
+    }
+
+    /** FR-APPS-08: the sheet's shortcut rows, only while Strata holds the shortcut-host permission. */
+    private fun loadShortcuts(key: AppKey) {
+        val source = shortcuts ?: return
+        shortcutJob?.cancel()
+        if (sheetShortcuts.value?.key != key) sheetShortcuts.value = null
+        shortcutJob =
+            viewModelScope.launch {
+                val found =
+                    try {
+                        withContext(ioDispatcher) {
+                            if (source.hasHostPermission()) source.shortcutsFor(key) else emptyList()
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        logger.w(TAG, "shortcuts unavailable", e)
+                        emptyList()
+                    }
+                sheetShortcuts.value = SheetShortcuts(key, found)
+            }
+    }
+
+    private fun launchShortcut(
+        shortcut: AppShortcut,
+        origin: LaunchOrigin?,
+    ) {
+        setModal(HomeModal.None)
+        val source = shortcuts ?: return
+        when (val result = source.launch(shortcut, origin)) {
+            is Outcome.Ok -> {
+                Unit
+            }
+
+            is Outcome.Err -> {
+                when (result.error) {
+                    LaunchError.PROFILE_PAUSED -> {
+                        setModal(HomeModal.ResumeWork(shortcut.userSerial))
+                    }
+
+                    LaunchError.SECURITY -> {
+                        // The shortcut-host permission is gone (no longer the default home): not a removed shortcut.
+                        // Re-check the role (banner) and say why; the next sheet lists no shortcuts.
+                        refreshRole()
+                        effectChannel.trySend(HomeEffect.ProfileChangeFailed(ProfileChangeProblem.NOT_DEFAULT))
+                    }
+
+                    else -> {
+                        effectChannel.trySend(HomeEffect.ShortcutRemoved)
+                    }
+                }
+            }
+        }
+    }
+
+    /** FR-APPS-09/10: `requestQuietModeEnabled`; the profile broadcasts then update rows without a restart. */
+    private fun requestQuietMode(
+        serial: Long,
+        enable: Boolean,
+    ) {
+        val source = profiles ?: return
+        viewModelScope.launch {
+            val result =
+                try {
+                    source.requestQuietMode(serial, enable)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.w(TAG, "quiet mode request failed", e)
+                    QuietModeResult.FAILED
+                }
+            val problem =
+                when (result) {
+                    QuietModeResult.DONE, QuietModeResult.NEEDS_CREDENTIAL -> null
+                    QuietModeResult.NOT_ALLOWED -> ProfileChangeProblem.NOT_DEFAULT
+                    QuietModeResult.UNSUPPORTED -> ProfileChangeProblem.UNSUPPORTED
+                    QuietModeResult.FAILED -> ProfileChangeProblem.FAILED
+                }
+            if (problem != null) effectChannel.trySend(HomeEffect.ProfileChangeFailed(problem))
+        }
     }
 
     private fun openMenu() {
@@ -761,6 +1079,7 @@ class HomeViewModel(
         currentList.value?.sections?.any { section -> section.apps.any { it.key == key } } == true
 
     private fun toggleFavorite(key: AppKey) {
+        if (isPrivate(key)) return
         guardedWrite("toggle favourite") {
             if (key in favoriteKeys.value) {
                 favorites.remove(key)
@@ -790,6 +1109,7 @@ class HomeViewModel(
         key: AppKey,
         hidden: Boolean,
     ) {
+        if (isPrivate(key)) return
         val kind = appOf(key)?.profileKind ?: ProfileKind.MAIN
         setModal(HomeModal.None)
         guardedWrite("set hidden") {
@@ -802,6 +1122,7 @@ class HomeViewModel(
         key: AppKey,
         label: String?,
     ) {
+        if (isPrivate(key)) return
         val kind = appOf(key)?.profileKind ?: ProfileKind.MAIN
         setModal(HomeModal.Sheet(key, renaming = false))
         guardedWrite("rename") { overrides.setCustomLabel(key, kind, label) }
@@ -827,7 +1148,15 @@ class HomeViewModel(
         }
     }
 
-    private fun appOf(key: AppKey): VisibleApp? = currentList.value?.allApps?.firstOrNull { it.key == key }
+    private fun appOf(key: AppKey): VisibleApp? = currentList.value?.let { findApp(it, key) }
+
+    /**
+     * P-5 guard: nothing about a private-space app is ever written. A key that is not in the current list counts as
+     * private when its profile is a private space, so a stale action cannot store it as MAIN.
+     */
+    private fun isPrivate(key: AppKey): Boolean =
+        appOf(key)?.isPrivate == true ||
+            profiles?.profiles?.value?.any { it.serial == key.userSerial && it.kind == ProfileKind.PRIVATE } == true
 
     private fun uninstall(key: AppKey) {
         setModal(HomeModal.None)
@@ -949,6 +1278,11 @@ class HomeViewModel(
         app: VisibleApp,
         origin: LaunchOrigin?,
     ) {
+        // FR-APPS-09: a paused work app offers "Turn on work apps?" instead of failing.
+        if (app.paused) {
+            setModal(HomeModal.ResumeWork(app.key.userSerial))
+            return
+        }
         when (val result = launcher.launch(app.key, origin)) {
             is Outcome.Ok -> {
                 viewModelScope.launch(ioDispatcher) {
@@ -958,6 +1292,10 @@ class HomeViewModel(
             }
 
             is Outcome.Err -> {
+                if (result.error == LaunchError.PROFILE_PAUSED) {
+                    setModal(HomeModal.ResumeWork(app.key.userSerial))
+                    return
+                }
                 effectChannel.trySend(HomeEffect.LaunchFailed(app.displayLabel, app.key, result.error))
                 catalog.requestReconcile()
             }
@@ -965,4 +1303,16 @@ class HomeViewModel(
     }
 }
 
+/** Any app of the list by key: shown, hidden or in the unlocked private space. */
+internal fun findApp(
+    list: AppList,
+    key: AppKey,
+): VisibleApp? =
+    list.sections.firstNotNullOfOrNull { s -> s.apps.firstOrNull { it.key == key } }
+        ?: list.hiddenApps.firstOrNull { it.key == key }
+        ?: list.privateApps.firstOrNull { it.key == key }
+
 private const val TAG = "Home"
+
+/** FR-ONBOARD-04: a dismissed default-home banner stays hidden for 24 h. */
+internal const val BANNER_SNOOZE_MS: Long = 24L * 60 * 60 * 1000

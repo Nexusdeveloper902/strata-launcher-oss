@@ -14,9 +14,9 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
-import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.openAllApps
+import app.strata.launcher.passOnboarding
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -42,9 +42,7 @@ class ListDeviceTest {
 
     private fun openList() {
         compose.waitForIdle()
-        if (compose.onAllNodesWithTag(OnboardingTestTags.CONTINUE).fetchSemanticsNodes().isNotEmpty()) {
-            compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
-        }
+        compose.passOnboarding()
         compose.openAllApps()
     }
 

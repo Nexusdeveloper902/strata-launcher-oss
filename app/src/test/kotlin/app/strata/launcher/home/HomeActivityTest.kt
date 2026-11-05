@@ -99,15 +99,26 @@ class HomeActivityTest {
         assertThat(activity.isFinishing).isFalse()
     }
 
-    /** D-008 / T-ONBOARD-09 (stub): onboarding is home's first layer until Continue. */
+    /**
+     * D-008 / T-ONBOARD-09 (R half): the system started home first and Strata already holds the role. Onboarding is
+     * home's first layer; its set-default step says "Strata is your home app" with no action; Done → home.
+     */
     @Test
-    fun onboardingLayerShownUntilContinue() {
+    fun tOnboard09_firstRunStartingAtHome() {
         val store = FakeSettingsRepository(Settings(onboardingDone = false))
         TestAppGraph(roleController = FakeRoleController(defaultHome = true), settingsRepository = store).install()
         start()
         compose.onNodeWithTag(OnboardingTestTags.ROOT).assertExists()
-        compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
+        compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick() // Welcome
+        compose.onNodeWithTag(OnboardingTestTags.SKIP).performClick() // Pick favourites
+        shadowOf(Looper.getMainLooper()).idle()
+        compose.onNodeWithTag(OnboardingTestTags.HELD).assertExists()
+        compose.onNodeWithTag(OnboardingTestTags.SET_DEFAULT).assertDoesNotExist()
+        compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick() // Set default (held)
+        compose.onNodeWithTag(OnboardingTestTags.DONE).assertExists()
+        compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick() // Done → home
         compose.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idle()
         assertThat(store.value.onboardingDone).isTrue()
         compose.onNodeWithTag(OnboardingTestTags.ROOT).assertDoesNotExist()
         compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()

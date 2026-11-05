@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,13 +63,15 @@ import app.strata.launcher.core.theme.model.IndexSide
 import app.strata.launcher.core.theme.model.IndexVisibility
 import app.strata.launcher.core.ui.AlphabetIndex
 import app.strata.launcher.core.ui.AppRow
-import app.strata.launcher.core.ui.IconRequestKey
 import app.strata.launcher.core.ui.IndexExclusion
 import app.strata.launcher.core.ui.IndexMath
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.iconKey
 import app.strata.launcher.feature.home.ListJump
+import app.strata.launcher.feature.home.PrivateSpaceUi
 import app.strata.launcher.feature.home.R
+import app.strata.launcher.feature.home.WorkProfileUi
 import kotlinx.coroutines.launch
 import app.strata.launcher.core.ui.R as UiR
 
@@ -75,6 +81,17 @@ object AppListTestTags {
     const val END_HIDDEN = "app_list_end_hidden"
     const val EMPTY = "app_list_empty"
     const val SEARCH_FIELD = "app_list_search_field"
+    const val WORK_BAR = "app_list_work_bar"
+    const val WORK_FILTER_ALL = "app_list_work_filter_all"
+    const val WORK_FILTER_WORK = "app_list_work_filter_work"
+    const val WORK_SWITCH = "app_list_work_switch"
+    const val PRIVATE_HEADER = "app_list_private_header"
+    const val PRIVATE_UNLOCK = "app_list_private_unlock"
+    const val PRIVATE_LOCK = "app_list_private_lock"
+    const val PRIVATE_HIDE = "app_list_private_hide"
+    const val PRIVATE_EMPTY = "app_list_private_empty"
+
+    fun privateRow(app: VisibleApp) = "app_list_private_row_${app.key.component}_${app.key.userSerial}"
 
     fun row(app: VisibleApp) = "app_row_${app.key.component}_${app.key.userSerial}"
 
@@ -116,8 +133,21 @@ fun AppListScreen(
     onJumpToLetterMenu: (() -> Unit)? = null,
     /** System gesture exclusion of the index (INTERACTION_SPEC §4.2). */
     indexExclusion: IndexExclusion = IndexExclusion.NONE,
+    /** FR-APPS-09: the work bar (All / Work filter and the pause switch); absent without a work profile. */
+    work: WorkProfileUi? = null,
+    onWorkPaused: (Boolean) -> Unit = {},
+    /** FR-APPS-10: the private-space container at the list end; absent when null. */
+    privateSpace: PrivateSpaceUi? = null,
+    onPrivateSpace: (PrivateSpaceCommand) -> Unit = {},
 ) {
     val theme = Strata.theme
+    var workOnly by rememberSaveable { mutableStateOf(false) }
+    if (work == null && workOnly) workOnly = false
+    val all = list
+
+    // The "Work" filter shows a rebuilt list of work apps only (FR-APPS-09).
+    @Suppress("NAME_SHADOWING")
+    val list = if (workOnly) remember(all) { all.onlyWork() } else all
     val scope = rememberCoroutineScope()
     // The backdrop E(W) is drawn once under every home layer (HomeRoute), so the list adds none of its own.
     BoxWithConstraints(
@@ -128,8 +158,8 @@ fun AppListScreen(
     ) {
         val twoColumns = twoColumnSetting && maxWidth >= TWO_COLUMN_MIN_WIDTH
         val model =
-            remember(list, twoColumns, theme.list.sectionHeaders) {
-                ListItems.build(list, twoColumns, theme.list.sectionHeaders)
+            remember(list, twoColumns, theme.list.sectionHeaders, privateSpace, workOnly) {
+                ListItems.build(list, twoColumns, theme.list.sectionHeaders, privateSpace.takeUnless { workOnly })
             }
         val showIndex = theme.alphabetIndex.visibility != IndexVisibility.NEVER && list.index.isNotEmpty()
         val atEnd = theme.alphabetIndex.side == IndexSide.END
@@ -150,7 +180,8 @@ fun AppListScreen(
             remember(badgeStyle, onLaunch, onLongPress, rowActions) {
                 RowCallbacks(badgeStyle, onLaunch, onLongPress, rowActions)
             }
-        val offset = if (onOpenSearch != null) 1 else 0
+        // Items before the first section: the search field and the work bar.
+        val offset = (if (onOpenSearch != null) 1 else 0) + (if (work != null) 1 else 0)
         var focusTarget by remember { mutableStateOf<AppKey?>(null) }
         val currentOnJumpConsumed by rememberUpdatedState(onJumpConsumed)
         LaunchedEffect(jump) {
@@ -194,6 +225,11 @@ fun AppListScreen(
             if (onOpenSearch != null) {
                 item(key = SEARCH_FIELD_KEY, contentType = SEARCH_FIELD_KEY) { ListSearchField(onOpenSearch) }
             }
+            if (work != null) {
+                item(key = WORK_BAR_KEY, contentType = WORK_BAR_KEY) {
+                    WorkBar(work, workOnly, onFilter = { workOnly = it }, onPaused = onWorkPaused)
+                }
+            }
             items(
                 count = model.items.size,
                 key = { model.items[it].key },
@@ -221,6 +257,39 @@ fun AppListScreen(
 
                     is ListItem.End -> {
                         ListEnd(item.hiddenCount, onOpenSettings, onOpenHiddenApps)
+                    }
+
+                    is ListItem.PrivateHeader -> {
+                        PrivateHeader(item.locked, onPrivateSpace)
+                    }
+
+                    is ListItem.PrivateRow -> {
+                        ListRow(
+                            item.app,
+                            row,
+                            Modifier.fillMaxWidth(),
+                            tag = AppListTestTags.privateRow(item.app),
+                        )
+                    }
+
+                    ListItem.PrivateUnlock -> {
+                        EndRow(
+                            stringResource(R.string.private_space_unlock),
+                            { onPrivateSpace(PrivateSpaceCommand.UNLOCK) },
+                            AppListTestTags.PRIVATE_UNLOCK,
+                        )
+                    }
+
+                    ListItem.PrivateEmpty -> {
+                        Text(
+                            text = stringResource(R.string.private_space_empty),
+                            style = Strata.typography.label,
+                            color = Strata.colors.textSecondary,
+                            modifier =
+                                Modifier
+                                    .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 12.dp)
+                                    .testTag(AppListTestTags.PRIVATE_EMPTY),
+                        )
                     }
                 }
             }
@@ -303,6 +372,7 @@ private fun ListRow(
     callbacks: RowCallbacks,
     modifier: Modifier,
     focus: Boolean = false,
+    tag: String = AppListTestTags.row(app),
 ) {
     val view = LocalView.current
     val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
@@ -323,14 +393,20 @@ private fun ListRow(
         onClick = { callbacks.onLaunch(app, coordinates[0]?.let { originOf(it, view) }) },
         onLongClick = callbacks.onLongPress?.let { { it(app) } },
         actions = actions,
-        icon = IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride),
-        dimIcon = app.suspended,
-        tag = if (app.suspended) stringResource(R.string.row_suspended) else null,
+        icon = app.iconKey(),
+        // FR-LIST-08 suspended and FR-APPS-09 paused: icon at 60 % α, label kept, state named by a tag.
+        dimIcon = app.suspended || app.paused,
+        tag =
+            when {
+                app.suspended -> stringResource(R.string.row_suspended)
+                app.paused -> stringResource(R.string.row_paused)
+                else -> null
+            },
         modifier =
             modifier
                 .onGloballyPositioned { coordinates[0] = it }
                 .focusRequester(focusRequester)
-                .testTag(AppListTestTags.row(app)),
+                .testTag(tag),
     )
 }
 
@@ -385,6 +461,96 @@ private fun EndRow(
     }
 }
 
+/** FR-APPS-10 container commands. */
+enum class PrivateSpaceCommand { LOCK, UNLOCK, HIDE }
+
+/**
+ * FR-APPS-09: "All / Work" filter and the work-apps switch (on = running, off = paused). Profile headings are headings
+ * for TalkBack (INTERACTION_SPEC §9); the state is spoken by the switch, never shown by colour alone.
+ */
+@Composable
+private fun WorkBar(
+    work: WorkProfileUi,
+    workOnly: Boolean,
+    onFilter: (Boolean) -> Unit,
+    onPaused: (Boolean) -> Unit,
+) {
+    val theme = Strata.theme
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp)
+                .testTag(AppListTestTags.WORK_BAR),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = !workOnly,
+            onClick = { onFilter(false) },
+            label = { Text(stringResource(R.string.work_bar_all)) },
+            modifier = Modifier.testTag(AppListTestTags.WORK_FILTER_ALL),
+        )
+        FilterChip(
+            selected = workOnly,
+            onClick = { onFilter(true) },
+            label = { Text(stringResource(R.string.work_bar_work)) },
+            modifier = Modifier.testTag(AppListTestTags.WORK_FILTER_WORK),
+        )
+        Spacer(Modifier.weight(1f))
+        Row(
+            modifier =
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .toggleable(value = !work.paused, role = Role.Switch, onValueChange = { on -> onPaused(!on) })
+                    .testTag(AppListTestTags.WORK_SWITCH),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.work_bar_switch),
+                style = Strata.typography.label,
+                color = Strata.colors.textPrimary,
+            )
+            Switch(checked = !work.paused, onCheckedChange = null)
+        }
+    }
+}
+
+/** FR-APPS-10: the container heading with Lock (while unlocked) and Hide. */
+@Composable
+private fun PrivateHeader(
+    locked: Boolean,
+    onCommand: (PrivateSpaceCommand) -> Unit,
+) {
+    val theme = Strata.theme
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = theme.list.horizontalPaddingDp.dp, end = 8.dp, top = 16.dp)
+                .testTag(AppListTestTags.PRIVATE_HEADER),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.private_space_title),
+            style = Strata.typography.section,
+            color = Strata.colors.textSecondary,
+            modifier = Modifier.weight(1f).semantics { heading() },
+        )
+        if (!locked) {
+            TextButton(
+                onClick = { onCommand(PrivateSpaceCommand.LOCK) },
+                modifier = Modifier.testTag(AppListTestTags.PRIVATE_LOCK),
+            ) { Text(stringResource(R.string.private_space_lock)) }
+        }
+        TextButton(
+            onClick = { onCommand(PrivateSpaceCommand.HIDE) },
+            modifier = Modifier.testTag(AppListTestTags.PRIVATE_HIDE),
+        ) { Text(stringResource(R.string.private_space_hide)) }
+    }
+}
+
 /** INTERACTION_SPEC §8 "All apps are hidden". */
 @Composable
 private fun EmptyAllHidden(
@@ -405,6 +571,7 @@ private fun EmptyAllHidden(
 }
 
 private const val SEARCH_FIELD_KEY = "search_field"
+private const val WORK_BAR_KEY = "work_bar"
 private val INDEX_RESERVE = 48.dp
 private val INDEX_BOTTOM_GAP = 24.dp
 private val GUTTER = 24.dp

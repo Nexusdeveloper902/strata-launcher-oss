@@ -1,6 +1,7 @@
 package app.strata.launcher.core.data.list
 
 import app.strata.launcher.core.model.AppEntry
+import app.strata.launcher.core.model.AppFlags
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppList
 import app.strata.launcher.core.model.AppOverride
@@ -10,6 +11,7 @@ import app.strata.launcher.core.model.IndexLetter
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.SecondaryLine
 import app.strata.launcher.core.model.VisibleApp
+import app.strata.launcher.core.platformapi.apps.Profile
 import app.strata.launcher.core.platformapi.system.SectionModel
 import java.util.Locale
 
@@ -26,15 +28,14 @@ object AppListAssembler {
         overrides: Map<AppKey, AppOverride>,
         sectionModel: SectionModel,
         comparator: Comparator<String>,
+        profiles: ProfileState? = null,
     ): AppList {
         val sections = if (sectionModel.labels.isEmpty()) FALLBACK_SECTIONS else sectionModel
-        // Private-space rows get their own container in M6; they never enter the A–Z list.
-        val all =
-            catalog.entries.filter { it.profileKind != ProfileKind.PRIVATE }.map {
-                it.toVisible(
-                    overrides[it.key],
-                )
-            }
+        val entries = profiles?.apply(catalog.entries) ?: catalog.entries
+        // Private-space rows get their own container (FR-APPS-10); they never enter the A–Z list or the index, and
+        // no override applies to them (none is ever stored, P-5).
+        val (privateEntries, regular) = entries.partition { it.profileKind == ProfileKind.PRIVATE }
+        val all = regular.map { it.toVisible(overrides[it.key]) }
         val (hidden, shown) = all.partition { it.hidden }
         val withLines = disambiguate(shown)
         val order =
@@ -65,12 +66,14 @@ object AppListAssembler {
                 appSections += AppSection(label, apps)
             }
         }
+        val privateApps = disambiguate(privateEntries.map { it.toVisible(null) }).sortedWith(order)
         return AppList(
             appSections,
             index,
             hiddenCount = hidden.size,
             fromSnapshot = catalog.fromSnapshot,
             hiddenApps = hiddenSorted,
+            privateApps = privateApps,
         )
     }
 
@@ -133,5 +136,49 @@ object AppListAssembler {
         val simple = key.component.substringAfter('/').substringAfterLast('.')
         val trimmed = simple.removeSuffix("Activity")
         return trimmed.ifEmpty { simple }
+    }
+}
+
+/**
+ * What the profiles say now ([app.strata.launcher.core.platformapi.apps.ProfileSource]); it wins over the catalog's
+ * load-time flags, so a pause or a lock shows within one assembly, before the catalog has reloaded (T-LIFE-08/09).
+ */
+data class ProfileState(
+    /** Profiles in quiet mode (paused work, locked private space). */
+    val quiet: Set<Long>,
+    /** Private-space profiles that are unlocked. */
+    val unlockedPrivate: Set<Long>,
+) {
+    /** Private entries only of unlocked spaces; [AppFlags.QUIET] set exactly on entries of quiet profiles. */
+    fun apply(entries: List<AppEntry>): List<AppEntry> =
+        entries.mapNotNull { e ->
+            when {
+                e.profileKind == ProfileKind.PRIVATE -> {
+                    e.takeIf { it.key.userSerial in unlockedPrivate }
+                }
+
+                e.key.userSerial in quiet -> {
+                    if (e.hasFlag(AppFlags.QUIET)) e else e.copy(flags = e.flags or AppFlags.QUIET)
+                }
+
+                e.hasFlag(AppFlags.QUIET) -> {
+                    e.copy(flags = e.flags and AppFlags.QUIET.inv())
+                }
+
+                else -> {
+                    e
+                }
+            }
+        }
+
+    companion object {
+        fun of(profiles: List<Profile>): ProfileState =
+            ProfileState(
+                quiet = profiles.filter { it.quietMode }.mapTo(HashSet()) { it.serial },
+                unlockedPrivate =
+                    profiles
+                        .filter { it.kind == ProfileKind.PRIVATE && !it.quietMode }
+                        .mapTo(HashSet()) { it.serial },
+            )
     }
 }

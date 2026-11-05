@@ -137,9 +137,10 @@ class AndroidIconProvider(
     /** Tests: discovery and parsing on the caller's thread. */
     fun refreshPacksNow() = registry.refreshNow()
 
-    override fun cached(req: IconRequest): IconImage? = memory.get(cacheKey(req))
+    override fun cached(req: IconRequest): IconImage? = if (req.ephemeral) null else memory.get(cacheKey(req))
 
     override suspend fun icon(req: IconRequest): IconResult {
+        if (req.ephemeral) return ephemeralIcon(req)
         val key = cacheKey(req)
         memory.get(key)?.let { return IconResult.Image(it) }
         return try {
@@ -166,6 +167,22 @@ class AndroidIconProvider(
             IconResult.Monogram
         }
     }
+
+    /**
+     * FR-APPS-10, P-5: a private-space icon is rendered for this request only. It never enters L1 or L2 (nothing about
+     * the space reaches the disk, and nothing is left in memory once its rows are gone), and failures are not logged
+     * with the component.
+     */
+    private suspend fun ephemeralIcon(req: IconRequest): IconResult =
+        try {
+            withContext(renderDispatcher) { render(req) }?.let { IconResult.Image(it) } ?: IconResult.Monogram
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            IconResult.Monogram
+        } catch (e: OutOfMemoryError) {
+            IconResult.Monogram
+        }
 
     override fun trim(critical: Boolean) {
         if (critical) memory.evictAll() else memory.trimToSize(memory.maxSize() / 2)

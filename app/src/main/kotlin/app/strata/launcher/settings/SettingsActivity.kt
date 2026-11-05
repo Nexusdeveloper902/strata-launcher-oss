@@ -1,6 +1,7 @@
 package app.strata.launcher.settings
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,16 +11,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.appGraph
-import app.strata.launcher.feature.onboarding.OnboardingStubScreen
+import app.strata.launcher.core.platformapi.system.SystemIntent
+import app.strata.launcher.feature.onboarding.OnboardingAction
+import app.strata.launcher.feature.onboarding.OnboardingRoute
+import app.strata.launcher.feature.onboarding.OnboardingViewModel
+import app.strata.launcher.feature.onboarding.SetDefaultDialogs
+import app.strata.launcher.feature.onboarding.SetDefaultViewModel
 import app.strata.launcher.feature.settings.SettingsAction
+import app.strata.launcher.feature.settings.SettingsEffect
 import app.strata.launcher.feature.settings.SettingsPage
 import app.strata.launcher.feature.settings.SettingsRoute
 import app.strata.launcher.feature.settings.SettingsViewModel
 import app.strata.launcher.home.HomeActivity
+import app.strata.launcher.onboarding.SystemScreenLauncher
 import app.strata.launcher.theme.ThemeHost
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -47,10 +56,43 @@ class SettingsActivity : ComponentActivity() {
                     lockService = graph.lockService,
                     systemIntents = graph.systemIntents,
                     logger = graph.logger,
+                    roleController = graph.roleController,
+                    ioDispatcher = graph.dispatchers.io,
+                    privateSpaceSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM,
                 )
             }
         }
     }
+
+    /** First run from the launcher icon (D-008, FR-ONBOARD-01). */
+    private val onboardingViewModel: OnboardingViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                OnboardingViewModel(
+                    appList = graph.appList,
+                    favorites = graph.favorites,
+                    settings = graph.settingsRepository,
+                    roles = graph.roleController,
+                    io = graph.dispatchers.io,
+                    logger = graph.logger,
+                    handle = createSavedStateHandle(),
+                )
+            }
+        }
+    }
+
+    /** The "Default home" row's set-default flow (FR-SET-02). */
+    private val setDefaultViewModel: SetDefaultViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                SetDefaultViewModel(graph.roleController, graph.dispatchers.io, graph.logger)
+            }
+        }
+    }
+
+    private val systemScreens = SystemScreenLauncher(this) { appGraph.logger }
 
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
 
@@ -71,13 +113,24 @@ class SettingsActivity : ComponentActivity() {
                 ?.let { name -> SettingsPage.entries.firstOrNull { it.name == name } }
                 ?: startPage
         appGraph.startTheme()
+        systemScreens.bind(onboardingViewModel.setDefault)
+        systemScreens.bind(setDefaultViewModel.flow)
+        // The settings rows' home-settings screen (FR-SET-02); ignored unless the settings view model opened it.
+        systemScreens.onResult { _, _ -> viewModel.onAction(SettingsAction.HomeSettingsResult) }
         // Same theme hooks as home: first-frame gate, first-frame and boot-success reports, LKG on onStop.
         themeHost.holdFirstFrame(window.decorView)
         setContent {
             themeHost.Content(window) {
                 when (screen) {
                     EntryRoute.ONBOARDING -> {
-                        OnboardingStubScreen(onContinue = ::completeOnboarding)
+                        val onboarding by onboardingViewModel.state.collectAsStateWithLifecycle()
+                        OnboardingRoute(
+                            state = onboarding,
+                            effects = onboardingViewModel.effects,
+                            onAction = onboardingViewModel::onAction,
+                            onFinished = ::openHome,
+                            onLeave = ::finish,
+                        )
                     }
 
                     EntryRoute.SETTINGS_ROOT -> {
@@ -90,7 +143,10 @@ class SettingsActivity : ComponentActivity() {
                             onPage = { page = it },
                             startPage = startPage,
                             onBack = ::finish,
+                            onNavigate = ::navigate,
                         )
+                        val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
+                        SetDefaultDialogs(setDefault, setDefaultViewModel.flow)
                     }
 
                     EntryRoute.HOME, null -> {
@@ -120,19 +176,44 @@ class SettingsActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // The lock service may have been turned on or off in the system settings (FR-GEST-03).
-        if (screen == EntryRoute.SETTINGS_ROOT) viewModel.onAction(SettingsAction.Resume)
+        when (screen) {
+            EntryRoute.SETTINGS_ROOT -> {
+                viewModel.onAction(SettingsAction.Resume)
+                setDefaultViewModel.flow.refresh()
+            }
+
+            EntryRoute.ONBOARDING -> {
+                onboardingViewModel.onAction(OnboardingAction.Resume)
+            }
+
+            else -> {
+                Unit
+            }
+        }
+    }
+
+    /** FR-SET-02: the set-default flow, or the system home settings (for a result, so the uninstall can follow). */
+    private fun navigate(effect: SettingsEffect) {
+        when (effect) {
+            SettingsEffect.SetDefault -> {
+                setDefaultViewModel.flow.setAsDefault()
+            }
+
+            is SettingsEffect.OpenHomeSettings -> {
+                val chain = listOf(SystemIntent.HomeSettings) + appGraph.roleController.fallbackIntents()
+                viewModel.onAction(SettingsAction.HomeSettingsLaunched(effect.forUninstall))
+                if (!systemScreens.start(chain.distinct())) viewModel.onAction(SettingsAction.HomeSettingsResult)
+            }
+
+            else -> {
+                Unit
+            }
+        }
     }
 
     private fun show(route: EntryRoute) {
         appGraph.logger.d(TAG, "entry route $route")
         if (route == EntryRoute.HOME) openHome() else screen = route
-    }
-
-    private fun completeOnboarding() {
-        lifecycleScope.launch {
-            appGraph.settingsRepository.update { it.copy(onboardingDone = true) }
-            openHome()
-        }
     }
 
     private fun openHome() {

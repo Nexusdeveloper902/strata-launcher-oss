@@ -3,6 +3,7 @@ package app.strata.launcher.settings
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Looper
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -29,6 +30,7 @@ import app.strata.launcher.testing.fixtures.SearchFixtures.visible
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -184,6 +186,18 @@ class SettingsPagesTest {
         assertThat(s.allowRotation).isTrue()
         assertThat(s.keepBackGestureOnIndexSide).isTrue()
         assertThat(s.hapticsEnabled).isFalse()
+    }
+
+    /** FR-APPS-10: "Show private space" (API 35+) writes settings field 20, inverted. */
+    @Test
+    fun showPrivateSpaceToggle() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM)
+        val g = graph()
+        open(Intent.ACTION_APPLICATION_PREFERENCES)
+        scrollTo(SettingsTestTags.toggle(Toggle.SHOW_PRIVATE_SPACE))
+        compose.onNodeWithTag(SettingsTestTags.toggle(Toggle.SHOW_PRIVATE_SPACE)).performClick()
+        compose.waitForIdle()
+        assertThat(g.settingsRepository.value.privateSpaceContainerHidden).isTrue()
     }
 
     /** T-PRIV-05 (location half): the log DB is under `noBackupFilesDir`; neither backup rule file includes it. */

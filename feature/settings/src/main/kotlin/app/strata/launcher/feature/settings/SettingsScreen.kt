@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.ui.Strata
@@ -50,6 +51,10 @@ object SettingsTestTags {
     const val LOCK_DISCLOSURE = "settings_lock_disclosure"
     const val LOCK_CONTINUE = "settings_lock_continue"
     const val HIDDEN_EMPTY = "settings_hidden_empty"
+    const val DEFAULT_HOME = "settings_default_home"
+    const val UNINSTALL_STRATA = "settings_uninstall_strata"
+    const val UNINSTALL_GUIDANCE = "settings_uninstall_guidance"
+    const val UNINSTALL_GUIDANCE_CONTINUE = "settings_uninstall_guidance_continue"
 
     fun toggle(t: Toggle) = "settings_toggle_${t.name.lowercase()}"
 
@@ -72,8 +77,11 @@ fun SettingsRoute(
     onPage: (SettingsPage) -> Unit,
     startPage: SettingsPage,
     onBack: () -> Unit,
+    /** Effects that need the activity: [SettingsEffect.SetDefault], [SettingsEffect.OpenHomeSettings]. */
+    onNavigate: (SettingsEffect) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val currentOnNavigate by rememberUpdatedState(onNavigate)
     LaunchedEffect(effects) {
         effects.collect { effect ->
             val text =
@@ -81,8 +89,13 @@ fun SettingsRoute(
                     SettingsEffect.HistoryCleared -> R.string.settings_history_cleared
                     SettingsEffect.NoHandler -> R.string.settings_no_handler
                     SettingsEffect.WriteFailed -> R.string.settings_write_failed
+                    SettingsEffect.SetDefault, is SettingsEffect.OpenHomeSettings -> null
                 }
-            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+            if (text != null) {
+                Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+            } else {
+                currentOnNavigate(effect)
+            }
         }
     }
     val currentOnBack by rememberUpdatedState(onBack)
@@ -92,13 +105,16 @@ fun SettingsRoute(
         modifier =
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
+                // Test tags double as resource ids for UiAutomator (T-SET-03 device test).
+                .semantics { testTagsAsResourceId = true },
     ) {
         when (page) {
             SettingsPage.ROOT -> SettingsRoot(state, onAction) { onPage(SettingsPage.HIDDEN_APPS) }
             SettingsPage.HIDDEN_APPS -> HiddenAppsPage(state, onAction)
         }
         if (state.showLockDisclosure) LockDisclosure(onAction)
+        if (state.showUninstallGuidance) UninstallGuidance(onAction)
     }
 }
 
@@ -111,6 +127,27 @@ private fun SettingsRoot(
     val s = state.settings ?: return
     LazyColumn(modifier = Modifier.fillMaxSize().safeDrawingPadding().testTag(SettingsTestTags.ROOT)) {
         item { Title(stringResource(R.string.settings_title)) }
+        group(R.string.settings_group_default_home) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.settings_default_home),
+                    summary =
+                        when (state.defaultHome) {
+                            true -> stringResource(R.string.settings_default_home_held)
+                            false -> stringResource(R.string.settings_default_home_not_held)
+                            null -> null
+                        },
+                    tag = SettingsTestTags.DEFAULT_HOME,
+                ) { onAction(SettingsAction.DefaultHomeRow) }
+            }
+            item {
+                ActionRow(
+                    title = stringResource(R.string.settings_uninstall_strata),
+                    summary = stringResource(R.string.settings_uninstall_strata_summary),
+                    tag = SettingsTestTags.UNINSTALL_STRATA,
+                ) { onAction(SettingsAction.UninstallStrata) }
+            }
+        }
         group(R.string.settings_group_home) {
             toggle(Toggle.HOME_PRESS_OPENS_SEARCH, R.string.settings_home_press_search, s, onAction)
             toggle(Toggle.HIDE_STATUS_BAR, R.string.settings_hide_status_bar, s, onAction)
@@ -176,6 +213,15 @@ private fun SettingsRoot(
                         ),
                     tag = SettingsTestTags.HIDDEN_APPS_ROW,
                     onClick = onHiddenApps,
+                )
+            }
+            if (state.privateSpaceSupported) {
+                toggle(
+                    Toggle.SHOW_PRIVATE_SPACE,
+                    R.string.settings_show_private_space,
+                    s,
+                    onAction,
+                    R.string.settings_show_private_space_summary,
                 )
             }
         }
@@ -260,6 +306,28 @@ private fun LockDisclosure(onAction: (SettingsAction) -> Unit) {
             }
         },
         modifier = Modifier.testTag(SettingsTestTags.LOCK_DISCLOSURE),
+    )
+}
+
+/** FR-SET-02: the user must switch the home app before Strata can be uninstalled. */
+@Composable
+private fun UninstallGuidance(onAction: (SettingsAction) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onAction(SettingsAction.DismissUninstallGuidance) },
+        title = { Text(text = stringResource(R.string.settings_uninstall_guidance_title)) },
+        text = { Text(text = stringResource(R.string.settings_uninstall_guidance_body)) },
+        confirmButton = {
+            TextButton(
+                onClick = { onAction(SettingsAction.UninstallGuidanceContinue) },
+                modifier = Modifier.testTag(SettingsTestTags.UNINSTALL_GUIDANCE_CONTINUE),
+            ) { Text(text = stringResource(R.string.settings_uninstall_guidance_continue)) }
+        },
+        dismissButton = {
+            TextButton(onClick = { onAction(SettingsAction.DismissUninstallGuidance) }) {
+                Text(text = stringResource(R.string.settings_cancel))
+            }
+        },
+        modifier = Modifier.testTag(SettingsTestTags.UNINSTALL_GUIDANCE),
     )
 }
 

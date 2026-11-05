@@ -45,4 +45,17 @@
     <string name="settings_history_cleared">App history cleared</string>
     <string name="settings_no_handler">No app can open this</string>
     <string name="settings_write_failed">Couldn\'t save that change</string>
+    <!-- FR-SET-02 -->
+    <string name="settings_group_default_home">Home app</string>
+    <string name="settings_default_home">Default home</string>
+    <string name="settings_default_home_held">Strata is your home app</string>
+    <string name="settings_default_home_not_held">Strata isn\'t your home app. Tap to set it.</string>
+    <string name="settings_uninstall_strata">Uninstall Strata</string>
+    <string name="settings_uninstall_strata_summary">Switch to another home app first, then uninstall</string>
+    <string name="settings_uninstall_guidance_title">Choose another home app first</string>
+    <string name="settings_uninstall_guidance_body">Strata is your home app. Pick another home app in the system settings, then come back here and Strata\'s uninstall dialog opens.</string>
+    <string name="settings_uninstall_guidance_continue">Open home settings</string>
+    <!-- FR-APPS-10 -->
+    <string name="settings_show_private_space">Show private space</string>
+    <string name="settings_show_private_space_summary">Its container at the end of the app list. Nothing about it is stored by Strata.</string>
 </resources>

@@ -9,6 +9,8 @@ import app.strata.launcher.core.platformapi.apps.AppListSource
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.OverridesRepository
+import app.strata.launcher.core.platformapi.apps.ProfileSource
+import app.strata.launcher.core.platformapi.apps.ShortcutSource
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
@@ -51,6 +53,12 @@ interface AppGraph {
     val iconProvider: IconProvider
     val timeTicks: TimeTicks
     val lockService: LockService
+
+    /** Work profile and private space (FR-APPS-09/10). */
+    val profiles: ProfileSource
+
+    /** App shortcuts in the sheet (FR-APPS-08). */
+    val shortcuts: ShortcutSource
 
     /** Active theme and library (ARCHITECTURE §4); [ThemeRepository.start] boots it off the main thread. */
     val themeRepository: ThemeRepository

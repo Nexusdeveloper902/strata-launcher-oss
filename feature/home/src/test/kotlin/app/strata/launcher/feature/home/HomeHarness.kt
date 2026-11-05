@@ -31,9 +31,11 @@ import app.strata.launcher.testing.fakes.FakeHaptics
 import app.strata.launcher.testing.fakes.FakeLaunchLogRepository
 import app.strata.launcher.testing.fakes.FakeLockService
 import app.strata.launcher.testing.fakes.FakeOverridesRepository
+import app.strata.launcher.testing.fakes.FakeProfileSource
 import app.strata.launcher.testing.fakes.FakeResetNotices
 import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
+import app.strata.launcher.testing.fakes.FakeShortcutSource
 import app.strata.launcher.testing.fakes.FakeSystemIntents
 import app.strata.launcher.testing.fakes.RecordingLogger
 import kotlinx.coroutines.CoroutineScope
@@ -56,7 +58,15 @@ class HomeHarness(
     themeRepository: ThemeRepository? = null,
     /** Installed icon packs (FR-APPS-06 notices). */
     val iconPacks: MutableStateFlow<IconPacks> = MutableStateFlow(IconPacks(discovered = true)),
+    val role: FakeRoleController = FakeRoleController(defaultHome = true),
+    /** Work profile and private space (FR-APPS-09/10). */
+    val profiles: FakeProfileSource = FakeProfileSource(),
+    /** App shortcuts (FR-APPS-08); null = none wired. */
+    val shortcuts: FakeShortcutSource? = null,
 ) {
+    /** Taps on the APP_MODE banner's "Set as default". */
+    var setDefaultTaps = 0
+
     val catalog = FakeAppCatalog(Catalog(apps, fromSnapshot = false))
     val overrides = FakeOverridesRepository()
     val favoritesRepo = FakeFavoritesRepository(favorites)
@@ -77,11 +87,12 @@ class HomeHarness(
             collation = FakeCollation(),
             defaultDispatcher = Dispatchers.Unconfined,
             scope = scope,
+            profiles = profiles.profiles,
         )
 
     val vm =
         HomeViewModel(
-            roleController = FakeRoleController(defaultHome = true),
+            roleController = role,
             settings = settingsRepo,
             appList = appList,
             catalog = catalog,
@@ -97,6 +108,8 @@ class HomeHarness(
             logger = RecordingLogger(),
             theme = themeRepository,
             iconPacks = iconPacks,
+            profiles = profiles,
+            shortcuts = shortcuts,
         )
 
     val state: HomeUiState get() = vm.state.value
@@ -125,8 +138,8 @@ class HomeHarness(
             effects = vm.effects,
             onAction = vm::onAction,
             onNavigate = { navigations += it },
-            showSetDefaultButton = false,
-            onSetDefault = {},
+            showSetDefaultButton = true,
+            onSetDefault = { setDefaultTaps++ },
             searchLayer = { Box(Modifier.fillMaxSize().testTag(SEARCH_STUB)) },
         )
     }

@@ -122,18 +122,24 @@ fun SheetItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     tag: String? = null,
+    /** A disabled item is read as disabled and drawn in `textSecondary` (never by colour alone: it has no action). */
+    enabled: Boolean = true,
 ) {
     Box(
         modifier =
             modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .clickable(role = Role.Button, onClick = onClick)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier)
                 .padding(vertical = 8.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Text(text = text, style = MaterialTheme.typography.bodyLarge, color = Strata.colors.textPrimary)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (enabled) Strata.colors.textPrimary else Strata.colors.textSecondary,
+        )
     }
 }
 

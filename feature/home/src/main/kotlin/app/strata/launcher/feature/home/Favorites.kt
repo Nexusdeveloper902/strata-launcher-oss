@@ -234,11 +234,27 @@ internal fun appActions(
         onAction(a)
         true
     }
+    // FR-APPS-10: a private-space app offers only the system flows (nothing about it may be stored).
+    val stores = !app.isPrivate
     return listOfNotNull(
-        action(if (favorite) labels.unfavorite else labels.favorite, HomeAction.ToggleFavorite(app.key)),
-        action(labels.rename, HomeAction.OpenSheet(app, rename = true)),
-        action(if (app.hidden) labels.unhide else labels.hide, HomeAction.SetHidden(app.key, !app.hidden)),
-        action(labels.changeIcon, HomeAction.ChangeIcon(app.key)),
+        if (stores) {
+            action(
+                if (favorite) labels.unfavorite else labels.favorite,
+                HomeAction.ToggleFavorite(app.key),
+            )
+        } else {
+            null
+        },
+        if (stores) action(labels.rename, HomeAction.OpenSheet(app, rename = true)) else null,
+        if (stores) {
+            action(
+                if (app.hidden) labels.unhide else labels.hide,
+                HomeAction.SetHidden(app.key, !app.hidden),
+            )
+        } else {
+            null
+        },
+        if (stores) action(labels.changeIcon, HomeAction.ChangeIcon(app.key)) else null,
         action(labels.appInfo, HomeAction.OpenAppInfo(app.key, null)),
         when (uninstallKind(app)) {
             UninstallKind.UNINSTALL -> action(labels.uninstall, HomeAction.Uninstall(app.key))

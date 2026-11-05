@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.LauncherApps
+import android.content.pm.LauncherUserInfo
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -16,8 +17,12 @@ import androidx.core.content.ContextCompat
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.apps.Profile
 import app.strata.launcher.core.platformapi.apps.ProfileSource
+import app.strata.launcher.core.platformapi.apps.QuietModeResult
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /** The `strata-platform` thread for LauncherApps and profile callbacks (ARCHITECTURE §6). */
 object PlatformThread {
@@ -36,21 +41,18 @@ internal class ProfileResolver(context: Context) {
     fun userOf(serial: Long): UserHandle? = userManager.getUserForSerialNumber(serial)
 
     /**
-     * MAIN for this user. On API 35+ the launcher user type tells managed, private and other profiles
-     * apart; below 35 every other profile a launcher can see is treated as WORK (ANDROID_PLATFORM §3.2).
+     * MAIN for this user; for other profiles see [classify]. Null = the type could not be read on API 35+: the
+     * profile is skipped everywhere (fail closed, it may be a private space).
      */
-    fun kindOf(user: UserHandle): ProfileKind {
+    fun kindOf(user: UserHandle): ProfileKind? {
         if (user == Process.myUserHandle()) return ProfileKind.MAIN
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            val type = runCatching { launcherApps.getLauncherUserInfo(user)?.userType }.getOrNull()
-            return when (type) {
-                UserManager.USER_TYPE_PROFILE_MANAGED -> ProfileKind.WORK
-                UserManager.USER_TYPE_PROFILE_PRIVATE -> ProfileKind.PRIVATE
-                null -> ProfileKind.WORK
-                else -> ProfileKind.OTHER
+        val type =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                runCatching { launcherApps.getLauncherUserInfo(user)?.userType }.getOrNull()
+            } else {
+                null
             }
-        }
-        return ProfileKind.WORK
+        return classify(Build.VERSION.SDK_INT, type)
     }
 
     fun quiet(user: UserHandle): Boolean =
@@ -62,10 +64,32 @@ internal class ProfileResolver(context: Context) {
         )
 
     fun snapshot(): List<Profile> =
-        profiles().map { user ->
+        profiles().mapNotNull { user ->
+            val kind = kindOf(user) ?: return@mapNotNull null
             val quiet = quiet(user)
-            Profile(serialOf(user), kindOf(user), quietMode = quiet, available = !quiet)
+            Profile(serialOf(user), kind, quietMode = quiet, available = !quiet)
         }
+
+    companion object {
+        /**
+         * The kind of a non-main profile (ANDROID_PLATFORM §3.2/§3.3). Below API 35 every other profile a launcher can
+         * see is treated as WORK (private space does not exist there). On 35+ the launcher user type decides; a type
+         * that cannot be read is `null`: the caller skips the profile, so an unreadable private space never reaches the
+         * list, the snapshot, the launch log, favourites or overrides (P-5).
+         */
+        fun classify(
+            sdk: Int,
+            type: String?,
+        ): ProfileKind? {
+            if (sdk < Build.VERSION_CODES.VANILLA_ICE_CREAM) return ProfileKind.WORK
+            return when (type) {
+                null -> null
+                UserManager.USER_TYPE_PROFILE_MANAGED -> ProfileKind.WORK
+                UserManager.USER_TYPE_PROFILE_PRIVATE -> ProfileKind.PRIVATE
+                else -> ProfileKind.OTHER
+            }
+        }
+    }
 }
 
 /** Runtime-only profile broadcasts (ANDROID_PLATFORM §3.2: never delivered to manifest receivers). */
@@ -109,10 +133,14 @@ internal fun registerProfileReceiver(
 }
 
 /**
- * [ProfileSource] for M1: main and work profiles from `LauncherApps.getProfiles()`, refreshed by the
- * runtime profile broadcasts. Quiet-mode requests and private space arrive in M6.
+ * [ProfileSource]: main, work and private-space profiles from `LauncherApps.getProfiles()` (a private space is listed
+ * only while Strata holds ROLE_HOME and `ACCESS_HIDDEN_PROFILES`), refreshed by the runtime profile broadcasts.
+ * Quiet-mode requests pause/resume work and lock/unlock the private space (ANDROID_PLATFORM §3.2, §3.3).
  */
-class AndroidProfileSource(context: Context) : ProfileSource {
+class AndroidProfileSource(
+    context: Context,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) : ProfileSource {
     private val app = context.applicationContext
     private val resolver = ProfileResolver(app)
     private val state = MutableStateFlow<List<Profile>>(emptyList())
@@ -121,11 +149,57 @@ class AndroidProfileSource(context: Context) : ProfileSource {
 
     /** Reads the profiles off main and keeps them current; call once. */
     fun start() {
-        PlatformThread.handler.post { refresh() }
-        registerProfileReceiver(app) { refresh() }
+        PlatformThread.handler.post { read() }
+        registerProfileReceiver(app) { read() }
     }
 
-    private fun refresh() {
+    /** Only ever called on [PlatformThread] (start, broadcasts, [refresh], quiet-mode requests). */
+    private fun read() {
         state.value = runCatching { resolver.snapshot() }.getOrDefault(state.value)
+    }
+
+    override fun refresh() {
+        PlatformThread.handler.post { read() }
+    }
+
+    override suspend fun requestQuietMode(
+        serial: Long,
+        enable: Boolean,
+    ): QuietModeResult {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return QuietModeResult.UNSUPPORTED
+        return withContext(io) {
+            val user = resolver.userOf(serial) ?: return@withContext QuietModeResult.FAILED
+            val result =
+                try {
+                    // "false" = the system shows its credential screen first (ANDROID_PLATFORM §3.2).
+                    if (resolver.userManager.requestQuietModeEnabled(enable, user)) {
+                        QuietModeResult.DONE
+                    } else {
+                        QuietModeResult.NEEDS_CREDENTIAL
+                    }
+                } catch (e: SecurityException) {
+                    QuietModeResult.NOT_ALLOWED
+                } catch (e: IllegalArgumentException) {
+                    QuietModeResult.FAILED
+                } catch (e: IllegalStateException) {
+                    QuietModeResult.FAILED
+                }
+            // Every read runs on the platform thread, in order: no stale snapshot can overwrite a newer one.
+            PlatformThread.handler.post { read() }
+            result
+        }
+    }
+
+    override fun privateSpaceEntryHidden(serial: Long): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return false
+        return try {
+            val user = resolver.userOf(serial) ?: return false
+            resolver.launcherApps
+                .getLauncherUserInfo(user)
+                ?.userConfig
+                ?.getBoolean(LauncherUserInfo.PRIVATE_SPACE_ENTRYPOINT_HIDDEN, false) == true
+        } catch (e: RuntimeException) {
+            false
+        }
     }
 }

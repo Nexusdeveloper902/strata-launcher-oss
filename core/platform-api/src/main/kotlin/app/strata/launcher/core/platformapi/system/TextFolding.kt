@@ -42,6 +42,12 @@ interface SystemIntents {
     fun accessibilitySettings(): LaunchResult
 
     /**
+     * FR-SET-02: the system uninstall confirmation for Strata itself (`ACTION_DELETE`, `package:` URI). Callers first
+     * make sure Strata is no longer the home app; the system shows its own dialog.
+     */
+    fun uninstallStrata(): LaunchResult
+
+    /**
      * Share sheet for a `content:` URI from [SharedFiles] (FR-THEME-23): `ACTION_SEND` with `EXTRA_STREAM`, [mimeType]
      * and `FLAG_GRANT_READ_URI_PERMISSION`, in a chooser titled [title].
      */

@@ -1,6 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- FR-ONBOARD-01…03 (J-01). Own wording. -->
+    <string name="onboarding_step">Step %1$d of %2$d</string>
     <string name="onboarding_welcome_title">Welcome to Strata</string>
-    <string name="onboarding_welcome_body">A quiet home screen for your apps. No internet, no account.</string>
+    <string name="onboarding_welcome_body">A quiet home screen: your apps in one alphabetical list, a few favourites, and a theme you can make your own.</string>
+    <string name="onboarding_welcome_privacy">No internet, no account. Strata keeps everything on this phone.</string>
     <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_not_now">Not now</string>
+    <string name="onboarding_favorites_title">Pick favourites</string>
+    <string name="onboarding_favorites_body">Favourites sit on your home screen. Choose up to %1$d, or skip and add them later.</string>
+    <string name="onboarding_favorites_count">Picked: %1$d of %2$d</string>
+    <string name="onboarding_favorites_limit">That\'s the limit: %1$d.</string>
+    <string name="onboarding_favorites_search">Search apps</string>
+    <string name="onboarding_set_default_title">Make Strata your home app</string>
+    <string name="onboarding_set_default_body">The Home button will then open Strata.</string>
+    <string name="onboarding_set_default_undo">You can switch back at any time: Settings › Apps › Default apps › Home app.</string>
+    <string name="onboarding_set_default">Set as default</string>
+    <string name="onboarding_held_title">Strata is your home app</string>
+    <string name="onboarding_held_body">Nothing else to do here. The Home button already opens Strata.</string>
+    <string name="onboarding_done_title">You\'re all set</string>
+    <string name="onboarding_done_body">Long-press empty space on home for themes and settings. Swipe up to search.</string>
+    <string name="onboarding_go_home">Go to home</string>
+    <string name="onboarding_write_failed">That couldn\'t be saved. Try again.</string>
+
+    <string name="set_default_denied_title">Strata isn\'t your home app yet</string>
+    <string name="set_default_denied_body">You can try again, choose Strata in the system settings, or keep using Strata as a normal app for now.</string>
+    <string name="set_default_try_again">Try again</string>
+    <string name="set_default_open_settings">Open settings</string>
+    <string name="set_default_oem_title">Your phone didn\'t switch the home app</string>
+    <string name="set_default_oem_body">Some phones change the home app only from their own settings.</string>
+    <string name="set_default_oem_steps">Open Settings, search for \"Home app\" or \"Default apps\", choose Strata, then come back.</string>
+    <string name="set_default_oem_hyperos">On this phone (HyperOS 2 or later) the system may not allow another home app at all, or only with three-button navigation. Strata stays usable as a normal app.</string>
+    <string name="set_default_retry">Retry</string>
 </resources>

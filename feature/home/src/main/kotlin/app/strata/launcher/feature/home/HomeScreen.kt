@@ -92,6 +92,7 @@ import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.backdropFade
 import app.strata.launcher.core.ui.strataBackdrop
 import app.strata.launcher.feature.home.list.AppListScreen
+import app.strata.launcher.feature.home.list.PrivateSpaceCommand
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -102,6 +103,7 @@ object HomeTestTags {
     const val ROOT = "home_root"
     const val APP_MODE_BANNER = "home_app_mode_banner"
     const val SET_DEFAULT_BUTTON = "home_set_default_button"
+    const val APP_MODE_BANNER_DISMISS = "home_app_mode_banner_dismiss"
     const val ALL_APPS = "home_all_apps"
     const val RESET_BANNER = "home_reset_banner"
     const val THEME_BANNER = "home_theme_banner"
@@ -193,6 +195,20 @@ fun HomeRoute(
 
                 HomeEffect.AppRemoved -> {
                     launch { snackbar.showSnackbar(resources.getString(R.string.app_removed)) }
+                }
+
+                HomeEffect.ShortcutRemoved -> {
+                    launch { snackbar.showSnackbar(resources.getString(R.string.shortcut_removed)) }
+                }
+
+                is HomeEffect.ProfileChangeFailed -> {
+                    val text =
+                        when (effect.problem) {
+                            ProfileChangeProblem.NOT_DEFAULT -> R.string.profile_not_default
+                            ProfileChangeProblem.UNSUPPORTED -> R.string.profile_unsupported
+                            ProfileChangeProblem.FAILED -> R.string.profile_failed
+                        }
+                    launch { snackbar.showSnackbar(resources.getString(text)) }
                 }
 
                 is HomeEffect.NotYetAvailable -> {
@@ -289,6 +305,18 @@ fun HomeRoute(
                     onJumpConsumed = { onAction(HomeAction.JumpConsumed(it.seq)) },
                     onJumpToLetterMenu = { letterGrid = true },
                     indexExclusion = if (search == null) exclusion else IndexExclusion.NONE,
+                    work = state.work,
+                    onWorkPaused = { onAction(HomeAction.SetWorkPaused(it)) },
+                    privateSpace = state.privateSpace,
+                    onPrivateSpace = { command ->
+                        onAction(
+                            when (command) {
+                                PrivateSpaceCommand.LOCK -> HomeAction.SetPrivateSpaceLocked(true)
+                                PrivateSpaceCommand.UNLOCK -> HomeAction.SetPrivateSpaceLocked(false)
+                                PrivateSpaceCommand.HIDE -> HomeAction.HidePrivateSpace
+                            },
+                        )
+                    },
                 )
             }
             if (state.layer == HomeLayer.FAV_EDIT) {
@@ -440,8 +468,14 @@ fun HomeScreen(
             val iconNotice = state.iconNotice
             if (state.showAppModeBanner || state.showResetBanner || themeBanner != null || iconNotice != null) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (state.showAppModeBanner) {
-                        AppModeBanner(showSetDefaultButton = showSetDefaultButton, onSetDefault = onSetDefault)
+                    val defaultBanner = state.defaultBanner
+                    if (defaultBanner != null) {
+                        AppModeBanner(
+                            kind = defaultBanner,
+                            showSetDefaultButton = showSetDefaultButton,
+                            onSetDefault = onSetDefault,
+                            onDismiss = { onAction(HomeAction.DismissDefaultBanner) },
+                        )
                     }
                     if (state.showResetBanner) ResetBanner { onAction(HomeAction.DismissResetBanner) }
                     if (themeBanner != null) ThemeBannerCard(themeBanner) { onAction(HomeAction.DismissThemeBanner) }
@@ -719,25 +753,55 @@ private fun homeRootActions(
     )
 }
 
+/** FR-ONBOARD-02 "Not now" and FR-ONBOARD-04 lost default: non-blocking, dismissible for 24 h. */
 @Composable
 private fun AppModeBanner(
+    kind: DefaultHomeBanner,
     showSetDefaultButton: Boolean,
     onSetDefault: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth().testTag(HomeTestTags.APP_MODE_BANNER),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(HomeTestTags.APP_MODE_BANNER)
+                .semantics { liveRegion = LiveRegionMode.Polite },
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = stringResource(R.string.home_banner_not_default),
+                text =
+                    stringResource(
+                        if (kind ==
+                            DefaultHomeBanner.LOST
+                        ) {
+                            R.string.home_banner_lost
+                        } else {
+                            R.string.home_banner_not_default
+                        },
+                    ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
-            if (showSetDefaultButton) {
-                Button(onClick = onSetDefault, modifier = Modifier.testTag(HomeTestTags.SET_DEFAULT_BUTTON)) {
-                    Text(text = stringResource(R.string.home_banner_set_default))
+            Row(modifier = Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag(HomeTestTags.APP_MODE_BANNER_DISMISS)) {
+                    Text(text = stringResource(R.string.reset_banner_dismiss))
+                }
+                if (showSetDefaultButton) {
+                    Button(onClick = onSetDefault, modifier = Modifier.testTag(HomeTestTags.SET_DEFAULT_BUTTON)) {
+                        Text(
+                            text =
+                                stringResource(
+                                    if (kind == DefaultHomeBanner.LOST) {
+                                        R.string.home_banner_set_again
+                                    } else {
+                                        R.string.home_banner_set_default
+                                    },
+                                ),
+                        )
+                    }
                 }
             }
         }
