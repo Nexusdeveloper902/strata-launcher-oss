@@ -42,7 +42,7 @@ class LauncherAppsCatalogSource(
             val entries = ArrayList<AppEntry>()
             val serials = HashSet<Long>()
             for (user in resolver.profiles()) {
-                val kind = resolver.kindOf(user)
+                val kind = resolver.kindOf(user) ?: continue // unknown type: fail closed
                 val quiet = resolver.quiet(user)
                 if (!readable(kind, quiet)) continue
                 val serial = resolver.serialOf(user)
@@ -59,7 +59,7 @@ class LauncherAppsCatalogSource(
     ): List<AppEntry> =
         withContext(io) {
             val user = resolver.userOf(userSerial) ?: return@withContext emptyList()
-            val kind = resolver.kindOf(user)
+            val kind = resolver.kindOf(user) ?: return@withContext emptyList() // unknown type: fail closed
             val quiet = resolver.quiet(user)
             if (!readable(kind, quiet)) return@withContext emptyList()
             activities(packageName, user, kind).orEmpty().map { it.toEntry(userSerial, kind, quiet) }

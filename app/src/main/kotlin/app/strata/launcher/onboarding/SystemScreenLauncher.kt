@@ -11,69 +11,60 @@ import app.strata.launcher.core.platformapi.system.SystemIntent
 import app.strata.launcher.feature.onboarding.SetDefaultFlow
 import app.strata.launcher.platform.system.SystemIntentFactory
 import kotlinx.coroutines.launch
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Starts the system screens of the set-default flow (role request, home settings chain) for a result and reports the
- * return (FR-ONBOARD-02/03, ANDROID_PLATFORM §2). Construct it as an activity field: the result launcher must be
- * registered before the activity is started. One screen is open at a time; its return goes to whoever started it.
- * Every intent is tried in order and `ActivityNotFoundException` falls through to the next.
+ * Starts the system screens of the set-default flow (role request, home settings chain) for a result
+ * (FR-ONBOARD-02/03, ANDROID_PLATFORM §2). Construct it as an activity field: the result launcher must be registered
+ * before the activity is started. It keeps no state about the screen in flight: whoever starts one records that in
+ * its view model, and every result is offered to all receivers registered by the current activity instance, which
+ * ignore it unless they started a screen. So a result delivered to a recreated activity (rotation, dark mode while
+ * the role dialog is up) still reaches the view model that is waiting for it.
  */
 class SystemScreenLauncher(
     private val activity: ComponentActivity,
     private val logger: () -> Logger,
 ) {
-    private var pending: Pending? = null
+    private val receivers = CopyOnWriteArrayList<(ok: Boolean, now: Long) -> Unit>()
 
     private val launcher =
         activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val p = pending ?: return@registerForActivityResult
-            pending = null
-            p.onReturn(result.resultCode == Activity.RESULT_OK, SystemClock.elapsedRealtime() - p.startedAt)
+            val now = SystemClock.elapsedRealtime()
+            val ok = result.resultCode == Activity.RESULT_OK
+            receivers.forEach { it(ok, now) }
         }
 
-    /** Collects [flow]'s launch requests while the activity lives. Call once per flow, from `onCreate`. */
+    /** Registers a result receiver for this activity instance; call from `onCreate`. */
+    fun onResult(receiver: (ok: Boolean, now: Long) -> Unit) {
+        receivers += receiver
+    }
+
+    /** Starts [flow]'s launch requests and routes the results back to it. Call once per flow, from `onCreate`. */
     fun bind(flow: SetDefaultFlow) {
+        onResult(flow::onResult)
         activity.lifecycleScope.launch {
             flow.requests.collect { request ->
-                launch(
-                    intents = request.intents,
-                    onReturn = { ok, millis -> flow.onReturned(request.attempt, ok, millis) },
-                    onNoActivity = { flow.onNoActivity(request.attempt) },
-                )
+                flow.onLaunching(request.attempt, SystemClock.elapsedRealtime())
+                if (!start(request.intents)) flow.onNoActivity(request.attempt)
             }
         }
     }
 
-    /**
-     * Starts the first of [intents] that resolves. [onReturn] gets `RESULT_OK` and how long the screen was open;
-     * [onNoActivity] runs when none of them exists. A return after process death reaches no callback (the activity
-     * re-checks the role in `onResume` anyway).
-     */
-    fun launch(
-        intents: List<SystemIntent>,
-        onReturn: (ok: Boolean, openMillis: Long) -> Unit,
-        onNoActivity: () -> Unit,
-    ) {
+    /** Starts the first of [intents] that resolves, for a result. False when none of them exists. */
+    fun start(intents: List<SystemIntent>): Boolean {
         for (target in intents) {
             val intent = SystemIntentFactory.create(activity, target) ?: continue
             try {
-                pending = Pending(SystemClock.elapsedRealtime(), onReturn)
                 launcher.launch(intent)
-                return
+                return true
             } catch (e: ActivityNotFoundException) {
                 logger().w(TAG, "no activity for $target", e)
             } catch (e: SecurityException) {
                 logger().w(TAG, "not allowed to start $target", e)
             }
         }
-        pending = null
-        onNoActivity()
+        return false
     }
-
-    private class Pending(
-        val startedAt: Long,
-        val onReturn: (Boolean, Long) -> Unit,
-    )
 
     private companion object {
         const val TAG = "SystemScreen"

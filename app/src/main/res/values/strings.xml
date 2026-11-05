@@ -6,6 +6,4 @@
     <string name="icon_chooser_label">App icon</string>
     <string name="theme_editor_label">Edit theme</string>
     <string name="theme_import_label">Import theme</string>
-    <!-- PinRequestActivity: v1 declines pinned shortcuts and widgets (FR-APPS-08 v1.x). -->
-    <string name="pin_request_declined">Strata can\'t add items to home yet</string>
 </resources>

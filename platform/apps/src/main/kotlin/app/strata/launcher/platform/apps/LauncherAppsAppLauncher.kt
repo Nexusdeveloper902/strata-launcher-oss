@@ -70,7 +70,8 @@ class LauncherAppsAppLauncher(
         var private = false
         return try {
             val user = resolver.userOf(key.userSerial) ?: return Outcome.Err(LaunchError.NOT_FOUND)
-            private = resolver.kindOf(user) == ProfileKind.PRIVATE
+            // An unreadable type counts as private: nothing about it is logged.
+            private = resolver.kindOf(user).let { it == null || it == ProfileKind.PRIVATE }
             if (resolver.quiet(user)) return Outcome.Err(LaunchError.PROFILE_PAUSED)
             block(component, user)
             Outcome.Ok(Unit)

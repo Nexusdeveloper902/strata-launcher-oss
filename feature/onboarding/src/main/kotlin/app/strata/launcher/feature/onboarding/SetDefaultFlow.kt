@@ -62,8 +62,10 @@ data class SetDefaultLaunch(
 
 /**
  * The set-default logic of FR-ONBOARD-02/03 (J-01 steps 3–4), shared by onboarding, the APP_MODE banner and the
- * settings row. Pure: the activity starts each [SetDefaultLaunch] from [requests] for a result and reports back through
- * [onReturned] (with the time the screen was open) or [onNoActivity]. Role checks run on [io].
+ * settings row. Pure: the activity starts each [SetDefaultLaunch] from [requests] for a result, marks it with
+ * [onLaunching] and reports the return through [onResult] or [onNoActivity]. The request in flight is kept here (in
+ * the view model), not in the activity, so a result delivered to a recreated activity still ends the attempt instead
+ * of leaving [SetDefaultState.waiting] stuck. Role checks run on [io].
  */
 class SetDefaultFlow(
     private val roles: RoleController,
@@ -73,6 +75,17 @@ class SetDefaultFlow(
 ) {
     private val mutable = MutableStateFlow(SetDefaultState())
     private val launches = Channel<SetDefaultLaunch>(Channel.BUFFERED)
+
+    private class InFlight(
+        val attempt: SetDefaultAttempt,
+        val startedAt: Long,
+    )
+
+    /** The screen this flow started and whose result is still due. */
+    @Volatile private var inFlight: InFlight? = null
+
+    /** Role requests refused so far (J-01: the *second* quick cancel means "don't ask again"). */
+    private var roleRefusals = 0
 
     val state: StateFlow<SetDefaultState> = mutable
 
@@ -108,6 +121,27 @@ class SetDefaultFlow(
     /** Closes a card ("Not now" in a dialog, or the card's own close). */
     fun dismissCard() = mutable.update { it.copy(card = SetDefaultCard.None) }
 
+    /** The activity is about to start a screen of [attempt] at [startedAt] (`elapsedRealtime`). */
+    fun onLaunching(
+        attempt: SetDefaultAttempt,
+        startedAt: Long,
+    ) {
+        inFlight = InFlight(attempt, startedAt)
+    }
+
+    /**
+     * A screen started for a result returned at [now] (`elapsedRealtime`). Ignored unless this flow started it: one
+     * result launcher serves every flow of an activity, and only one screen is open at a time.
+     */
+    fun onResult(
+        ok: Boolean,
+        now: Long,
+    ) {
+        val started = inFlight ?: return
+        inFlight = null
+        onReturned(started.attempt, ok, (now - started.startedAt).coerceAtLeast(0))
+    }
+
     /**
      * The screen of [attempt] returned. [ok] = `RESULT_OK`; [openMillis] = how long it was open. A role refusal within
      * [SILENT_REFUSAL_MS] without UI is the AOSP "don't ask again" state: go to the settings chain at once.
@@ -126,7 +160,11 @@ class SetDefaultFlow(
                 }
                 return@launch
             }
-            val silentRefusal = attempt == SetDefaultAttempt.ROLE && !ok && openMillis < SILENT_REFUSAL_MS
+            // J-01: "a second cancel within 2 s without UI means don't-ask-again". The first refusal is always shown as
+            // Denied, so a user who cancels quickly once is not sent to settings by mistake.
+            val refusal = attempt == SetDefaultAttempt.ROLE && !ok
+            val silentRefusal = refusal && openMillis < SILENT_REFUSAL_MS && roleRefusals >= 1
+            if (refusal) roleRefusals++
             when {
                 silentRefusal -> {
                     mutable.update { it.copy(held = false, waiting = false, dontAskAgain = true) }
@@ -147,6 +185,7 @@ class SetDefaultFlow(
 
     /** No screen of [attempt] could be started: the role request falls back to settings; settings → OEM help. */
     fun onNoActivity(attempt: SetDefaultAttempt) {
+        inFlight = null
         mutable.update { it.copy(waiting = false) }
         if (attempt == SetDefaultAttempt.ROLE) {
             start(SetDefaultAttempt.SETTINGS, settingsChain(roles.requestIntent()))
@@ -179,7 +218,7 @@ class SetDefaultFlow(
         }
 
     companion object {
-        /** J-01: a refusal within 2 s without UI means "don't ask again" (Proposed heuristic). */
+        /** J-01: a second refusal within 2 s without UI means "don't ask again" (Proposed heuristic). */
         const val SILENT_REFUSAL_MS: Long = 2_000L
         private const val TAG = "SetDefault"
     }

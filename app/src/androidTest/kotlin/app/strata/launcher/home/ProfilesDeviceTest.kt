@@ -20,6 +20,8 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.core.model.IconRequest
+import app.strata.launcher.core.model.IconResult
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.coverForeignActivities
@@ -28,6 +30,7 @@ import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
+import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import com.google.common.truth.Truth.assertThat
@@ -79,11 +82,30 @@ class ProfilesDeviceTest {
     fun ready() {
         compose.passOnboarding()
         compose.waitUntil(10_000) { count(HomeTestTags.ROOT) > 0 }
+        resumeWorkProfile()
+    }
+
+    /**
+     * Global state these tests change is put back: a paused work profile is resumed (tApps14 pauses it; a profile left
+     * paused by an earlier run must not change this one), the dynamic fixture shortcut is removed.
+     */
+    private fun resumeWorkProfile() {
+        val work = profileSerial(ProfileKind.WORK) ?: return
+        val paused =
+            graph.profiles.profiles.value
+                .any { it.serial == work && it.quietMode }
+        if (paused && graph.roleController.isDefaultHome()) {
+            runBlocking { runCatching { graph.profiles.requestQuietMode(work, enable = false) } }
+        }
     }
 
     @After
     fun tearDown() {
         runBlocking { graph.settingsRepository.update { it.copy(privateSpaceContainerHidden = false) } }
+        resumeWorkProfile()
+        runCatching {
+            instrumentation.context.getSystemService(ShortcutManager::class.java)?.removeAllDynamicShortcuts()
+        }
         var owned: HomeActivity? = null
         runCatching { compose.activityRule.scenario.onActivity { owned = it } }
         compose.coverForeignActivities(HomeActivity::class.java, owned)
@@ -180,7 +202,18 @@ class ProfilesDeviceTest {
             compose.onNodeWithTag(AppListTestTags.PRIVATE_UNLOCK).performClick()
         }
         val p = awaitPrivateApp()
-        compose.onNodeWithTag(AppListTestTags.PRIVATE_LOCK).performClick()
+        // T-SEARCH-08 / T-LIFE-09: unlocked → P is a search result; locked while it shows → gone at once.
+        instrumentation.runOnMainSync { vm().onAction(HomeAction.OpenSearch(p.displayLabel)) }
+        compose.waitUntil(5_000) { count(SearchTestTags.row(p)) > 0 }
+        runBlocking { graph.profiles.requestQuietMode(space!!, enable = true) }
+        compose.waitUntil(LOCK_BUDGET_MS) { count(SearchTestTags.row(p)) == 0 }
+        instrumentation.runOnMainSync { vm().onAction(HomeAction.CloseSearch) }
+        // Locked: no search result either (FR-SEARCH-03).
+        instrumentation.runOnMainSync { vm().onAction(HomeAction.OpenSearch(p.displayLabel)) }
+        compose.waitForIdle()
+        assertThat(count(SearchTestTags.row(p))).isEqualTo(0)
+        instrumentation.runOnMainSync { vm().onAction(HomeAction.CloseSearch) }
+        // T-APPS-15: the container shows only the Unlock entry.
         compose.waitUntil(5_000) { count(AppListTestTags.PRIVATE_UNLOCK) > 0 }
         assertThat(compose.onAllNodesWithText(p.displayLabel).fetchSemanticsNodes()).isEmpty()
         assertThat(runBlocking { graph.appList.appList.first() }.privateApps).isEmpty()
@@ -208,6 +241,27 @@ class ProfilesDeviceTest {
         val space = profileSerial(ProfileKind.PRIVATE)
         assumeTrue(space != null)
         val p = awaitPrivateApp()
+        // The icon cache (L2) gains no file for the private app: its icon is requested as the list does.
+        val iconDir = File(context.cacheDir, "icons")
+        val iconsBefore =
+            iconDir
+                .listFiles()
+                .orEmpty()
+                .map { it.name }
+                .toSet()
+        val icon =
+            runBlocking {
+                graph.iconProvider.icon(IconRequest(p.key, p.lastUpdateTime, ICON_PX, ICON_DPI, ephemeral = true))
+            }
+        assertThat(icon).isInstanceOf(IconResult.Image::class.java)
+        Thread.sleep(PERSIST_WAIT_MS)
+        assertThat(
+            iconDir
+                .listFiles()
+                .orEmpty()
+                .map { it.name }
+                .toSet() - iconsBefore,
+        ).isEmpty()
         instrumentation.runOnMainSync {
             vm().onAction(HomeAction.Launch(p, null))
         }
@@ -245,6 +299,9 @@ class ProfilesDeviceTest {
         const val FIXTURE_PACKAGE = "app.strata.launcher.test"
         const val PAUSE_BUDGET_MS = 1_000L
         const val PERSIST_WAIT_MS = 3_000L
+        const val LOCK_BUDGET_MS = 1_000L
+        const val ICON_PX = 96
+        const val ICON_DPI = 420
     }
 }
 

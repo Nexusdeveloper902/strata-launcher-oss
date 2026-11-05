@@ -622,13 +622,24 @@ class HomeViewModel(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
 
     init {
-        // INTERACTION_SPEC §8 "App removed while shown": an open sheet closes with a snackbar.
+        // INTERACTION_SPEC §8 "App removed while shown": an open sheet closes with a snackbar. A private-space app
+        // that vanished because the space was locked is not "removed": its sheet closes without a message.
         viewModelScope.launch {
             currentList.collect { list ->
                 val sheet = local.value.modal as? HomeModal.Sheet ?: return@collect
                 if (list != null && !list.fromSnapshot && findApp(list, sheet.key) == null) {
+                    val private = isPrivate(sheet.key)
                     local.update { it.copy(modal = HomeModal.None) }
-                    effectChannel.trySend(HomeEffect.AppRemoved)
+                    if (!private) effectChannel.trySend(HomeEffect.AppRemoved)
+                }
+            }
+        }
+        // The sheet's shortcut labels live only while its sheet is open (a private app's ones included).
+        viewModelScope.launch {
+            local.map { (it.modal as? HomeModal.Sheet)?.key }.distinctUntilChanged().collect { key ->
+                if (key == null) {
+                    shortcutJob?.cancel()
+                    sheetShortcuts.value = null
                 }
             }
         }
@@ -1012,11 +1023,21 @@ class HomeViewModel(
             }
 
             is Outcome.Err -> {
-                if (result.error == LaunchError.PROFILE_PAUSED) {
-                    setModal(HomeModal.ResumeWork(shortcut.userSerial))
-                } else {
-                    sheetShortcuts.update { s -> s?.copy(shortcuts = s.shortcuts.filterNot { it == shortcut }) }
-                    effectChannel.trySend(HomeEffect.ShortcutRemoved)
+                when (result.error) {
+                    LaunchError.PROFILE_PAUSED -> {
+                        setModal(HomeModal.ResumeWork(shortcut.userSerial))
+                    }
+
+                    LaunchError.SECURITY -> {
+                        // The shortcut-host permission is gone (no longer the default home): not a removed shortcut.
+                        // Re-check the role (banner) and say why; the next sheet lists no shortcuts.
+                        refreshRole()
+                        effectChannel.trySend(HomeEffect.ProfileChangeFailed(ProfileChangeProblem.NOT_DEFAULT))
+                    }
+
+                    else -> {
+                        effectChannel.trySend(HomeEffect.ShortcutRemoved)
+                    }
                 }
             }
         }

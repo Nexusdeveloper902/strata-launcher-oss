@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Looper
 import android.provider.Settings
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -127,6 +128,57 @@ class SetDefaultActivityTest {
         role.defaultHome = false // the user picked another home app
         val opened = returnFrom(activity, Activity.RESULT_CANCELED)
         assertThat(opened.action).isEqualTo(Settings.ACTION_HOME_SETTINGS)
+        assertThat(graph.systemIntents.started).containsExactly(FakeSystemIntents.UNINSTALL_STRATA)
+    }
+
+    /**
+     * Review fix: the activity is recreated (rotation, dark mode) while the system screen is open. The result reaches the
+     * new instance's launcher and, through the view model's in-flight attempt, ends the attempt: no stuck `waiting`.
+     */
+    @Test
+    fun resultAfterRecreation_endsTheAttempt() {
+        val role = FakeRoleController(defaultHome = false, request = SystemIntent.HomeSettings)
+        TestAppGraph(roleController = role, onboarded = false).install()
+        val intent =
+            Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .setComponent(ComponentName(context, SettingsActivity::class.java))
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java, intent).setup()
+        idle()
+        compose.onNodeWithTag(OnboardingTestTags.CONTINUE).performClick()
+        compose.onNodeWithTag(OnboardingTestTags.SKIP).performClick()
+        idle()
+        compose.onNodeWithTag(OnboardingTestTags.SET_DEFAULT).performClick()
+        idle()
+        val requestCode = shadowOf(controller.get()).nextStartedActivityForResult.requestCode
+        controller.recreate()
+        idle()
+        controller.get().activityResultRegistry.dispatchResult(requestCode, Activity.RESULT_CANCELED, null)
+        idle()
+        compose.onNodeWithTag(OnboardingTestTags.OEM_HELP).assertExists()
+        compose.onNodeWithTag(OnboardingTestTags.RETRY).assertIsEnabled()
+    }
+
+    /** Review fix, settings half: the uninstall guidance's home-settings return survives a recreation too (T-SET-03). */
+    @Test
+    fun uninstallReturnAfterRecreation_opensUninstall() {
+        val role = FakeRoleController(defaultHome = true)
+        val graph = TestAppGraph(roleController = role, onboarded = true).install()
+        val intent =
+            Intent(Intent.ACTION_APPLICATION_PREFERENCES)
+                .setComponent(ComponentName(context, SettingsActivity::class.java))
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java, intent).setup()
+        idle()
+        compose.onNodeWithTag(SettingsTestTags.UNINSTALL_STRATA).performClick()
+        idle()
+        compose.onNodeWithTag(SettingsTestTags.UNINSTALL_GUIDANCE_CONTINUE).performClick()
+        idle()
+        val requestCode = shadowOf(controller.get()).nextStartedActivityForResult.requestCode
+        controller.recreate()
+        idle()
+        role.defaultHome = false
+        controller.get().activityResultRegistry.dispatchResult(requestCode, Activity.RESULT_CANCELED, null)
+        idle()
         assertThat(graph.systemIntents.started).containsExactly(FakeSystemIntents.UNINSTALL_STRATA)
     }
 

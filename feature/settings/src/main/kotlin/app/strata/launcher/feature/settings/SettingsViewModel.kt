@@ -122,8 +122,14 @@ sealed interface SettingsAction {
 
     data object DismissUninstallGuidance : SettingsAction
 
-    /** The home settings opened by [SettingsEffect.OpenHomeSettings] returned. */
-    data class HomeSettingsReturned(val forUninstall: Boolean) : SettingsAction
+    /** The host is about to open the home settings for [SettingsEffect.OpenHomeSettings]. */
+    data class HomeSettingsLaunched(val forUninstall: Boolean) : SettingsAction
+
+    /**
+     * A system screen started for a result returned (or none could be started). Acted on only when this view model
+     * opened the home settings; the in-flight request lives here, so it survives the activity being recreated.
+     */
+    data object HomeSettingsResult : SettingsAction
 }
 
 sealed interface SettingsEffect {
@@ -139,7 +145,7 @@ sealed interface SettingsEffect {
 
     /**
      * Open the system home settings for a result (`HOME_SETTINGS` chain); the host reports the return with
-     * [SettingsAction.HomeSettingsReturned]. [forUninstall]: the uninstall dialog follows once Strata is no longer home.
+     * [SettingsAction.HomeSettingsLaunched] and [SettingsAction.HomeSettingsResult]. [forUninstall]: the uninstall dialog follows once Strata is no longer home.
      */
     data class OpenHomeSettings(val forUninstall: Boolean) : SettingsEffect
 }
@@ -162,6 +168,9 @@ class SettingsViewModel(
 ) : ViewModel() {
     private val disclosure = MutableStateFlow(false)
     private val role = MutableStateFlow(RoleUi())
+
+    /** Non-null while the home settings opened by this view model are due to return (true = for the uninstall). */
+    private var homeSettingsInFlight: Boolean? = null
     private val effectChannel = Channel<SettingsEffect>(Channel.BUFFERED)
 
     val effects: Flow<SettingsEffect> = effectChannel.receiveAsFlow()
@@ -255,10 +264,16 @@ class SettingsViewModel(
                 role.update { it.copy(guidance = false) }
             }
 
-            is SettingsAction.HomeSettingsReturned -> {
+            is SettingsAction.HomeSettingsLaunched -> {
+                homeSettingsInFlight = action.forUninstall
+            }
+
+            SettingsAction.HomeSettingsResult -> {
+                val forUninstall = homeSettingsInFlight ?: return
+                homeSettingsInFlight = null
                 checkRole { held ->
                     // T-SET-03: after switching the home app, the system uninstall dialog opens.
-                    if (action.forUninstall) {
+                    if (forUninstall) {
                         if (held) role.update { it.copy(guidance = true) } else uninstallStrata()
                     }
                 }

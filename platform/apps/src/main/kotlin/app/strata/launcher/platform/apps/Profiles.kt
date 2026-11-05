@@ -41,21 +41,18 @@ internal class ProfileResolver(context: Context) {
     fun userOf(serial: Long): UserHandle? = userManager.getUserForSerialNumber(serial)
 
     /**
-     * MAIN for this user. On API 35+ the launcher user type tells managed, private and other profiles
-     * apart; below 35 every other profile a launcher can see is treated as WORK (ANDROID_PLATFORM §3.2).
+     * MAIN for this user; for other profiles see [classify]. Null = the type could not be read on API 35+: the
+     * profile is skipped everywhere (fail closed, it may be a private space).
      */
-    fun kindOf(user: UserHandle): ProfileKind {
+    fun kindOf(user: UserHandle): ProfileKind? {
         if (user == Process.myUserHandle()) return ProfileKind.MAIN
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            val type = runCatching { launcherApps.getLauncherUserInfo(user)?.userType }.getOrNull()
-            return when (type) {
-                UserManager.USER_TYPE_PROFILE_MANAGED -> ProfileKind.WORK
-                UserManager.USER_TYPE_PROFILE_PRIVATE -> ProfileKind.PRIVATE
-                null -> ProfileKind.WORK
-                else -> ProfileKind.OTHER
+        val type =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                runCatching { launcherApps.getLauncherUserInfo(user)?.userType }.getOrNull()
+            } else {
+                null
             }
-        }
-        return ProfileKind.WORK
+        return classify(Build.VERSION.SDK_INT, type)
     }
 
     fun quiet(user: UserHandle): Boolean =
@@ -67,10 +64,32 @@ internal class ProfileResolver(context: Context) {
         )
 
     fun snapshot(): List<Profile> =
-        profiles().map { user ->
+        profiles().mapNotNull { user ->
+            val kind = kindOf(user) ?: return@mapNotNull null
             val quiet = quiet(user)
-            Profile(serialOf(user), kindOf(user), quietMode = quiet, available = !quiet)
+            Profile(serialOf(user), kind, quietMode = quiet, available = !quiet)
         }
+
+    companion object {
+        /**
+         * The kind of a non-main profile (ANDROID_PLATFORM §3.2/§3.3). Below API 35 every other profile a launcher can
+         * see is treated as WORK (private space does not exist there). On 35+ the launcher user type decides; a type
+         * that cannot be read is `null`: the caller skips the profile, so an unreadable private space never reaches the
+         * list, the snapshot, the launch log, favourites or overrides (P-5).
+         */
+        fun classify(
+            sdk: Int,
+            type: String?,
+        ): ProfileKind? {
+            if (sdk < Build.VERSION_CODES.VANILLA_ICE_CREAM) return ProfileKind.WORK
+            return when (type) {
+                null -> null
+                UserManager.USER_TYPE_PROFILE_MANAGED -> ProfileKind.WORK
+                UserManager.USER_TYPE_PROFILE_PRIVATE -> ProfileKind.PRIVATE
+                else -> ProfileKind.OTHER
+            }
+        }
+    }
 }
 
 /** Runtime-only profile broadcasts (ANDROID_PLATFORM §3.2: never delivered to manifest receivers). */
@@ -134,6 +153,7 @@ class AndroidProfileSource(
         registerProfileReceiver(app) { read() }
     }
 
+    /** Only ever called on [PlatformThread] (start, broadcasts, [refresh], quiet-mode requests). */
     private fun read() {
         state.value = runCatching { resolver.snapshot() }.getOrDefault(state.value)
     }
@@ -164,7 +184,8 @@ class AndroidProfileSource(
                 } catch (e: IllegalStateException) {
                     QuietModeResult.FAILED
                 }
-            read()
+            // Every read runs on the platform thread, in order: no stale snapshot can overwrite a newer one.
+            PlatformThread.handler.post { read() }
             result
         }
     }

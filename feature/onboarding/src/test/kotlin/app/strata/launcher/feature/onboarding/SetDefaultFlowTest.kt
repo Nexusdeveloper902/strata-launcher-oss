@@ -104,6 +104,42 @@ class SetDefaultFlowTest {
             }
         }
 
+    /** J-01: only a *second* quick refusal is "don't ask again"; a user's quick first Cancel shows the Denied card. */
+    @Test
+    fun firstQuickCancel_isDenied_notSettings() =
+        runTest {
+            flow.requests.test {
+                flow.setAsDefault()
+                awaitItem()
+                flow.onReturned(SetDefaultAttempt.ROLE, ok = false, openMillis = 300)
+                assertThat(flow.state.value.card).isEqualTo(SetDefaultCard.Denied)
+                assertThat(flow.state.value.dontAskAgain).isFalse()
+                expectNoEvents()
+            }
+        }
+
+    /**
+     * The in-flight attempt is kept by the flow (view model), so a result delivered to a recreated activity ends it;
+     * a result this flow did not start is ignored.
+     */
+    @Test
+    fun resultRoutedByTheFlowsOwnInFlightAttempt() =
+        runTest {
+            flow.requests.test {
+                flow.onResult(ok = false, now = 1_000) // not started by this flow
+                assertThat(flow.state.value.card).isEqualTo(SetDefaultCard.None)
+                flow.setAsDefault()
+                val launch = awaitItem()
+                flow.onLaunching(launch.attempt, startedAt = 10_000)
+                assertThat(flow.state.value.waiting).isTrue()
+                flow.onResult(ok = false, now = 16_000)
+                assertThat(flow.state.value.waiting).isFalse()
+                assertThat(flow.state.value.card).isEqualTo(SetDefaultCard.Denied)
+                flow.onResult(ok = false, now = 17_000) // a duplicate is ignored
+                expectNoEvents()
+            }
+        }
+
     /**
      * T-ONBOARD-07 (logic): RESULT_OK but the role is not held, and a settings return without a change, each show the OEM
      * help card once per attempt with "Retry"; the HyperOS note only for a HyperOS 2 build.

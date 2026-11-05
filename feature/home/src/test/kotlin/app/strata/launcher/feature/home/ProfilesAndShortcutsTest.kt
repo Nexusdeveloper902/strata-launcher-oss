@@ -273,6 +273,40 @@ class ProfilesAndShortcutsTest {
         compose.onNodeWithText("This shortcut was removed by its app").assertExists()
     }
 
+    /** Review fix: a SECURITY failure is a lost host permission, not a removed shortcut: role re-checked, reason shown. */
+    @Test
+    fun securityFailure_isNotRemoved() {
+        val shortcuts =
+            FakeShortcutSource(host = true, byKey = mutableMapOf(maps.key to threeShortcuts())).also {
+                it.denied +=
+                    "home"
+            }
+        val h = harness(shortcuts = shortcuts)
+        val checks = h.role.isDefaultHomeCalls
+        compose.onNodeWithText("Maps").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithTag(SheetTestTags.shortcut("home")).performClick()
+        compose.waitForIdle()
+        assertThat(count("This shortcut was removed by its app")).isEqualTo(0)
+        compose.onNodeWithText("Only the default home app can do this. Set Strata as default first.").assertExists()
+        assertThat(h.role.isDefaultHomeCalls).isGreaterThan(checks)
+    }
+
+    /** Review fix: locking the space while a private app's sheet is open closes it without "app removed". */
+    @Test
+    fun lockWhilePrivateSheetOpen_closesSilently() {
+        val p = profiles()
+        val h = harness(p)
+        compose.onNodeWithText("Bank").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithTag(SheetTestTags.SHEET).assertExists()
+        p.setQuiet(PRIVATE, true)
+        compose.waitForIdle()
+        assertThat(countTag(SheetTestTags.SHEET)).isEqualTo(0)
+        assertThat(h.state.modal).isEqualTo(HomeModal.None)
+        assertThat(compose.onAllNodesWithText("removed", substring = true).fetchSemanticsNodes()).isEmpty()
+    }
+
     private fun threeShortcuts() =
         listOf(
             AppShortcut("home", maps.packageName, 0, "Home", dynamic = false, rank = 0),

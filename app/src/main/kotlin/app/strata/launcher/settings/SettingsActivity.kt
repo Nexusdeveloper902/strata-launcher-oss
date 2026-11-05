@@ -115,6 +115,8 @@ class SettingsActivity : ComponentActivity() {
         appGraph.startTheme()
         systemScreens.bind(onboardingViewModel.setDefault)
         systemScreens.bind(setDefaultViewModel.flow)
+        // The settings rows' home-settings screen (FR-SET-02); ignored unless the settings view model opened it.
+        systemScreens.onResult { _, _ -> viewModel.onAction(SettingsAction.HomeSettingsResult) }
         // Same theme hooks as home: first-frame gate, first-frame and boot-success reports, LKG on onStop.
         themeHost.holdFirstFrame(window.decorView)
         setContent {
@@ -199,11 +201,8 @@ class SettingsActivity : ComponentActivity() {
 
             is SettingsEffect.OpenHomeSettings -> {
                 val chain = listOf(SystemIntent.HomeSettings) + appGraph.roleController.fallbackIntents()
-                systemScreens.launch(
-                    intents = chain.distinct(),
-                    onReturn = { _, _ -> viewModel.onAction(SettingsAction.HomeSettingsReturned(effect.forUninstall)) },
-                    onNoActivity = { viewModel.onAction(SettingsAction.HomeSettingsReturned(effect.forUninstall)) },
-                )
+                viewModel.onAction(SettingsAction.HomeSettingsLaunched(effect.forUninstall))
+                if (!systemScreens.start(chain.distinct())) viewModel.onAction(SettingsAction.HomeSettingsResult)
             }
 
             else -> {

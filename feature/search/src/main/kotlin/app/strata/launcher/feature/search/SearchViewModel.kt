@@ -122,6 +122,9 @@ class SearchViewModel(
     private val storeAvailable = MutableStateFlow(false)
     private val effectChannel = Channel<SearchEffect>(Channel.BUFFERED)
     private val translitCache = HashMap<String, String>()
+
+    /** The last index included private-space apps (their labels are then in [translitCache]). */
+    private var indexedPrivate = false
     private val transliterate = Transliterate { textFolding.transliterate(it) }
 
     val effects: Flow<SearchEffect> = effectChannel.receiveAsFlow()
@@ -163,14 +166,12 @@ class SearchViewModel(
     private val index: StateFlow<SearchIndex?> =
         combine(appList.appList, counts, privateShown) { list, c, p -> Triple(list, c, p) }
             .mapLatest { (list, c, private) ->
-                val apps =
-                    if (private &&
-                        list.privateApps.isNotEmpty()
-                    ) {
-                        list.allApps + list.privateApps
-                    } else {
-                        list.allApps
-                    }
+                val withPrivate = private && list.privateApps.isNotEmpty()
+                // FR-APPS-10: transliterations of private labels must not outlive the unlocked space (memory only, and
+                // only while it is open). The cache refills from the remaining labels on this pass.
+                if (!withPrivate && indexedPrivate) translitCache.clear()
+                indexedPrivate = withPrivate
+                val apps = if (withPrivate) list.allApps + list.privateApps else list.allApps
                 // Tie order = the assembled list's collation order, so no comparator is needed here.
                 SearchIndex.build(apps, c, comparator = null, transliterate, translitCache)
             }.flowOn(defaultDispatcher)

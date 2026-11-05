@@ -161,6 +161,9 @@ class FakeShortcutSource(
     /** Ids whose launch fails as removed by the app. */
     val removed = mutableSetOf<String>()
 
+    /** Ids whose launch fails with SECURITY (the shortcut-host permission was lost meanwhile). */
+    val denied = mutableSetOf<String>()
+
     override fun hasHostPermission(): Boolean = host
 
     override suspend fun shortcutsFor(key: AppKey): List<AppShortcut> = if (host) byKey[key].orEmpty() else emptyList()
@@ -170,6 +173,7 @@ class FakeShortcutSource(
         origin: LaunchOrigin?,
     ): LaunchResult {
         if (shortcut.id in removed) return Outcome.Err(LaunchError.NOT_FOUND)
+        if (shortcut.id in denied) return Outcome.Err(LaunchError.SECURITY)
         launched += shortcut
         return Outcome.Ok(Unit)
     }

@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.strata.launcher.DeviceStateRule
@@ -65,16 +66,49 @@ class OnboardingDeviceTest {
         timeout: Long = 10_000,
     ): Boolean = device.wait(Until.hasObject(tag(t)), timeout)
 
-    private fun stepText(): String? = device.findObject(tag(OnboardingTestTags.STEP))?.text
+    /**
+     * The current "Step n of 4" text, or null when the flow is gone. A `UiObject2` goes stale when compose replaces the
+     * node (a new step) or the layer is removed (Done); it is re-found on each attempt, never kept.
+     */
+    private fun stepText(): String? {
+        repeat(STALE_RETRIES) {
+            try {
+                return device.findObject(tag(OnboardingTestTags.STEP))?.text
+            } catch (e: StaleObjectException) {
+                // Replaced between find and read: look again.
+            }
+        }
+        return null
+    }
 
-    /** Clicks [t] and waits until the step changed or the flow is gone, so the next look sees the next screen. */
+    /**
+     * Clicks [t] and waits until the step text shown before the click is gone (next step, or the flow ended), so the
+     * next look sees the next screen. Waits on a selector condition, which re-resolves the node itself.
+     */
     private fun click(t: String) {
         assertThat(waitFor(t)).isTrue()
         val before = stepText()
-        device.findObject(tag(t)).click()
-        val until = System.currentTimeMillis() + STEP_TIMEOUT_MS
-        while (stepText() == before && System.currentTimeMillis() < until) Thread.sleep(POLL_MS)
+        clickFresh(t)
+        if (before != null) {
+            device.wait(Until.gone(By.res(OnboardingTestTags.STEP).text(before)), STEP_TIMEOUT_MS)
+        }
         device.waitForIdle()
+    }
+
+    /** Finds [t] right before the click; a node replaced in between is found again. */
+    private fun clickFresh(t: String) {
+        repeat(STALE_RETRIES) {
+            try {
+                device.findObject(tag(t))?.let {
+                    it.click()
+                    return
+                }
+            } catch (e: StaleObjectException) {
+                // Recomposed between find and click: find again.
+            }
+            device.wait(Until.hasObject(tag(t)), STEP_TIMEOUT_MS)
+        }
+        throw AssertionError("$t could not be clicked")
     }
 
     /** A runtime-permission dialog of the system permission controller (T-ONBOARD-01 watcher). */
@@ -228,7 +262,7 @@ class OnboardingDeviceTest {
 
     private companion object {
         const val STEP_TIMEOUT_MS = 5_000L
-        const val POLL_MS = 100L
+        const val STALE_RETRIES = 3
     }
 
     /** Gives the home role back to another home app, so the role dialog can be shown (manual tests only). */
