@@ -6,7 +6,11 @@
      ShortcutFixtureActivity: a launcher activity of the test APK with two static shortcuts, the T-APPS-12 fixture
      (ProfilesDeviceTest.kt).
      AccessFixtureReceiver: the M7 fixture app; it posts notifications and writes fixture contacts as the test package
-     (OptionalAccessDeviceTest.kt). The permissions below belong to the test APK only, never to Strata; the tests grant
+     (OptionalAccessDeviceTest.kt). It must be exported: the instrumentation runs in Strata's process and uid, and a
+     non-exported receiver of the test APK cannot receive its broadcasts. A permission guard is not possible either
+     (Strata would have to declare it; the permission gate forbids that). Instead the receiver refuses any sender but
+     Strata on API 34+ (shared broadcast identity), and it can only touch the test package's own notifications and the
+     contacts of its own fixture account. AGP uninstalls the test APK after a connected run. The permissions below belong to the test APK only, never to Strata; the tests grant
      them with `pm grant app.strata.launcher.test …`. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

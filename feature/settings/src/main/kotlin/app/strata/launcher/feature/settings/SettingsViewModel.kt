@@ -1,5 +1,6 @@
 package app.strata.launcher.feature.settings
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.strata.launcher.core.common.Outcome
@@ -253,6 +254,8 @@ class SettingsViewModel(
     /** FR-SEARCH-06; null = no contacts row. */
     private val contacts: ContactsSource? = null,
     restrictedSettingsHint: Boolean = false,
+    /** Holds the system screens in flight across process death (the grant page and the permission dialog). */
+    private val handle: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
     private val disclosure = MutableStateFlow(false)
     private val role = MutableStateFlow(RoleUi())
@@ -264,11 +267,25 @@ class SettingsViewModel(
             ),
         )
 
-    /** The listener grant page opened by this view model is due to return (checked on the next resume). */
-    private var badgeGrantInFlight = false
+    /** The listener grant page opened by this view model is due to return (resolved on a later resume). */
+    private var badgeGrantInFlight: Boolean
+        get() = handle[KEY_BADGE_GRANT] ?: false
+        set(value) {
+            handle[KEY_BADGE_GRANT] = value
+        }
 
     /** The `READ_CONTACTS` request started by this view model is due to return. */
-    private var contactsRequestInFlight = false
+    private var contactsRequestInFlight: Boolean
+        get() = handle[KEY_CONTACTS_REQUEST] ?: false
+        set(value) {
+            handle[KEY_CONTACTS_REQUEST] = value
+        }
+
+    /** Resumes seen by this instance; a grant is resolved only by a check started on a resume after the page opened. */
+    private var resumes = 0
+
+    /** [resumes] when the grant page opened; -1 after process death (any resume of the new instance resolves it). */
+    private var grantOpenedAtResume = if (badgeGrantInFlight) -1 else Int.MAX_VALUE
 
     /** Non-null while the home settings opened by this view model are due to return (true = for the uninstall). */
     private var homeSettingsInFlight: Boolean? = null
@@ -301,7 +318,7 @@ class SettingsViewModel(
         val source = badges
         if (source != null) {
             viewModelScope.launch {
-                refreshBadgeAccess(source)
+                refreshBadgeAccess(source, resume = null)
                 source.access.collect { a -> optional.update { it.copy(badgeAccess = a) } }
             }
         }
@@ -353,7 +370,8 @@ class SettingsViewModel(
             SettingsAction.Resume -> {
                 lockService.refresh()
                 checkRole()
-                badges?.let { source -> viewModelScope.launch { refreshBadgeAccess(source) } }
+                val resume = ++resumes
+                badges?.let { source -> viewModelScope.launch { refreshBadgeAccess(source, resume) } }
                 contacts?.let { c -> optional.update { it.copy(contactsPermission = c.permission()) } }
             }
 
@@ -475,14 +493,22 @@ class SettingsViewModel(
         val source = badges ?: return
         if (source.openGrantScreen() is Outcome.Ok) {
             badgeGrantInFlight = true
+            grantOpenedAtResume = resumes
         } else {
             optional.update { it.copy(badgeAttemptFailed = true) }
             effectChannel.trySend(SettingsEffect.NoHandler)
         }
     }
 
-    /** Reads the listener access; a grant page this view model opened is resolved here (J-09: "On return"). */
-    private suspend fun refreshBadgeAccess(source: BadgeSource) {
+    /**
+     * Reads the listener access. A grant page this view model opened is resolved here (J-09: "On return"), but only by
+     * a check started on [resume] after the page opened: a check already running when the page opened (the start-up
+     * read, an earlier resume) must not take the user's answer before they have given it.
+     */
+    private suspend fun refreshBadgeAccess(
+        source: BadgeSource,
+        resume: Int?,
+    ) {
         val access =
             try {
                 source.refresh()
@@ -495,8 +521,9 @@ class SettingsViewModel(
         optional.update {
             it.copy(badgeAccess = access, badgeAttemptFailed = if (access.granted) false else it.badgeAttemptFailed)
         }
-        if (!badgeGrantInFlight) return
+        if (!badgeGrantInFlight || resume == null || resume <= grantOpenedAtResume) return
         badgeGrantInFlight = false
+        grantOpenedAtResume = Int.MAX_VALUE
         if (access.granted) {
             guardedWrite("badges on") { settings.update { it.copy(badgesEnabled = true) } }
         } else {
@@ -572,3 +599,5 @@ class SettingsViewModel(
 }
 
 private const val TAG = "Settings"
+private const val KEY_BADGE_GRANT = "settings_badge_grant_in_flight"
+private const val KEY_CONTACTS_REQUEST = "settings_contacts_request_in_flight"

@@ -19,6 +19,8 @@ import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.notifications.ListenerAccess
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -35,7 +37,7 @@ import kotlinx.coroutines.withContext
  * (`getActiveNotifications`, `getCurrentRanking`, `requestUnbind`/`requestRebind`) and publishes the counts and the
  * access state on [publish] (the main dispatcher). Nothing is ever written to disk or logged beyond event kinds.
  */
-class AndroidBadgeSource(
+class AndroidBadgeSource internal constructor(
     context: Context,
     /** Our listener component (`.badges.BadgeListenerService`, declared by `:app`). */
     private val listener: ComponentName,
@@ -43,8 +45,20 @@ class AndroidBadgeSource(
     private val publish: CoroutineDispatcher,
     private val scope: CoroutineScope,
     private val logger: Logger,
+    /** The platform calls; replaced in the state-machine tests. */
+    ops: ListenerOps?,
 ) : BadgeSource {
+    constructor(
+        context: Context,
+        listener: ComponentName,
+        worker: CoroutineDispatcher,
+        publish: CoroutineDispatcher,
+        scope: CoroutineScope,
+        logger: Logger,
+    ) : this(context, listener, worker, publish, scope, logger, null)
+
     private val appContext = context.applicationContext
+    private val ops: ListenerOps = ops ?: PlatformListenerOps(appContext, listener)
     private val accessState = MutableStateFlow(ListenerAccess.NOT_GRANTED)
     private val badgeState = MutableStateFlow<Map<BadgeKey, Int>>(emptyMap())
     private val events = Channel<Event>(Channel.UNLIMITED)
@@ -61,21 +75,18 @@ class AndroidBadgeSource(
     override val access: StateFlow<ListenerAccess> = accessState
     override val badges: StateFlow<Map<BadgeKey, Int>> = badgeState
 
-    /** FR-NOTIF-03: listeners cannot be granted or bound on low-RAM devices running API ≤ 29. */
-    private val unsupported: Boolean by lazy {
-        Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q &&
-            appContext.getSystemService(ActivityManager::class.java)?.isLowRamDevice == true
-    }
-
     init {
         instance = this
         scope.launch(worker) {
             for (event in events) {
                 try {
                     handle(event)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: RuntimeException) {
                     // A revoked grant races every call (SecurityException); never crash home for a badge.
                     logger.w(TAG, "badge event ${event::class.simpleName} failed: ${e.javaClass.simpleName}")
+                    if (event is Event.Refresh) event.reply.complete(accessState.value)
                 }
             }
         }
@@ -85,15 +96,14 @@ class AndroidBadgeSource(
         events.trySend(Event.Active(active))
     }
 
+    /**
+     * Runs in the event queue, in order with the listener's connect/disconnect, so a stale read can never overwrite a
+     * newer state (review of PR #24).
+     */
     override suspend fun refresh(): ListenerAccess {
-        val access =
-            withContext(worker) {
-                val a = readAccess()
-                if (a == ListenerAccess.GRANTED && active == true) rebind()
-                a
-            }
-        withContext(publish) { accessState.value = access }
-        return access
+        val reply = CompletableDeferred<ListenerAccess>()
+        events.trySend(Event.Refresh(reply))
+        return reply.await()
     }
 
     override fun openGrantScreen(): LaunchResult {
@@ -181,6 +191,13 @@ class AndroidBadgeSource(
                 if (changed) publishCounts()
             }
 
+            is Event.Refresh -> {
+                val a = readAccess()
+                if (a == ListenerAccess.GRANTED && active == true) rebind()
+                setAccess(a)
+                event.reply.complete(a)
+            }
+
             is Event.Active -> {
                 val was = active
                 active = event.active
@@ -201,13 +218,9 @@ class AndroidBadgeSource(
 
     /** `onListenerConnected` is the point where `getActiveNotifications()` is safe (ANDROID_PLATFORM §8). */
     private suspend fun load(service: NotificationListenerService) {
-        val active = service.activeNotifications.orEmpty()
-        val ranking = service.currentRanking
+        val active = ops.activeNotifications(service)
         facts.clear()
-        for (sbn in active) {
-            val raw = BadgeListener.rawOf(sbn, ranking)
-            facts[raw.key] = factsOf(raw)
-        }
+        for (raw in active) facts[raw.key] = factsOf(raw)
         publishCounts()
     }
 
@@ -221,39 +234,32 @@ class AndroidBadgeSource(
             canShowBadge = raw.canShowBadge,
         )
 
-    private fun serialOf(user: UserHandle): Long =
-        serials.getOrPut(user) {
-            appContext.getSystemService(UserManager::class.java)?.getSerialNumberForUser(user) ?: -1L
-        }
+    private fun serialOf(user: UserHandle): Long = serials.getOrPut(user) { ops.serialOf(user) }
 
-    private fun unbind(service: NotificationListenerService) {
+    /** Badges off: the system unbinds us; the access is what the settings say, no longer CONNECTED. */
+    private suspend fun unbind(service: NotificationListenerService) {
         if (connected === service) connected = null
-        service.requestUnbind()
+        ops.unbind(service)
         logger.d(TAG, "listener unbind requested (badges off)")
+        setAccess(readAccess())
     }
 
     /** U-020: OEM task killers may drop the listener; a granted, wanted listener asks to be bound again. */
     private fun rebind() {
         if (connected != null) return
         try {
-            NotificationListenerService.requestRebind(listener)
+            ops.rebind()
         } catch (e: RuntimeException) {
             logger.w(TAG, "listener rebind failed: ${e.javaClass.simpleName}")
         }
     }
 
     private fun readAccess(): ListenerAccess {
-        if (unsupported) return ListenerAccess.UNSUPPORTED
+        if (ops.unsupported) return ListenerAccess.UNSUPPORTED
         if (connected != null) return ListenerAccess.CONNECTED
         val granted =
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    appContext
-                        .getSystemService(NotificationManager::class.java)
-                        ?.isNotificationListenerAccessGranted(listener) == true
-                } else {
-                    NotificationManagerCompat.getEnabledListenerPackages(appContext).contains(appContext.packageName)
-                }
+                ops.granted()
             } catch (e: RuntimeException) {
                 false
             }
@@ -281,6 +287,8 @@ class AndroidBadgeSource(
         class Ranking(val rankings: Map<String, Pair<Int, Boolean>>) : Event
 
         class Active(val active: Boolean) : Event
+
+        class Refresh(val reply: CompletableDeferred<ListenerAccess>) : Event
     }
 
     companion object {
@@ -291,4 +299,53 @@ class AndroidBadgeSource(
         var instance: AndroidBadgeSource? = null
             private set
     }
+}
+
+/** The platform calls of [AndroidBadgeSource]: one seam, so the event state machine runs in JVM tests. */
+internal interface ListenerOps {
+    /** FR-NOTIF-03: low-RAM device on API ≤ 29. */
+    val unsupported: Boolean
+
+    /** Listener access in the system settings. */
+    fun granted(): Boolean
+
+    fun serialOf(user: UserHandle): Long
+
+    /** `getActiveNotifications()` with `getCurrentRanking()`; only flags and rankings are kept. */
+    fun activeNotifications(service: NotificationListenerService): List<RawNotification>
+
+    fun unbind(service: NotificationListenerService)
+
+    fun rebind()
+}
+
+private class PlatformListenerOps(
+    private val context: Context,
+    private val listener: ComponentName,
+) : ListenerOps {
+    override val unsupported: Boolean by lazy {
+        Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q &&
+            context.getSystemService(ActivityManager::class.java)?.isLowRamDevice == true
+    }
+
+    override fun granted(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            context.getSystemService(NotificationManager::class.java)?.isNotificationListenerAccessGranted(listener) ==
+                true
+        } else {
+            NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+        }
+
+    override fun serialOf(user: UserHandle): Long =
+        context.getSystemService(UserManager::class.java)?.getSerialNumberForUser(user) ?: -1L
+
+    override fun activeNotifications(service: NotificationListenerService): List<RawNotification> {
+        val active = service.activeNotifications.orEmpty()
+        val ranking = service.currentRanking
+        return active.map { BadgeListener.rawOf(it, ranking) }
+    }
+
+    override fun unbind(service: NotificationListenerService) = service.requestUnbind()
+
+    override fun rebind() = NotificationListenerService.requestRebind(listener)
 }

@@ -65,6 +65,7 @@ class SettingsActivity : ComponentActivity() {
                     contacts = graph.contacts,
                     // J-09: Android 13+ blocks listener access for sideloaded apps until "Allow restricted settings".
                     restrictedSettingsHint = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+                    handle = createSavedStateHandle(),
                 )
             }
         }

@@ -10,6 +10,7 @@ import app.strata.launcher.core.platformapi.notifications.ListenerAccess
 import app.strata.launcher.core.platformapi.system.ContactHit
 import app.strata.launcher.core.platformapi.system.ContactsSource
 import app.strata.launcher.core.platformapi.system.PermissionState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -40,10 +41,15 @@ class FakeBadgeSource(
         update()
     }
 
+    /** When set, [refresh] reads the access, then waits for it: a check that is still running (race tests). */
+    var refreshGate: CompletableDeferred<Unit>? = null
+
     override suspend fun refresh(): ListenerAccess {
-        accessState.value = systemAccess
+        val read = systemAccess
+        refreshGate?.await()
+        accessState.value = read
         update()
-        return systemAccess
+        return read
     }
 
     override fun openGrantScreen(): LaunchResult {

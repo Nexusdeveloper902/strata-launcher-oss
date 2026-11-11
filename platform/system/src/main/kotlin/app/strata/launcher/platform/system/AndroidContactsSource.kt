@@ -2,6 +2,7 @@ package app.strata.launcher.platform.system
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,11 +23,10 @@ import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.system.ContactHit
 import app.strata.launcher.core.platformapi.system.ContactsSource
 import app.strata.launcher.core.platformapi.system.PermissionState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /** Trace section around one contact query (T-PERF-06 on device). */
 const val TRACE_CONTACTS_QUERY = "strata.contactsQuery"
@@ -58,29 +58,41 @@ class AndroidContactsSource(
     ): List<ContactHit> {
         val q = query.trim()
         if (q.isEmpty() || limit <= 0 || permission() != PermissionState.GRANTED) return emptyList()
-        return withContext(io) {
+        return coroutineScope {
+            // The provider call blocks: cancellation reaches it only through the signal. `await` throws as soon as the
+            // caller is cancelled (the next keystroke, `mapLatest`), and the signal then stops the running query.
             val signal = CancellationSignal()
-            val job = currentCoroutineContext()[Job]
-            val handle = job?.invokeOnCompletion { signal.cancel() }
-            Trace.beginSection(TRACE_CONTACTS_QUERY)
+            val work = async(io) { blockingSearch(q, limit, signal) }
             try {
-                val hits = query(q, limit, signal)
-                hits.map { (hit, thumb) ->
-                    ensureActive()
-                    if (thumb == null) hit else hit.copy(photo = decodeThumbnail(thumb))
-                }
-            } catch (e: OperationCanceledException) {
-                ensureActive()
-                emptyList()
-            } catch (e: SecurityException) {
-                emptyList() // revoked between the check and the query
-            } catch (e: RuntimeException) {
-                logger.w(TAG, "contact query failed: ${e.javaClass.simpleName}")
-                emptyList()
-            } finally {
-                Trace.endSection()
-                handle?.dispose()
+                work.await()
+            } catch (e: CancellationException) {
+                signal.cancel()
+                throw e
             }
+        }
+    }
+
+    /** Runs on [io]; never throws (cancellation of the signal gives an empty list). */
+    private fun blockingSearch(
+        q: String,
+        limit: Int,
+        signal: CancellationSignal,
+    ): List<ContactHit> {
+        Trace.beginSection(TRACE_CONTACTS_QUERY)
+        return try {
+            query(q, limit, signal).map { (hit, thumb) ->
+                signal.throwIfCanceled()
+                if (thumb == null) hit else hit.copy(photo = decodeThumbnail(thumb))
+            }
+        } catch (e: OperationCanceledException) {
+            emptyList()
+        } catch (e: SecurityException) {
+            emptyList() // revoked between the check and the query
+        } catch (e: RuntimeException) {
+            logger.w(TAG, "contact query failed: ${e.javaClass.simpleName}")
+            emptyList()
+        } finally {
+            Trace.endSection()
         }
     }
 
@@ -131,8 +143,7 @@ class AndroidContactsSource(
         origin: LaunchOrigin?,
     ): LaunchResult {
         val uri = hit.lookupUri.toUri()
-        // Only a contacts lookup URI is ever opened from a result.
-        if (uri.authority != ContactsContract.AUTHORITY) return Outcome.Err(LaunchError.SECURITY)
+        if (!isLookupUri(uri)) return Outcome.Err(LaunchError.SECURITY)
         val intent =
             Intent(Intent.ACTION_VIEW, uri)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -147,9 +158,20 @@ class AndroidContactsSource(
         }
     }
 
-    private companion object {
-        const val TAG = "Contacts"
-        val PROJECTION =
+    companion object {
+        private const val TAG = "Contacts"
+
+        /** Only a contacts lookup URI (`content://com.android.contacts/contacts/lookup/…`) is ever opened from a result. */
+        fun isLookupUri(uri: android.net.Uri): Boolean {
+            val segments = uri.pathSegments
+            return uri.scheme == ContentResolver.SCHEME_CONTENT &&
+                uri.authority == ContactsContract.AUTHORITY &&
+                segments.size >= 3 &&
+                segments[0] == "contacts" &&
+                segments[1] == "lookup"
+        }
+
+        private val PROJECTION =
             arrayOf(
                 ContactsContract.Contacts._ID,
                 ContactsContract.Contacts.LOOKUP_KEY,
