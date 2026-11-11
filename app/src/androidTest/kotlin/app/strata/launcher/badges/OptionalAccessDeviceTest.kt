@@ -38,10 +38,12 @@ import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.home.list.AppListTestTags
 import app.strata.launcher.feature.search.SearchTestTags
+import app.strata.launcher.focusReport
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -248,7 +250,8 @@ class OptionalAccessDeviceTest {
     fun tNotif01_noPromptsAtFirstRun() {
         post(1, AccessFixtureReceiver.KIND_ALERTING)
         Thread.sleep(QUIET_WAIT_MS)
-        assertThat(device.currentPackageName).isEqualTo(context.packageName)
+        // Nothing may come to front: no grant page, no disclosure, no dialog (a crash dialog of the fixture also fails it).
+        assertWithMessage(focusReport()).that(device.currentPackageName).isEqualTo(context.packageName)
         assertThat(runBlocking { graph.badges.refresh() }.granted).isFalse()
         assertThat(graph.badges.badges.value).isEmpty()
         assertThat(
