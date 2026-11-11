@@ -257,3 +257,43 @@ fun ComposeTestRule.coverForeignActivities(
         throw AssertionError("Foreign ${type.simpleName} still live behind the cover. ${focusReport()}", e)
     }
 }
+
+/** The resumed HomeActivity, if any (the compose test only sees resumed activities). */
+fun resumedHomeActivity(): app.strata.launcher.home.HomeActivity? {
+    var home: app.strata.launcher.home.HomeActivity? = null
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        home =
+            ActivityLifecycleMonitorRegistry
+                .getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .filterIsInstance<app.strata.launcher.home.HomeActivity>()
+                .firstOrNull()
+    }
+    return home
+}
+
+/**
+ * Returns to the rule's own HomeActivity [owned] after another app came to front: starts HomeActivity explicitly
+ * (`singleTask`, so the rule's task comes back) and waits until [owned] is resumed and focused. Never a Back loop
+ * (docs/impl-notes/M6.md, HomeDeviceTest.bringToFront).
+ */
+fun ComposeTestRule.bringHomeToFront(
+    owned: app.strata.launcher.home.HomeActivity,
+    device: UiDevice,
+) {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+    instrumentation.context.startActivity(
+        Intent(instrumentation.targetContext, app.strata.launcher.home.HomeActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+    try {
+        waitUntil(20_000) {
+            var focused = false
+            instrumentation.runOnMainSync { focused = owned.window.decorView.hasWindowFocus() }
+            if (!focused) closeSystemErrorDialog(device)
+            focused && resumedHomeActivity() === owned
+        }
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError("The rule's HomeActivity did not return to front. ${focusReport()}", e)
+    }
+}

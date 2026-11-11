@@ -4,9 +4,19 @@
      FixturePackActivity: makes the test APK an icon pack (ADW THEMES action) with a compiled res/xml/appfilter.xml, the PACK_OK
      fixture of the icon device tests (IconDeviceTest.kt).
      ShortcutFixtureActivity: a launcher activity of the test APK with two static shortcuts, the T-APPS-12 fixture
-     (ProfilesDeviceTest.kt). -->
+     (ProfilesDeviceTest.kt).
+     AccessFixtureReceiver: the M7 fixture app; it posts notifications and writes fixture contacts as the test package
+     (OptionalAccessDeviceTest.kt). The permissions below belong to the test APK only, never to Strata; the tests grant
+     them with `pm grant app.strata.launcher.test …`. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <application>
+        <receiver
+            android:name="app.strata.launcher.badges.AccessFixtureReceiver"
+            android:exported="true" />
         <activity
             android:name="app.strata.launcher.CoverActivity"
             android:exported="true"
