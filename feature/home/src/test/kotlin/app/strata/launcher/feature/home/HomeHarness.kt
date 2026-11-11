@@ -25,6 +25,7 @@ import app.strata.launcher.core.theme.store.ThemeRepository
 import app.strata.launcher.core.ui.StrataTheme
 import app.strata.launcher.testing.fakes.FakeAppCatalog
 import app.strata.launcher.testing.fakes.FakeAppLauncher
+import app.strata.launcher.testing.fakes.FakeBadgeSource
 import app.strata.launcher.testing.fakes.FakeCollation
 import app.strata.launcher.testing.fakes.FakeFavoritesRepository
 import app.strata.launcher.testing.fakes.FakeHaptics
@@ -63,6 +64,8 @@ class HomeHarness(
     val profiles: FakeProfileSource = FakeProfileSource(),
     /** App shortcuts (FR-APPS-08); null = none wired. */
     val shortcuts: FakeShortcutSource? = null,
+    /** Notification badges (FR-NOTIF-01/02); null = none wired. */
+    val badges: FakeBadgeSource? = null,
 ) {
     /** Taps on the APP_MODE banner's "Set as default". */
     var setDefaultTaps = 0
@@ -88,6 +91,7 @@ class HomeHarness(
             defaultDispatcher = Dispatchers.Unconfined,
             scope = scope,
             profiles = profiles.profiles,
+            badges = badges?.badges,
         )
 
     val vm =

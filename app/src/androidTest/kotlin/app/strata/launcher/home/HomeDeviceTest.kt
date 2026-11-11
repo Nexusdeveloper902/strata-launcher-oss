@@ -35,6 +35,7 @@ import androidx.test.uiautomator.Until
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
 import app.strata.launcher.awaitWindowFocus
+import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.closeSystemErrorDialog
 import app.strata.launcher.coverForeignActivities
 import app.strata.launcher.feature.home.HomeAction
@@ -216,28 +217,8 @@ class HomeDeviceTest {
         bringToFront(owned)
     }
 
-    /**
-     * Starts HomeActivity explicitly, as the entry activity does (`SettingsActivity.openHome`). HomeActivity is
-     * `singleTask`, so this brings the existing standard-type task (the rule's one; a home-task instance is of the home
-     * activity type and is not reused) to front and delivers a non-Home intent, which `onNewIntent` ignores. Waits
-     * until [owned] itself is resumed and focused; no key press can overshoot into it.
-     */
-    private fun bringToFront(owned: HomeActivity) {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        instrumentation.context.startActivity(
-            Intent(instrumentation.targetContext, HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-        try {
-            compose.waitUntil(20_000) {
-                var focused = false
-                instrumentation.runOnMainSync { focused = owned.window.decorView.hasWindowFocus() }
-                if (!focused) closeSystemErrorDialog(device)
-                focused && resumedHome() === owned
-            }
-        } catch (e: ComposeTimeoutException) {
-            throw AssertionError("The rule's HomeActivity did not return to front. ${focusReport()}", e)
-        }
-    }
+    /** Brings the rule's own HomeActivity back to front (shared helper, re-issues the start while covered). */
+    private fun bringToFront(owned: HomeActivity) = compose.bringHomeToFront(owned, device)
 
     /** T-HOME-07: "hide status bar" hides it on home; it is visible again in another app. */
     @Test

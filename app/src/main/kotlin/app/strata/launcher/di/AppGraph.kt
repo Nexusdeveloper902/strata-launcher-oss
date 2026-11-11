@@ -12,8 +12,10 @@ import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.apps.ProfileSource
 import app.strata.launcher.core.platformapi.apps.ShortcutSource
 import app.strata.launcher.core.platformapi.icons.IconProvider
+import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
+import app.strata.launcher.core.platformapi.system.ContactsSource
 import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.LockService
@@ -59,6 +61,12 @@ interface AppGraph {
 
     /** App shortcuts in the sheet (FR-APPS-08). */
     val shortcuts: ShortcutSource
+
+    /** Notification badges (FR-NOTIF-01…03): opt-in listener, counts in memory only. */
+    val badges: BadgeSource
+
+    /** Contact search (FR-SEARCH-06): opt-in, `READ_CONTACTS` requested only when turned on. */
+    val contacts: ContactsSource
 
     /** Active theme and library (ARCHITECTURE §4); [ThemeRepository.start] boots it off the main thread. */
     val themeRepository: ThemeRepository

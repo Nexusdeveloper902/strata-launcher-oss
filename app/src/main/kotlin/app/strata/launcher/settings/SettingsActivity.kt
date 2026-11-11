@@ -1,11 +1,13 @@
 package app.strata.launcher.settings
 
+import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +61,11 @@ class SettingsActivity : ComponentActivity() {
                     roleController = graph.roleController,
                     ioDispatcher = graph.dispatchers.io,
                     privateSpaceSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM,
+                    badges = graph.badges,
+                    contacts = graph.contacts,
+                    // J-09: Android 13+ blocks listener access for sideloaded apps until "Allow restricted settings".
+                    restrictedSettingsHint = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+                    handle = createSavedStateHandle(),
                 )
             }
         }
@@ -93,6 +100,12 @@ class SettingsActivity : ComponentActivity() {
     }
 
     private val systemScreens = SystemScreenLauncher(this) { appGraph.logger }
+
+    /** FR-SEARCH-06: `READ_CONTACTS`, requested only after the contacts disclosure; the VM holds the request in flight. */
+    private val contactsPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            viewModel.onAction(SettingsAction.ContactsPermissionResult(granted))
+        }
 
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
 
@@ -203,6 +216,14 @@ class SettingsActivity : ComponentActivity() {
                 val chain = listOf(SystemIntent.HomeSettings) + appGraph.roleController.fallbackIntents()
                 viewModel.onAction(SettingsAction.HomeSettingsLaunched(effect.forUninstall))
                 if (!systemScreens.start(chain.distinct())) viewModel.onAction(SettingsAction.HomeSettingsResult)
+            }
+
+            SettingsEffect.RequestContacts -> {
+                try {
+                    contactsPermission.launch(Manifest.permission.READ_CONTACTS)
+                } catch (e: android.content.ActivityNotFoundException) {
+                    viewModel.onAction(SettingsAction.ContactsPermissionResult(false))
+                }
             }
 
             else -> {

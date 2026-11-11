@@ -67,6 +67,8 @@ class FakeSystemIntents(
 
     override fun uninstallStrata(): LaunchResult = start(UNINSTALL_STRATA)
 
+    override fun strataAppDetails(): LaunchResult = start(APP_DETAILS)
+
     /** (uri, mime) of every share sheet started. */
     val shares = mutableListOf<Pair<String, String>>()
 
@@ -111,6 +113,7 @@ class FakeSystemIntents(
         const val ACCESSIBILITY = "accessibility"
         const val UNINSTALL_STRATA = "uninstall_strata"
         const val SHARE = "share"
+        const val APP_DETAILS = "app_details"
         const val CROP = "crop"
         const val ATTACH = "attach"
     }

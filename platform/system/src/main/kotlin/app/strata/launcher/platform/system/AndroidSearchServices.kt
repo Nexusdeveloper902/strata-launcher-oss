@@ -91,6 +91,14 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
     override fun uninstallStrata(): LaunchResult =
         start(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", appContext.packageName, null)))
 
+    override fun strataAppDetails(): LaunchResult =
+        start(
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", appContext.packageName, null),
+            ),
+        )
+
     override fun share(
         contentUri: String,
         mimeType: String,

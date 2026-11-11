@@ -26,6 +26,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.BuildConfig
@@ -45,6 +46,7 @@ import app.strata.launcher.feature.onboarding.OnboardingRoute
 import app.strata.launcher.feature.onboarding.OnboardingViewModel
 import app.strata.launcher.feature.onboarding.SetDefaultDialogs
 import app.strata.launcher.feature.onboarding.SetDefaultViewModel
+import app.strata.launcher.feature.search.SearchAction
 import app.strata.launcher.feature.search.SearchRoute
 import app.strata.launcher.feature.search.SearchViewModel
 import app.strata.launcher.onboarding.SystemScreenLauncher
@@ -52,6 +54,8 @@ import app.strata.launcher.settings.SettingsActivity
 import app.strata.launcher.theme.IconChooserActivity
 import app.strata.launcher.theme.ThemeHost
 import app.strata.launcher.theme.ThemesActivity
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * The HOME activity (ANDROID_PLATFORM §1, §22). Edge-to-edge over the wallpaper. Reads only
@@ -101,6 +105,7 @@ class HomeActivity : ComponentActivity() {
                     systemIntents = graph.systemIntents,
                     defaultDispatcher = graph.dispatchers.default,
                     ioDispatcher = graph.dispatchers.io,
+                    contacts = graph.contacts,
                 )
             }
         }
@@ -186,6 +191,7 @@ class HomeActivity : ComponentActivity() {
                                 rowActions = appActions,
                                 closeLog = searchCloseLog,
                                 onProfilePaused = { viewModel.onAction(HomeAction.Launch(it, null)) },
+                                onOpenSettings = { viewModel.onAction(HomeAction.OpenSettings) },
                             )
                         },
                     )
@@ -323,6 +329,18 @@ class HomeActivity : ComponentActivity() {
         viewModel.onAction(HomeAction.RefreshRole)
         onboardingViewModel.onAction(OnboardingAction.Resume)
         setDefaultViewModel.flow.refresh()
+        // ARCHITECTURE §10 step 4: listener access (FR-NOTIF-01; revoked → badges vanish) and the contact permission.
+        val graph = appGraph
+        lifecycleScope.launch {
+            try {
+                graph.badges.refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                graph.logger.w(TAG_BADGES, "listener access check failed", e)
+            }
+        }
+        searchViewModel.onAction(SearchAction.Resume)
     }
 
     /**
@@ -359,3 +377,5 @@ class HomeActivity : ComponentActivity() {
         }
     }
 }
+
+private const val TAG_BADGES = "Badges"

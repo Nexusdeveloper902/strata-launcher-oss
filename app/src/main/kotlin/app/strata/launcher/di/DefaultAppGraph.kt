@@ -1,8 +1,10 @@
 package app.strata.launcher.di
 
+import android.content.ComponentName
 import android.content.Context
 import android.view.View
 import app.strata.launcher.BuildConfig
+import app.strata.launcher.badges.BadgeListenerService
 import app.strata.launcher.core.common.AppDispatchers
 import app.strata.launcher.core.common.Clock
 import app.strata.launcher.core.common.log.LogLevel
@@ -33,8 +35,10 @@ import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.apps.ProfileSource
 import app.strata.launcher.core.platformapi.apps.ShortcutSource
 import app.strata.launcher.core.platformapi.icons.IconProvider
+import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
+import app.strata.launcher.core.platformapi.system.ContactsSource
 import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.LockService
@@ -53,7 +57,9 @@ import app.strata.launcher.platform.apps.AndroidShortcutSource
 import app.strata.launcher.platform.apps.LauncherAppsAppLauncher
 import app.strata.launcher.platform.apps.LauncherAppsCatalogSource
 import app.strata.launcher.platform.icons.AndroidIconProvider
+import app.strata.launcher.platform.notifications.AndroidBadgeSource
 import app.strata.launcher.platform.system.AndroidAnimatorScaleSource
+import app.strata.launcher.platform.system.AndroidContactsSource
 import app.strata.launcher.platform.system.AndroidDocumentIO
 import app.strata.launcher.platform.system.AndroidDynamicColorsSource
 import app.strata.launcher.platform.system.AndroidLockService
@@ -70,6 +76,9 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -146,6 +155,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
             snapshotLoaded = catalogRepository.snapshotLoaded,
             // Pause and lock show at once, before the catalog reload (T-LIFE-08/09).
             profiles = profileSource.profiles,
+            badges = badgeSource.badges,
         )
     }
 
@@ -293,6 +303,33 @@ class DefaultAppGraph(context: Context) : AppGraph {
     override val profiles: ProfileSource get() = profileSource
 
     override val shortcuts: ShortcutSource by lazy { AndroidShortcutSource(appContext, dispatchers.io, logger) }
+
+    /**
+     * FR-NOTIF-01: created with the list (cheap, no I/O); follows settings field 13. The listener service reports to it
+     * through [AndroidBadgeSource.instance].
+     */
+    private val badgeSource: AndroidBadgeSource by lazy {
+        AndroidBadgeSource(
+            context = appContext,
+            listener = ComponentName(appContext, BadgeListenerService::class.java),
+            worker = dispatchers.io.limitedParallelism(1),
+            publish = dispatchers.main,
+            scope = appScope,
+            logger = logger,
+        ).also { source ->
+            appScope.launch {
+                settingsRepository.settings
+                    .map { it.badgesEnabled }
+                    .catch { emit(false) }
+                    .distinctUntilChanged()
+                    .collect { source.setActive(it) }
+            }
+        }
+    }
+
+    override val badges: BadgeSource get() = badgeSource
+
+    override val contacts: ContactsSource by lazy { AndroidContactsSource(appContext, dispatchers.io, logger) }
 
     override fun startCatalog() {
         profileSource

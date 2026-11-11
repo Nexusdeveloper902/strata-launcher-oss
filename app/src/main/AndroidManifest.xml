@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Strata Launcher. Skeleton: spec/ANDROID_PLATFORM.md §22 with the ARCHITECTURE §17 deltas.
      Components of §22 arrive with their milestones (M5: ThemeImportActivity, FileProvider; ThemesActivity is
-     the non-exported theme library; M6: PinRequestActivity). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
+     the non-exported theme library; M6: PinRequestActivity; M7: BadgeListenerService). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -106,6 +106,25 @@
                 <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
             </intent-filter>
         </activity>
+
+        <!-- Optional: notification badges (FR-NOTIF-01). The system binds it only after the user grants listener access
+             in the system settings; only the system can bind it (BIND_NOTIFICATION_LISTENER_SERVICE). Counts only,
+             in memory (FR-NOTIF-03). Filter types apply on API 31+; older APIs filter in code. -->
+        <service
+            android:name=".badges.BadgeListenerService"
+            android:exported="false"
+            android:label="@string/badge_service_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="conversations|alerting" />
+            <meta-data
+                android:name="android.service.notification.disabled_filter_types"
+                android:value="ongoing|silent" />
+        </service>
 
         <!-- Theme library (FR-THEME-27), opened from the home menu. Not exported. -->
         <activity

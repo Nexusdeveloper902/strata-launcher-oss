@@ -257,3 +257,61 @@ fun ComposeTestRule.coverForeignActivities(
         throw AssertionError("Foreign ${type.simpleName} still live behind the cover. ${focusReport()}", e)
     }
 }
+
+/** The resumed HomeActivity, if any (the compose test only sees resumed activities). */
+fun resumedHomeActivity(): app.strata.launcher.home.HomeActivity? {
+    var home: app.strata.launcher.home.HomeActivity? = null
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        home =
+            ActivityLifecycleMonitorRegistry
+                .getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .filterIsInstance<app.strata.launcher.home.HomeActivity>()
+                .firstOrNull()
+    }
+    return home
+}
+
+/**
+ * Returns to the rule's own HomeActivity [owned] after another app came to front: starts HomeActivity explicitly
+ * (`singleTask`, so the rule's task comes back; a non-Home intent, which `onNewIntent` ignores) and waits until [owned] is
+ * resumed and focused. Never a Back loop (docs/impl-notes/M6.md).
+ *
+ * The start is issued again every [RESTART_EVERY_MS] while [owned] is not in front: the app that was opened can put
+ * another activity on top after home already came back. CI run 42961426106 (API 36, tHome05): the calendar's first run
+ * started the Google sign-in flow 0.4 s after HomeActivity had resumed, and a single start left it covered.
+ */
+fun ComposeTestRule.bringHomeToFront(
+    owned: app.strata.launcher.home.HomeActivity,
+    device: UiDevice,
+    timeoutMillis: Long = 30_000,
+) {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    fun start() =
+        instrumentation.context.startActivity(
+            Intent(instrumentation.targetContext, app.strata.launcher.home.HomeActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    start()
+    var lastStart = android.os.SystemClock.uptimeMillis()
+    try {
+        waitUntil(timeoutMillis) {
+            var focused = false
+            instrumentation.runOnMainSync { focused = owned.window.decorView.hasWindowFocus() }
+            val front = focused && resumedHomeActivity() === owned
+            if (!front) {
+                closeSystemErrorDialog(device)
+                if (android.os.SystemClock.uptimeMillis() - lastStart >= RESTART_EVERY_MS) {
+                    start()
+                    lastStart = android.os.SystemClock.uptimeMillis()
+                }
+            }
+            front
+        }
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError("The rule's HomeActivity did not return to front. ${focusReport()}", e)
+    }
+}
+
+private const val RESTART_EVERY_MS = 2_000L

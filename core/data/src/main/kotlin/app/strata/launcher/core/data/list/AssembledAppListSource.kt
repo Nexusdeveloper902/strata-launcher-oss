@@ -5,8 +5,10 @@ import app.strata.launcher.core.data.db.StrataDatabase
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppList
 import app.strata.launcher.core.model.AppOverride
+import app.strata.launcher.core.model.BadgeKey
 import app.strata.launcher.core.model.Catalog
 import app.strata.launcher.core.model.IconOverride
+import app.strata.launcher.core.model.withBadges
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppListSource
 import app.strata.launcher.core.platformapi.apps.Profile
@@ -80,6 +82,11 @@ class AssembledAppListSource(
     snapshotLoaded: StateFlow<Boolean> = MutableStateFlow(true),
     /** Current profiles (pause/lock state, FR-APPS-09/10); null = the catalog's load-time flags only. */
     profiles: Flow<List<Profile>>? = null,
+    /**
+     * Notification counts (FR-NOTIF-01/02; memory only). Applied after assembly, so a new notification costs one
+     * pass over the assembled list instead of a re-assembly; null = no badges.
+     */
+    badges: Flow<Map<BadgeKey, Int>>? = null,
 ) : AppListSource {
     private val profileState: Flow<ProfileState?> =
         profiles?.map { ProfileState.of(it) }?.distinctUntilChanged() ?: flowOf(null)
@@ -95,6 +102,12 @@ class AssembledAppListSource(
             .filterNotNull()
             .mapLatest { (c, o, l, p) ->
                 AppListAssembler.assemble(c, o, collation.sections(l), collation.comparator(l), p)
+            }.let { assembled ->
+                if (badges == null) {
+                    assembled
+                } else {
+                    combine(assembled, badges.distinctUntilChanged()) { list, b -> list.withBadges(b) }
+                }
             }.distinctUntilChanged()
             .flowOn(defaultDispatcher)
             .shareIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), replay = 1)

@@ -20,6 +20,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
 import app.strata.launcher.core.model.ProfileKind
@@ -123,8 +124,15 @@ class ProfilesDeviceTest {
         instrumentation.runOnMainSync { vm().onAction(HomeAction.OpenSheet(fixture)) }
         compose.waitUntil(10_000) { count(SheetTestTags.SHORTCUTS) > 0 }
         compose.waitUntil(5_000) { shortcutRows() == expected }
+        var owned: HomeActivity? = null
+        compose.activityRule.scenario.onActivity { owned = it }
         compose.onNodeWithTag(SheetTestTags.shortcut("fixture_static_one")).performClick()
         assertThat(device.wait(Until.hasObject(By.pkg(FIXTURE_PACKAGE)), 10_000)).isTrue()
+        // Leave nothing in front: the fixture activity (test APK process) outlived this test and was still the focused
+        // window when OnboardingDeviceTest.tOnboard01 ran next (CI run 42961426106, API 34: its Skip tap went to the
+        // fixture). Home comes back over it; the fixture is `noHistory`, so being covered finishes it.
+        compose.bringHomeToFront(owned!!, device)
+        assertThat(device.wait(Until.gone(By.pkg(FIXTURE_PACKAGE)), 10_000)).isTrue()
     }
 
     private fun shortcutRows(): Int =

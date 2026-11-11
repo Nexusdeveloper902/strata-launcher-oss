@@ -57,6 +57,7 @@ dependencies {
     implementation(projects.platform.system)
     implementation(projects.platform.apps)
     implementation(projects.platform.icons)
+    implementation(projects.platform.notifications)
     implementation(projects.feature.home)
     implementation(projects.feature.search)
     implementation(projects.feature.onboarding)
