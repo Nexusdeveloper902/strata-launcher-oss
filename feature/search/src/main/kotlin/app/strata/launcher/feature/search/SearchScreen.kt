@@ -1,17 +1,22 @@
 package app.strata.launcher.feature.search
 
+import android.graphics.Bitmap
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -47,16 +53,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -76,10 +85,12 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
+import app.strata.launcher.core.platformapi.system.ContactHit
 import app.strata.launcher.core.ui.AppRow
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
@@ -97,6 +108,10 @@ object SearchTestTags {
     const val RECENT_HEADER = "search_recent_header"
     const val NO_RESULTS = "search_no_results"
     const val STORE_ROW = "search_store_row"
+    const val CONTACTS_HEADER = "search_contacts_header"
+    const val CONTACTS_HINT = "search_contacts_hint"
+
+    fun contact(index: Int) = "search_contact_$index"
 
     fun row(app: VisibleApp) = "search_row_${app.key.component}_${app.key.userSerial}"
 }
@@ -123,6 +138,8 @@ fun SearchRoute(
     closeLog: (String) -> Unit = {},
     /** FR-APPS-09: a paused work app was chosen; home shows "Turn on work apps?". */
     onProfilePaused: (VisibleApp) -> Unit = {},
+    /** The contacts hint: home opens Settings (FR-SEARCH-06 is turned on there). */
+    onOpenSettings: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val currentCloseLog by rememberUpdatedState(closeLog)
@@ -130,6 +147,7 @@ fun SearchRoute(
     val currentOnAction by rememberUpdatedState(onAction)
     val currentOnProfilePaused by rememberUpdatedState(onProfilePaused)
     val currentOnClose by rememberUpdatedState(onClose)
+    val currentOnOpenSettings by rememberUpdatedState(onOpenSettings)
     LaunchedEffect(effects) {
         effects.collect { effect ->
             when (effect) {
@@ -140,6 +158,14 @@ fun SearchRoute(
 
                 is SearchEffect.ProfilePaused -> {
                     currentOnProfilePaused(effect.app)
+                }
+
+                SearchEffect.OpenSettings -> {
+                    currentOnOpenSettings()
+                }
+
+                SearchEffect.ContactOpenFailed -> {
+                    launch { snackbar.showSnackbar(resources.getString(R.string.search_contact_failed)) }
                 }
 
                 is SearchEffect.LaunchFailed -> {
@@ -325,6 +351,23 @@ fun SearchScreen(
             if (state.noResults) {
                 item(key = "no_results") { NoResults(state.query) }
                 if (state.showStoreRow) item(key = "store") { StoreRow { onAction(SearchAction.StoreSearch) } }
+                if (state.showContactsHint) {
+                    item(key = "contacts_hint") { ContactsHintRow { onAction(SearchAction.ContactsHint) } }
+                }
+            }
+            // FR-SEARCH-06: up to 5 contacts below the apps, appended when they arrive.
+            if (!state.isBlank && state.contacts.isNotEmpty()) {
+                item(key = "contacts_header") { ContactsHeader() }
+                val contacts = state.contacts
+                items(count = contacts.size, key = { "contact_" + it + "_" + contacts[it].lookupUri.hashCode() }) { i ->
+                    val contact = contacts[i]
+                    ContactRow(
+                        contact = contact,
+                        index = i,
+                        selected = state.selected == state.items.size + i,
+                        onOpen = { origin -> onAction(SearchAction.OpenContact(contact, origin)) },
+                    )
+                }
             }
         }
     }
@@ -493,6 +536,113 @@ private fun NoResults(query: String) {
                 .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 12.dp)
                 .testTag(SearchTestTags.NO_RESULTS),
     )
+}
+
+@Composable
+private fun ContactsHeader() {
+    val theme = Strata.theme
+    Text(
+        text = stringResource(R.string.search_contacts_header),
+        style = Strata.typography.section,
+        color = Strata.colors.textSecondary,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 32.dp)
+                .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp)
+                .semantics { heading() }
+                .testTag(SearchTestTags.CONTACTS_HEADER),
+    )
+}
+
+/** FR-SEARCH-06: the contact's photo (or a monogram) and name. One accessibility node; tap opens the contact. */
+@Composable
+private fun ContactRow(
+    contact: ContactHit,
+    index: Int,
+    selected: Boolean,
+    onOpen: (LaunchOrigin?) -> Unit,
+) {
+    val view = LocalView.current
+    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val theme = Strata.theme
+    val colors = Strata.colors
+    val size =
+        theme.icons.sizeDp
+            .coerceAtLeast(24)
+            .dp
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .then(if (selected) Modifier.border(2.dp, colors.accent) else Modifier)
+                .clickable(role = Role.Button) { onOpen(coordinates[0]?.let { originOf(it, view) }) }
+                .onGloballyPositioned { coordinates[0] = it }
+                .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp)
+                .semantics(mergeDescendants = true) {}
+                .testTag(SearchTestTags.contact(index)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        val bitmap = contact.photo?.native as? Bitmap
+        if (bitmap != null) {
+            Image(
+                bitmap = remember(bitmap) { bitmap.asImageBitmap() },
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(size).clip(CircleShape),
+            )
+        } else {
+            Box(
+                modifier = Modifier.size(size).clip(CircleShape).background(colors.surface),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = contact.name.firstGrapheme(),
+                    style = Strata.typography.label,
+                    color = colors.textSecondary,
+                )
+            }
+        }
+        Text(
+            text = contact.name,
+            style = Strata.typography.label,
+            color = colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+private fun String.firstGrapheme(): String {
+    val t = trim()
+    if (t.isEmpty()) return ""
+    val end = t.offsetByCodePoints(0, 1)
+    return t.substring(0, end).uppercase()
+}
+
+/** INTERACTION_SPEC §8: the one-time contact hint under "No apps match". Opens Settings. */
+@Composable
+private fun ContactsHintRow(onClick: () -> Unit) {
+    val theme = Strata.theme
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 8.dp)
+                .testTag(SearchTestTags.CONTACTS_HINT),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = stringResource(R.string.search_contacts_hint),
+            style = Strata.typography.label,
+            color = Strata.colors.accent,
+        )
+    }
 }
 
 /** FR-SEARCH-07 hand-off row. */

@@ -9,6 +9,7 @@ import app.strata.launcher.testing.fakes.FakeAppCatalog
 import app.strata.launcher.testing.fakes.FakeAppLauncher
 import app.strata.launcher.testing.fakes.FakeAppListSource
 import app.strata.launcher.testing.fakes.FakeClock
+import app.strata.launcher.testing.fakes.FakeContactsSource
 import app.strata.launcher.testing.fakes.FakeLaunchLogRepository
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import app.strata.launcher.testing.fakes.FakeSystemIntents
@@ -27,6 +28,7 @@ class SearchHarness(
     settings: Settings = Settings(onboardingDone = true),
     storeHandler: Boolean = true,
     dispatcher: CoroutineDispatcher = Dispatchers.Unconfined,
+    val contacts: FakeContactsSource? = null,
 ) {
     val clock = FakeClock()
     val appList = FakeAppListSource(listOf(apps))
@@ -46,6 +48,7 @@ class SearchHarness(
             systemIntents = intents,
             defaultDispatcher = dispatcher,
             ioDispatcher = dispatcher,
+            contacts = contacts,
         )
 
     fun app(label: String): VisibleApp =

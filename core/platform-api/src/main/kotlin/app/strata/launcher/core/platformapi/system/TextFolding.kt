@@ -48,6 +48,12 @@ interface SystemIntents {
     fun uninstallStrata(): LaunchResult
 
     /**
+     * Strata's own App info page (`ACTION_APPLICATION_DETAILS_SETTINGS`): where a denied permission is allowed again
+     * (FR-SEARCH-06) and, on Android 13+ for a sideloaded app, "Allow restricted settings" is turned on (J-09).
+     */
+    fun strataAppDetails(): LaunchResult
+
+    /**
      * Share sheet for a `content:` URI from [SharedFiles] (FR-THEME-23): `ACTION_SEND` with `EXTRA_STREAM`, [mimeType]
      * and `FLAG_GRANT_READ_URI_PERMISSION`, in a chooser titled [title].
      */

@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,6 +39,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
+import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.ui.Strata
 import kotlinx.coroutines.flow.Flow
@@ -55,6 +58,19 @@ object SettingsTestTags {
     const val UNINSTALL_STRATA = "settings_uninstall_strata"
     const val UNINSTALL_GUIDANCE = "settings_uninstall_guidance"
     const val UNINSTALL_GUIDANCE_CONTINUE = "settings_uninstall_guidance_continue"
+    const val BADGES = "settings_badges"
+    const val BADGES_NOT_ALLOWED = "settings_badges_not_allowed"
+    const val BADGES_OPEN_ACCESS = "settings_badges_open_access"
+    const val BADGES_UNSUPPORTED = "settings_badges_unsupported"
+    const val BADGE_DISCLOSURE = "settings_badge_disclosure"
+    const val BADGE_CONTINUE = "settings_badge_continue"
+    const val BADGE_STYLE_DOT = "settings_badge_style_dot"
+    const val BADGE_STYLE_COUNT = "settings_badge_style_count"
+    const val CONTACTS = "settings_contacts"
+    const val CONTACTS_PERMISSION_NEEDED = "settings_contacts_permission_needed"
+    const val CONTACTS_DISCLOSURE = "settings_contacts_disclosure"
+    const val CONTACTS_CONTINUE = "settings_contacts_continue"
+    const val APP_DETAILS = "settings_app_details"
 
     fun toggle(t: Toggle) = "settings_toggle_${t.name.lowercase()}"
 
@@ -87,9 +103,15 @@ fun SettingsRoute(
             val text =
                 when (effect) {
                     SettingsEffect.HistoryCleared -> R.string.settings_history_cleared
+
                     SettingsEffect.NoHandler -> R.string.settings_no_handler
+
                     SettingsEffect.WriteFailed -> R.string.settings_write_failed
-                    SettingsEffect.SetDefault, is SettingsEffect.OpenHomeSettings -> null
+
+                    SettingsEffect.SetDefault,
+                    is SettingsEffect.OpenHomeSettings,
+                    SettingsEffect.RequestContacts,
+                    -> null
                 }
             if (text != null) {
                 Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
@@ -114,6 +136,8 @@ fun SettingsRoute(
             SettingsPage.HIDDEN_APPS -> HiddenAppsPage(state, onAction)
         }
         if (state.showLockDisclosure) LockDisclosure(onAction)
+        if (state.optional.showBadgeDisclosure) BadgeDisclosure(state.optional.restrictedSettingsHint, onAction)
+        if (state.optional.showContactsDisclosure) ContactsDisclosure(onAction)
         if (state.showUninstallGuidance) UninstallGuidance(onAction)
     }
 }
@@ -165,6 +189,7 @@ private fun SettingsRoot(
         group(R.string.settings_group_search) {
             toggle(Toggle.SHOW_HIDDEN_IN_SEARCH, R.string.settings_show_hidden, s, onAction)
             toggle(Toggle.RECENTS, R.string.settings_recents, s, onAction)
+            if (state.optional.contactsPermission != null) contactsRows(state, onAction)
         }
         group(R.string.settings_group_gestures) {
             toggle(Toggle.HAPTICS, R.string.settings_haptics, s, onAction)
@@ -200,6 +225,9 @@ private fun SettingsRoot(
                     }
                 }
             }
+        }
+        if (state.optional.badgeAccess != null) {
+            group(R.string.settings_group_notifications) { badgeRows(state, onAction) }
         }
         group(R.string.settings_group_apps) {
             item {
@@ -309,6 +337,158 @@ private fun LockDisclosure(onAction: (SettingsAction) -> Unit) {
     )
 }
 
+/** FR-NOTIF-01…03 rows: "Show badges" with its J-09 states, then the style (FR-NOTIF-02). */
+private fun LazyListScope.badgeRows(
+    state: SettingsUiState,
+    onAction: (SettingsAction) -> Unit,
+) {
+    val s = state.settings ?: return
+    if (state.badgesUnsupported) {
+        // FR-NOTIF-03 / T-NOTIF-06: the feature is absent, with an explanation.
+        item(key = "badges_unsupported") {
+            NoteRow(stringResource(R.string.settings_badges_unsupported), SettingsTestTags.BADGES_UNSUPPORTED)
+        }
+        return
+    }
+    item(key = "badges") {
+        SwitchRow(
+            title = stringResource(R.string.settings_badges),
+            summary =
+                stringResource(
+                    if (state.badgesNotAllowed) {
+                        R.string.settings_badges_not_allowed
+                    } else {
+                        R.string.settings_badges_summary
+                    },
+                ),
+            checked = state.badgesOn,
+            onChange = { onAction(SettingsAction.Badges(it)) },
+            tag = SettingsTestTags.BADGES,
+        )
+    }
+    if (state.badgesNotAllowed) {
+        item(key = "badges_open_access") {
+            ActionRow(
+                title = stringResource(R.string.settings_badges_open_access),
+                summary =
+                    if (state.optional.restrictedSettingsHint) {
+                        stringResource(R.string.settings_badges_restricted_hint)
+                    } else {
+                        null
+                    },
+                tag = SettingsTestTags.BADGES_OPEN_ACCESS,
+            ) { onAction(SettingsAction.OpenBadgeAccess) }
+        }
+        if (state.optional.restrictedSettingsHint) {
+            item(key = "badges_app_details") {
+                ActionRow(stringResource(R.string.settings_open_app_info), null, SettingsTestTags.APP_DETAILS) {
+                    onAction(SettingsAction.OpenAppDetails)
+                }
+            }
+        }
+    }
+    if (state.badgesOn) {
+        item(key = "badge_style_dot") {
+            RadioRow(
+                title = stringResource(R.string.settings_badge_style_dot),
+                selected = s.badgeStyle == BadgeStyle.DOT,
+                tag = SettingsTestTags.BADGE_STYLE_DOT,
+            ) { onAction(SettingsAction.SetBadgeStyle(BadgeStyle.DOT)) }
+        }
+        item(key = "badge_style_count") {
+            RadioRow(
+                title = stringResource(R.string.settings_badge_style_count),
+                selected = s.badgeStyle == BadgeStyle.COUNT,
+                tag = SettingsTestTags.BADGE_STYLE_COUNT,
+            ) { onAction(SettingsAction.SetBadgeStyle(BadgeStyle.COUNT)) }
+        }
+    }
+}
+
+/** FR-SEARCH-06: "Contacts in search" with the T-SEARCH-14 "Permission needed" note. */
+private fun LazyListScope.contactsRows(
+    state: SettingsUiState,
+    onAction: (SettingsAction) -> Unit,
+) {
+    item(key = "contacts") {
+        SwitchRow(
+            title = stringResource(R.string.settings_contacts),
+            summary =
+                stringResource(
+                    if (state.contactsPermissionNeeded) {
+                        R.string.settings_contacts_permission_needed
+                    } else {
+                        R.string.settings_contacts_summary
+                    },
+                ),
+            checked = state.contactsOn,
+            onChange = { onAction(SettingsAction.Contacts(it)) },
+            tag = SettingsTestTags.CONTACTS,
+        )
+    }
+    if (state.contactsPermissionNeeded) {
+        item(key = "contacts_app_details") {
+            ActionRow(
+                title = stringResource(R.string.settings_open_app_info),
+                summary = stringResource(R.string.settings_contacts_app_info_summary),
+                tag = SettingsTestTags.CONTACTS_PERMISSION_NEEDED,
+            ) { onAction(SettingsAction.OpenAppDetails) }
+        }
+    }
+}
+
+/** J-09 S-DISC: what is read, that it stays in memory, and that nothing is stored or sent. */
+@Composable
+private fun BadgeDisclosure(
+    restrictedHint: Boolean,
+    onAction: (SettingsAction) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { onAction(SettingsAction.DismissBadgeDisclosure) },
+        title = { Text(text = stringResource(R.string.settings_badge_disclosure_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = stringResource(R.string.settings_badge_disclosure_body))
+                if (restrictedHint) Text(text = stringResource(R.string.settings_badges_restricted_hint))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onAction(SettingsAction.AcceptBadgeDisclosure) },
+                modifier = Modifier.testTag(SettingsTestTags.BADGE_CONTINUE),
+            ) { Text(text = stringResource(R.string.settings_continue)) }
+        },
+        dismissButton = {
+            TextButton(onClick = { onAction(SettingsAction.DismissBadgeDisclosure) }) {
+                Text(text = stringResource(R.string.settings_cancel))
+            }
+        },
+        modifier = Modifier.testTag(SettingsTestTags.BADGE_DISCLOSURE),
+    )
+}
+
+/** S-DISC for contacts (FR-SEARCH-06): asked before the runtime permission dialog. */
+@Composable
+private fun ContactsDisclosure(onAction: (SettingsAction) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onAction(SettingsAction.DismissContactsDisclosure) },
+        title = { Text(text = stringResource(R.string.settings_contacts_disclosure_title)) },
+        text = { Text(text = stringResource(R.string.settings_contacts_disclosure_body)) },
+        confirmButton = {
+            TextButton(
+                onClick = { onAction(SettingsAction.AcceptContactsDisclosure) },
+                modifier = Modifier.testTag(SettingsTestTags.CONTACTS_CONTINUE),
+            ) { Text(text = stringResource(R.string.settings_continue)) }
+        },
+        dismissButton = {
+            TextButton(onClick = { onAction(SettingsAction.DismissContactsDisclosure) }) {
+                Text(text = stringResource(R.string.settings_cancel))
+            }
+        },
+        modifier = Modifier.testTag(SettingsTestTags.CONTACTS_DISCLOSURE),
+    )
+}
+
 /** FR-SET-02: the user must switch the home app before Strata can be uninstalled. */
 @Composable
 private fun UninstallGuidance(onAction: (SettingsAction) -> Unit) {
@@ -404,6 +584,42 @@ private fun SwitchRow(
         }
         Switch(checked = checked, onCheckedChange = null)
     }
+}
+
+@Composable
+private fun RadioRow(
+    title: String,
+    selected: Boolean,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(text = title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun NoteRow(
+    text: String,
+    tag: String,
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = Strata.colors.textSecondary,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp).testTag(tag),
+    )
 }
 
 @Composable

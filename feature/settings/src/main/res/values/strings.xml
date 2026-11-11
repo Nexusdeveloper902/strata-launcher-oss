@@ -28,6 +28,24 @@
     <string name="settings_continue">Continue</string>
     <string name="settings_cancel">Cancel</string>
 
+    <string name="settings_group_notifications">Notifications</string>
+    <string name="settings_badges">Show badges</string>
+    <string name="settings_badges_summary">A dot or a number on apps that have notifications.</string>
+    <string name="settings_badges_not_allowed">Not allowed. Strata needs notification access to show badges.</string>
+    <string name="settings_badges_open_access">Open settings</string>
+    <string name="settings_badges_restricted_hint">If Android says this setting is restricted, open Strata\'s App info, tap the menu and choose \"Allow restricted settings\", then try again.</string>
+    <string name="settings_badges_unsupported">Notification badges aren\'t available on this device. Android doesn\'t allow notification access on low-memory devices with this Android version.</string>
+    <string name="settings_badge_style_dot">Dot</string>
+    <string name="settings_badge_style_count">Number</string>
+    <string name="settings_badge_disclosure_title">Allow Strata to see your notifications?</string>
+    <string name="settings_badge_disclosure_body">To show badges, Strata needs notification access. Android then lets Strata see all your notifications, including their text. Strata only counts them per app: it never reads, stores, logs or backs up what they say, and it has no internet access. You allow access on the next screen and can turn it off there at any time.</string>
+    <string name="settings_contacts">Contacts in search</string>
+    <string name="settings_contacts_summary">Show up to 5 matching contacts below the apps.</string>
+    <string name="settings_contacts_permission_needed">Permission needed. Strata can\'t read your contacts, so contact search is off.</string>
+    <string name="settings_contacts_app_info_summary">Allow Contacts in Strata\'s permissions, then turn this on again.</string>
+    <string name="settings_contacts_disclosure_title">Search your contacts?</string>
+    <string name="settings_contacts_disclosure_body">Strata will ask Android for permission to read your contacts. Names and photos are looked up only while you type in search. Nothing is copied, stored, logged or sent anywhere, and Strata has no internet access.</string>
+    <string name="settings_open_app_info">Open App info</string>
     <string name="settings_group_apps">Apps</string>
     <string name="settings_hidden_apps">Hidden apps</string>
     <plurals name="settings_hidden_count">

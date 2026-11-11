@@ -15,10 +15,14 @@ import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
+import app.strata.launcher.core.platformapi.system.ContactHit
+import app.strata.launcher.core.platformapi.system.ContactsSource
+import app.strata.launcher.core.platformapi.system.PermissionState
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.search.SearchIndex
 import app.strata.launcher.core.search.Transliterate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -29,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -60,13 +65,30 @@ data class SearchUiState(
     val badgeStyle: BadgeStyle = BadgeStyle.DOT,
     /** False until the results for [query] have been computed (no "no results" flash). */
     val settled: Boolean = true,
+    /** FR-SEARCH-06: at most 5 contacts for [query], below the apps; empty unless turned on and granted. */
+    val contacts: List<ContactHit> = emptyList(),
+    /** INTERACTION_SPEC §8: the one-time "search contacts too?" hint (contacts off, no app match, a name-like query). */
+    val showContactsHint: Boolean = false,
 ) {
     val isBlank: Boolean get() = query.isBlank()
 
     /** What the result list shows: recents for the blank query, else the ranked results. */
     val items: List<VisibleApp> get() = if (isBlank) recents else results
 
+    /** Keyboard selection covers the apps, then the contacts (FR-SEARCH-04). */
+    val selectableCount: Int get() = items.size + if (isBlank) 0 else contacts.size
+
+    /** No app matches the query; contact rows may still follow (FR-SEARCH-06 shows them below the apps). */
     val noResults: Boolean get() = !isBlank && settled && results.isEmpty()
+}
+
+/** INTERACTION_SPEC §8 "the query looks like a name": two or more letters, only letters, spaces, `'`, `-` or `.`. */
+object NameLikeQuery {
+    fun matches(query: String): Boolean {
+        val q = query.trim()
+        if (q.count { it.isLetter() } < 2) return false
+        return q.all { it.isLetter() || it == ' ' || it == '\'' || it == '-' || it == '.' || it == '’' }
+    }
 }
 
 sealed interface SearchAction {
@@ -87,6 +109,15 @@ sealed interface SearchAction {
 
     data class OpenAppInfo(val key: AppKey) : SearchAction
 
+    /** FR-SEARCH-06: a contact row; opens its lookup URI in the contacts app. */
+    data class OpenContact(val contact: ContactHit, val origin: LaunchOrigin?) : SearchAction
+
+    /** The contacts hint row: close search and open Settings, where contact search is turned on. */
+    data object ContactsHint : SearchAction
+
+    /** Activity `onResume`: `READ_CONTACTS` may have been granted or revoked in the system settings. */
+    data object Resume : SearchAction
+
     /** Esc / Back / close: back to the origin layer. */
     data object Close : SearchAction
 }
@@ -99,6 +130,12 @@ sealed interface SearchEffect {
 
     /** FR-APPS-09: a paused work app was chosen; home offers "Turn on work apps?". */
     data class ProfilePaused(val app: VisibleApp) : SearchEffect
+
+    /** No contacts app could open the result. */
+    data object ContactOpenFailed : SearchEffect
+
+    /** The contacts hint was tapped: home opens Settings. */
+    data object OpenSettings : SearchEffect
 }
 
 /**
@@ -108,7 +145,7 @@ sealed interface SearchEffect {
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchViewModel(
     appList: AppListSource,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
     private val launchLog: LaunchLogRepository,
     private val launcher: AppLauncher,
     private val catalog: AppCatalog,
@@ -116,8 +153,16 @@ class SearchViewModel(
     private val systemIntents: SystemIntents,
     private val defaultDispatcher: CoroutineDispatcher,
     private val ioDispatcher: CoroutineDispatcher,
+    /** FR-SEARCH-06; null = no contact results and no hint. */
+    private val contacts: ContactsSource? = null,
 ) : ViewModel() {
     private val query = MutableStateFlow("")
+
+    /** `READ_CONTACTS`, read when the layer opens and on resume (never requested here: T-SEARCH-12). */
+    private val contactsPermitted = MutableStateFlow(contacts?.permission() == PermissionState.GRANTED)
+
+    /** The hint was shown in this search session: it stays until the layer closes, then never again. */
+    private val hintSession = MutableStateFlow(false)
     private val selected = MutableStateFlow(0)
     private val storeAvailable = MutableStateFlow(false)
     private val effectChannel = Channel<SearchEffect>(Channel.BUFFERED)
@@ -221,31 +266,105 @@ class SearchViewModel(
                     .take(MAX_RECENTS)
             }.distinctUntilChanged()
 
+    private data class ContactResults(val query: String, val hits: List<ContactHit>)
+
+    /** FR-SEARCH-06 on: the setting and the permission (settings field 15 is "effective only while granted"). */
+    private val contactsOn: Flow<Boolean> =
+        combine(
+            currentSettings.map { it?.contactsSearchEnabled == true }.distinctUntilChanged(),
+            contactsPermitted,
+        ) { enabled, permitted -> enabled && permitted && contacts != null }.distinctUntilChanged()
+
+    /**
+     * ARCHITECTURE §8: contacts run beside the app ranking, cancelled by the next keystroke (`mapLatest`); the app
+     * results never wait for them. Memory only.
+     */
+    private val contactResults: Flow<ContactResults?> =
+        combine(query, contactsOn) { q, on -> q to on }
+            .mapLatest { (q, on) ->
+                val source = contacts
+                if (!on || source == null || q.isBlank()) return@mapLatest ContactResults(q, emptyList())
+                val hits =
+                    try {
+                        source.search(q, ContactsSource.MAX_RESULTS).take(ContactsSource.MAX_RESULTS)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                ContactResults(q, hits)
+            }
+
+    private data class Extras(
+        val selected: Int,
+        val store: Boolean,
+        val contacts: ContactResults?,
+        val hintSession: Boolean,
+    )
+
     val state: StateFlow<SearchUiState> =
         combine(
             query,
             ranked.onStart { emit(null) },
             recents.onStart { emit(emptyList()) },
-            combine(selected, storeAvailable) { s, store -> s to store },
-            currentSettings.map { it?.badgeStyle ?: BadgeStyle.DOT },
-        ) { q, r, rec, (sel, store), badge ->
+            combine(selected, storeAvailable, contactResults.onStart { emit(null) }, hintSession, ::Extras),
+            currentSettings,
+        ) { q, r, rec, extras, s ->
             val settled = r != null && r.query == q
             val results = if (settled) r.results else r?.results.orEmpty()
             val items = if (q.isBlank()) rec else results
+            // Contact rows belong to the query they were found for; stale names never show under a new query.
+            val contactHits =
+                extras.contacts
+                    ?.takeIf { it.query == q && q.isNotBlank() }
+                    ?.hits
+                    .orEmpty()
+            val noResults = q.isNotBlank() && settled && results.isEmpty()
+            val hint =
+                contacts != null && s != null && !s.contactsSearchEnabled && noResults &&
+                    (extras.hintSession || !s.contactsHintShown) && NameLikeQuery.matches(q)
+            val selectable = items.size + if (q.isBlank()) 0 else contactHits.size
             SearchUiState(
                 query = q,
                 results = results,
                 recents = rec,
-                showStoreRow = store && settled && q.isNotBlank() && results.isEmpty(),
-                selected = sel.coerceIn(0, (items.size - 1).coerceAtLeast(0)),
-                badgeStyle = badge,
+                showStoreRow = extras.store && noResults,
+                selected = extras.selected.coerceIn(0, (selectable - 1).coerceAtLeast(0)),
+                badgeStyle = s?.badgeStyle ?: BadgeStyle.DOT,
                 settled = settled || q.isBlank(),
+                contacts = contactHits,
+                showContactsHint = hint,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SearchUiState())
+
+    init {
+        // "Once" (INTERACTION_SPEC §8): the first time the hint shows, settings field 16 is set; the hint then stays
+        // for the rest of this search session only.
+        viewModelScope.launch {
+            state
+                .map { it.showContactsHint }
+                .distinctUntilChanged()
+                .filter { it }
+                .collect {
+                    hintSession.value = true
+                    if (currentSettings.value?.contactsHintShown != true) {
+                        try {
+                            settings.update { it.copy(contactsHintShown = true) }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Unit // shown again next time; nothing else depends on it
+                        }
+                    }
+                }
+        }
+    }
 
     fun onAction(action: SearchAction) {
         when (action) {
             is SearchAction.Open -> {
+                hintSession.value = false
+                refreshContactsPermission()
                 setQuery(action.seed)
                 viewModelScope.launch {
                     storeAvailable.value =
@@ -258,17 +377,32 @@ class SearchViewModel(
             }
 
             is SearchAction.MoveSelection -> {
-                val size = state.value.items.size
+                val size = state.value.selectableCount
                 if (size > 0) selected.update { (it + action.delta).coerceIn(0, size - 1) }
             }
 
             SearchAction.LaunchSelected -> {
                 val s = state.value
                 val app = s.items.getOrNull(s.selected)
+                val contact = if (s.isBlank) null else s.contacts.getOrNull(s.selected - s.items.size)
                 when {
                     app != null -> launch(app, null)
+                    contact != null -> openContact(contact, null)
                     s.showStoreRow -> storeSearch()
                 }
+            }
+
+            is SearchAction.OpenContact -> {
+                openContact(action.contact, action.origin)
+            }
+
+            SearchAction.ContactsHint -> {
+                effectChannel.trySend(SearchEffect.OpenSettings)
+                close()
+            }
+
+            SearchAction.Resume -> {
+                refreshContactsPermission()
             }
 
             is SearchAction.Launch -> {
@@ -289,12 +423,34 @@ class SearchViewModel(
         }
     }
 
+    private fun refreshContactsPermission() {
+        contactsPermitted.value = contacts?.permission() == PermissionState.GRANTED
+    }
+
+    /** FR-SEARCH-06: the contacts app shows the contact; search closes like after an app launch (J-04). */
+    private fun openContact(
+        contact: ContactHit,
+        origin: LaunchOrigin?,
+    ) {
+        val source = contacts ?: return
+        if (source.open(
+                contact,
+                origin,
+            ) is Outcome.Ok
+        ) {
+            close()
+        } else {
+            effectChannel.trySend(SearchEffect.ContactOpenFailed)
+        }
+    }
+
     private fun setQuery(text: String) {
         query.value = text
         selected.value = 0
     }
 
     private fun close() {
+        hintSession.value = false
         setQuery("")
         effectChannel.trySend(SearchEffect.Close)
     }

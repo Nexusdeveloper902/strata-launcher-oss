@@ -14,4 +14,7 @@
     <string name="search_launch_failed_app_info">App info</string>
     <string name="search_private_tag">Private space</string>
     <string name="search_paused_tag">Paused</string>
+    <string name="search_contacts_header">Contacts</string>
+    <string name="search_contacts_hint">Search your contacts too? Turn it on in Settings</string>
+    <string name="search_contact_failed">No app can open this contact</string>
 </resources>
