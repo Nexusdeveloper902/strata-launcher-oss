@@ -11,12 +11,15 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
@@ -277,6 +280,12 @@ class OptionalAccessDeviceTest {
         compose.waitUntil(STALL_MS) { fixtureBadge() >= 2 }
         assertThat(fixtureBadge()).isEqualTo(2)
         instrumentation.runOnMainSync { vm().onAction(HomeAction.OpenList) }
+        // The fixture row ("Strata shortcut fixture") is far down the A–Z list; a lazy list composes only what is on
+        // screen, so scroll to it first (GMD API 26, run 42960033351: the off-screen row had no node to find).
+        compose.waitUntil(STALL_MS) { count(AppListTestTags.LIST) > 0 }
+        compose
+            .onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollToIndex))
+            .performScrollToNode(hasTestTag(AppListTestTags.row(app)))
         compose.waitUntil(STALL_MS) {
             compose
                 .onAllNodes(
