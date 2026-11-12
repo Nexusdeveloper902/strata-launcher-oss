@@ -212,12 +212,12 @@ private fun ProviderRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .testTag(WidgetTestTags.provider(provider.ref.component))
                 .clickable(enabled = enabled, onClick = onClick)
                 .clearAndSetSemantics {
                     contentDescription = description
                     role = Role.Button
-                }.padding(horizontal = 16.dp, vertical = 8.dp)
-                .testTag(WidgetTestTags.provider(provider.ref.component)),
+                }.padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {

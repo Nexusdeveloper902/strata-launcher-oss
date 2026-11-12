@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.VisibleForTesting
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -144,11 +145,16 @@ class WidgetPickerActivity : ComponentActivity() {
         data: Intent?,
     ) {
         if (requestCode == REQUEST_CONFIGURE) {
-            // ANDROID_PLATFORM §7: only OK counts; cancel, RESULT_FIRST_USER and a crashed activity are a cancel.
-            viewModel.onConfigureResult(resultCode == Activity.RESULT_OK)
+            deliverConfigureResult(resultCode)
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    /** ANDROID_PLATFORM §7: only OK counts; cancel, RESULT_FIRST_USER and a crashed activity are a cancel. */
+    @VisibleForTesting
+    internal fun deliverConfigureResult(resultCode: Int) {
+        viewModel.onConfigureResult(resultCode == Activity.RESULT_OK)
     }
 
     override fun onStop() {
