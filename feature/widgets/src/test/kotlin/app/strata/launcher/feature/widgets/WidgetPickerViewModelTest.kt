@@ -167,6 +167,16 @@ class WidgetPickerViewModelTest {
         assertThat(host.inFlight).isEmpty() // settled: the orphan sweep may now judge it by the placement
     }
 
+    /** A duplicate configure answer (two activity results for one start) runs the flow once. */
+    @Test
+    fun duplicateConfigureAnswerIsIgnored() {
+        val vm = vm()
+        vm.onAction(WidgetPickerAction.Pick(notes.ref))
+        vm.onConfigureResult(false)
+        vm.onConfigureResult(false)
+        assertThat(effects.count { it == WidgetPickerEffect.NotAdded }).isEqualTo(1)
+    }
+
     @Test
     fun abandonFreesTheIdInFlight() {
         val vm = vm()

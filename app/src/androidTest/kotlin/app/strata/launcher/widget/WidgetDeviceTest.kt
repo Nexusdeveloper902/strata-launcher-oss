@@ -390,15 +390,13 @@ class WidgetDeviceTest {
         grantBind()
         openPickerFromHomeMenu()
         pick(backConfig)
-        assertWithMessage(
-            "configure activity",
-        ).that(
+        val shown =
             device.wait(
                 androidx.test.uiautomator.Until
                     .hasObject(By.text(FixtureConfigureActivity.LABEL)),
                 STALL_MS,
-            ),
-        ).isTrue()
+            )
+        assertWithMessage("configure activity shown. ${focusReport()}").that(shown).isTrue()
         device.pressBack()
         waitNotAdded()
         assertThat(hostIds()).isEmpty()
@@ -414,14 +412,20 @@ class WidgetDeviceTest {
         waitNotAdded()
         assertThat(hostIds()).isEmpty()
         pick(crashConfig)
+        // Treated as cancel: the ID is freed and nothing is placed. API 26 may show the "has stopped" dialog for the
+        // fixture despite hide_error_dialogs. On API 36 the system's crash handling also finishes the picker (the
+        // activity below the crashed one in its task, CI run 43161519075); the picker then frees the ID as it finishes.
+        // Either way the flow ends: no picker is busy any more.
         compose.waitUntil(STALL_MS) {
-            // API 26 may show the "has stopped" dialog for the fixture despite hide_error_dialogs.
             app.strata.launcher.closeSystemErrorDialog(device)
             !pickerBusy() && hostIds().isEmpty()
         }
         assertThat(placement()).isNull()
-        // Strata is alive and its picker is still usable.
-        assertThat(count(WidgetTestTags.PICKER_LIST)).isEqualTo(1)
+        // No crash of Strata: its picker or home is in front again.
+        compose.waitUntil(STALL_MS) {
+            app.strata.launcher.closeSystemErrorDialog(device)
+            count(WidgetTestTags.PICKER_LIST) == 1 || app.strata.launcher.resumedHomeActivity() != null
+        }
     }
 
     @Test

@@ -69,6 +69,13 @@ class AndroidWidgetHost(
     /** Provider info by bound ID, filled off main ([isBound], binds) so [hostView] needs no binder call. */
     private val infos = ConcurrentHashMap<Int, AppWidgetProviderInfo>()
 
+    /**
+     * Provider info from the last [providers] call. Previews and icons read it instead of listing every provider again
+     * for each row: many rows at once each fetching the full list ran the binder buffer out on API 36
+     * (DeadObjectException in CI run 43161519075). Binding always reads the current list.
+     */
+    private val listed = ConcurrentHashMap<WidgetProviderRef, AppWidgetProviderInfo>()
+
     /** IDs allocated by a bind flow and not placed yet: the orphan sweep leaves them alone. */
     private val inFlight: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
@@ -97,6 +104,7 @@ class AndroidWidgetHost(
             val manager = manager ?: return@withContext emptyList()
             val pm = appContext.packageManager
             val out = mutableListOf<WidgetProviderModel>()
+            val seen = HashMap<WidgetProviderRef, AppWidgetProviderInfo>()
             for (user in profiles()) {
                 // P-5: nothing of the private space is ever persisted; a profile of unknown type is skipped (fail closed).
                 val kind = kindOf(user)?.takeIf { it != ProfileKind.PRIVATE } ?: continue
@@ -108,9 +116,11 @@ class AndroidWidgetHost(
                         guard("app label") {
                             pm.getApplicationLabel(pm.getApplicationInfo(info.provider.packageName, 0)).toString()
                         } ?: info.provider.packageName
+                    val ref = WidgetProviderRef(info.provider.flattenToString(), serial)
+                    seen[ref] = info
                     out +=
                         WidgetProviderModel(
-                            ref = WidgetProviderRef(info.provider.flattenToString(), serial),
+                            ref = ref,
                             label = guard("label") { info.loadLabel(pm) } ?: info.provider.className,
                             appLabel = appLabel,
                             profileKind = kind,
@@ -120,6 +130,8 @@ class AndroidWidgetHost(
                         )
                 }
             }
+            listed.clear()
+            listed.putAll(seen)
             out
         }
 
@@ -138,7 +150,7 @@ class AndroidWidgetHost(
                     }
                 if (generated != null) return@withContext WidgetPreview.Generated(generated)
             }
-            val info = findInfo(ref, user) ?: return@withContext WidgetPreview.None
+            val info = listed[ref] ?: findInfo(ref, user) ?: return@withContext WidgetPreview.None
             val dpi = appContext.resources.displayMetrics.densityDpi
             val drawable =
                 decode("preview image") { info.loadPreviewImage(appContext, dpi) }
@@ -153,7 +165,7 @@ class AndroidWidgetHost(
     ): IconImage? =
         withContext(io) {
             val user = userFor(ref) ?: return@withContext null
-            val info = findInfo(ref, user) ?: return@withContext null
+            val info = listed[ref] ?: findInfo(ref, user) ?: return@withContext null
             val drawable =
                 decode("icon") { info.loadIcon(appContext, appContext.resources.displayMetrics.densityDpi) }
                     ?: return@withContext null

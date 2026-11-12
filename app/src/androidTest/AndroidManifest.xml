@@ -15,7 +15,10 @@
      the test package (a scrollable list via FixtureListService; the subclasses name the configure activities Back /
      RESULT_FIRST_USER / crash). Providers must be exported for the system's APPWIDGET_UPDATE; the list service is guarded
      by BIND_REMOTEVIEWS. WidgetFixtureReceiver turns a provider off and on (T-WIDGET-09), with the same sender check as
-     AccessFixtureReceiver. AGP uninstalls the test APK after a connected run. The permissions below belong to the test APK only, never to Strata; the tests grant
+     AccessFixtureReceiver. The crashing configure activity runs in its own process (":crash"): a crash in the fixture
+     receiver's process left it unanswering on API 26 (CI run 43161519075). The configure fixtures are not noHistory: a
+     transient loss of visibility must not finish them before the test answers them; teardown clears them by bringing
+     home to front. AGP uninstalls the test APK after a connected run. The permissions below belong to the test APK only, never to Strata; the tests grant
      them with `pm grant app.strata.launcher.test …`. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -100,7 +103,6 @@
         <activity
             android:name="app.strata.launcher.widget.FixtureConfigureActivity"
             android:exported="true"
-            android:noHistory="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
@@ -109,7 +111,6 @@
         <activity
             android:name="app.strata.launcher.widget.FixtureConfigureActivity$FirstUser"
             android:exported="true"
-            android:noHistory="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
@@ -118,7 +119,7 @@
         <activity
             android:name="app.strata.launcher.widget.FixtureConfigureActivity$Crash"
             android:exported="true"
-            android:noHistory="true"
+            android:process=":crash"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />

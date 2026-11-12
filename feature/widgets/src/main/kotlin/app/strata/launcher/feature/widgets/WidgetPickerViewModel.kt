@@ -113,7 +113,8 @@ class WidgetPickerViewModel(
     private val effectChannel = Channel<WidgetPickerEffect>(Channel.BUFFERED)
     val effects: Flow<WidgetPickerEffect> = effectChannel.receiveAsFlow()
 
-    private enum class Stage { CONSENT, CONFIGURE, ASK_CLOCK }
+    /** ANSWERED: the host is processing an answer for this ID; further answers are ignored. */
+    private enum class Stage { CONSENT, CONFIGURE, ASK_CLOCK, ANSWERED }
 
     private data class Pending(
         val id: Int,
@@ -138,6 +139,8 @@ class WidgetPickerViewModel(
         }
 
     init {
+        // An answer that was being processed when the process died never completes: free its ID.
+        pending?.takeIf { it.stage == Stage.ANSWERED }?.let { abandon() }
         val inFlight = pending
         mutable.update { it.copy(busy = inFlight != null, askReplaceClock = inFlight?.stage == Stage.ASK_CLOCK) }
         if (readd != null && handle.get<Boolean>(KEY_READD_STARTED) != true) {
@@ -192,13 +195,24 @@ class WidgetPickerViewModel(
 
     /** The answer of the consent dialog started for the pending ID (also after recreation or process death). */
     fun onConsentResult(ok: Boolean) {
-        val p = pending?.takeIf { it.stage == Stage.CONSENT } ?: return
+        val p = take(Stage.CONSENT) ?: return
         viewModelScope.launch { advance(host.onConsentResult(p.id, ok), p.ref) }
+    }
+
+    /**
+     * Takes the step in flight for [stage], synchronously (main): a second answer for the same step (a duplicate
+     * activity result) then finds nothing and is ignored. The ID is still recorded as consumed only once the host has
+     * answered, so [abandon] still frees it if the activity finishes meanwhile.
+     */
+    private fun take(stage: Stage): Pending? {
+        val p = pending?.takeIf { it.stage == stage } ?: return null
+        pending = p.copy(stage = Stage.ANSWERED)
+        return p
     }
 
     /** The answer of the configure activity; anything but OK (cancel, error, crash) is a cancel. */
     fun onConfigureResult(ok: Boolean) {
-        val p = pending?.takeIf { it.stage == Stage.CONFIGURE } ?: return
+        val p = take(Stage.CONFIGURE) ?: return
         viewModelScope.launch { advance(host.onConfigureResult(p.id, ok), p.ref) }
     }
 
