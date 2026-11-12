@@ -5,8 +5,13 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.StaleObjectException
@@ -15,7 +20,10 @@ import androidx.test.uiautomator.Until
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
 import app.strata.launcher.feature.home.HomeTestTags
+import app.strata.launcher.feature.onboarding.OnboardingStep
 import app.strata.launcher.feature.onboarding.OnboardingTestTags
+import app.strata.launcher.feature.onboarding.OnboardingViewModel
+import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.settings.SettingsActivity
 import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
@@ -67,31 +75,55 @@ class OnboardingDeviceTest {
     ): Boolean = device.wait(Until.hasObject(tag(t)), timeout)
 
     /**
-     * The current "Step n of 4" text, or null when the flow is gone. A `UiObject2` goes stale when compose replaces the
-     * node (a new step) or the layer is removed (Done); it is re-found on each attempt, never kept.
+     * The onboarding step the app is on: the [OnboardingViewModel] of the resumed activity that hosts the flow
+     * (SettingsActivity from the launcher icon, HomeActivity as its first layer), or null when none shows it. This is
+     * the real state; UiAutomator's view of the screen comes from the accessibility cache, which can lag behind it.
+     * CI run 43204723608 (API 34, tOnboard01): the Skip tap advanced the flow, but the cache kept "Step 2 of 4" and the
+     * old Skip node for 5 s; waiting on the cached text timed out and every click of the cached node was stale.
      */
-    private fun stepText(): String? {
-        repeat(STALE_RETRIES) {
-            try {
-                return device.findObject(tag(OnboardingTestTags.STEP))?.text
-            } catch (e: StaleObjectException) {
-                // Replaced between find and read: look again.
-            }
+    private fun liveStep(): OnboardingStep? {
+        var step: OnboardingStep? = null
+        instrumentation.runOnMainSync {
+            val host =
+                ActivityLifecycleMonitorRegistry
+                    .getInstance()
+                    .getActivitiesInStage(Stage.RESUMED)
+                    .filterIsInstance<ComponentActivity>()
+                    .firstOrNull { it is SettingsActivity || it is HomeActivity } ?: return@runOnMainSync
+            // Only an existing view model is read; the flow's host creates it in onCreate.
+            val vm =
+                runCatching { ViewModelProvider(host.viewModelStore, ExistingOnly)[OnboardingViewModel::class.java] }
+                    .getOrNull() ?: return@runOnMainSync
+            step = vm.state.value.step
         }
-        return null
+        return step
+    }
+
+    /** A factory that never creates: reading a view model the activity has not made fails instead. */
+    private object ExistingOnly : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = throw IllegalStateException("no view model")
+    }
+
+    /** Drops UiAutomator's accessibility cache (API 34+), so the next find reads the live tree. */
+    private fun freshTree() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) instrumentation.uiAutomation.clearCache()
     }
 
     /**
-     * Clicks [t] and waits until the step text shown before the click is gone (next step, or the flow ended), so the
-     * next look sees the next screen. Waits on a selector condition, which re-resolves the node itself.
+     * Clicks [t], then waits until the app's step changed (when the click moves the flow on), on real state.
+     * A click that only opens a dialog keeps the step; the wait then ends after [STEP_TIMEOUT_MS] as before.
      */
     private fun click(t: String) {
         assertThat(waitFor(t)).isTrue()
-        val before = stepText()
+        val before = liveStep()
         clickFresh(t)
         if (before != null) {
-            device.wait(Until.gone(By.res(OnboardingTestTags.STEP).text(before)), STEP_TIMEOUT_MS)
+            val end = android.os.SystemClock.uptimeMillis() + STEP_TIMEOUT_MS
+            while (liveStep() == before && android.os.SystemClock.uptimeMillis() < end) {
+                instrumentation.waitForIdleSync()
+            }
         }
+        freshTree()
         device.waitForIdle()
     }
 
@@ -104,7 +136,8 @@ class OnboardingDeviceTest {
                     return
                 }
             } catch (e: StaleObjectException) {
-                // Recomposed between find and click: find again.
+                // The cached node is gone from the live tree (recomposed, or the cache lags): read the live tree again.
+                freshTree()
             }
             device.wait(Until.hasObject(tag(t)), STEP_TIMEOUT_MS)
         }
@@ -146,12 +179,13 @@ class OnboardingDeviceTest {
         while (!onboardingDone() && screens < 6) {
             assertThat(permissionDialogShown()).isFalse()
             screens++
-            when {
-                device.hasObject(tag(OnboardingTestTags.WELCOME)) -> {
+            // Decide on the app's real step, not on the (possibly lagging) accessibility cache.
+            when (liveStep()) {
+                OnboardingStep.WELCOME -> {
                     click(OnboardingTestTags.CONTINUE)
                 }
 
-                device.hasObject(tag(OnboardingTestTags.SKIP)) -> {
+                OnboardingStep.FAVORITES -> {
                     click(OnboardingTestTags.SKIP)
                 }
 
@@ -199,8 +233,11 @@ class OnboardingDeviceTest {
         click(OnboardingTestTags.CONTINUE)
         assertThat(waitFor(OnboardingTestTags.DONE)).isTrue()
         click(OnboardingTestTags.CONTINUE)
-        assertThat(device.wait(Until.gone(tag(OnboardingTestTags.ROOT)), 10_000)).isTrue()
+        // Real state: the flow stores `onboarding_done`, then home removes the layer (the cache may still show it).
+        val end = android.os.SystemClock.uptimeMillis() + 10_000
+        while (!onboardingDone() && android.os.SystemClock.uptimeMillis() < end) instrumentation.waitForIdleSync()
         assertThat(onboardingDone()).isTrue()
+        freshTree()
         assertThat(waitFor(HomeTestTags.ROOT)).isTrue()
     }
 
