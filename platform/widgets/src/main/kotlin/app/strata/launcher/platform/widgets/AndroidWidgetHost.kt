@@ -1,6 +1,7 @@
 package app.strata.launcher.platform.widgets
 
 import android.app.Activity
+import android.app.ActivityOptions
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
@@ -318,7 +319,7 @@ class AndroidWidgetHost(
     ): Boolean {
         val a = activity as? Activity ?: return false
         return try {
-            host.startAppWidgetConfigureActivityForResult(a, id, 0, requestCode, null)
+            host.startAppWidgetConfigureActivityForResult(a, id, 0, requestCode, configureOptions())
             true
         } catch (e: ActivityNotFoundException) {
             logger.w(TAG, "no configure activity", e)
@@ -327,6 +328,32 @@ class AndroidWidgetHost(
             logger.w(TAG, "configure activity could not start", e)
             false
         }
+    }
+
+    /**
+     * API 34+: `startAppWidgetConfigureActivityForResult` sends an IntentSender whose creator is the provider's app,
+     * which is usually in the background. Since Android 14 the sender's (our foreground) right to start activities only
+     * applies when the sender opts in; without it the start is aborted and RESULT_CANCELED arrives at once, so the
+     * configure screen never appears (CI run 43204723608, API 34). ANDROID_PLATFORM §4: `ALLOW_IF_VISIBLE` on 36+
+     * (`ALLOWED` is deprecated there), `ALLOWED` on 34–35. The picker is visible whenever this is called.
+     */
+    private fun configureOptions(): Bundle? {
+        val mode =
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA -> {
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+                }
+
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> {
+                    @Suppress("DEPRECATION")
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                }
+
+                else -> {
+                    return null
+                }
+            }
+        return ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(mode).toBundle()
     }
 
     /**

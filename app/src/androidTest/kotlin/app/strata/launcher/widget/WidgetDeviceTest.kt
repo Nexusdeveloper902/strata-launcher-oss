@@ -92,7 +92,23 @@ class WidgetDeviceTest {
     private val firstUserConfig = ComponentName(TEST_PACKAGE, FixtureWidgetProvider.FirstUserConfig::class.java.name)
     private val crashConfig = ComponentName(TEST_PACKAGE, FixtureWidgetProvider.CrashConfig::class.java.name)
 
-    private fun count(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().size
+    /**
+     * Nodes with [tag] in the resumed Compose hierarchies; 0 while none is resumed. Between two of our activities (the
+     * picker finishing, home not resumed yet) or while a system window is in front (the consent dialog), the rule finds
+     * no hierarchy and throws "No compose hierarchies found" instead of reporting nothing: in a wait that means "not
+     * yet" (CI run 43204723608: API 26 tWidget03 after Back on the consent dialog, API 36 tWidget09 after Re-add).
+     */
+    private fun count(tag: String) = nodes { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().size }
+
+    private fun countText(text: String) = nodes { compose.onAllNodesWithText(text).fetchSemanticsNodes().size }
+
+    private fun nodes(query: () -> Int): Int =
+        try {
+            query()
+        } catch (e: IllegalStateException) {
+            if (e.message?.startsWith("No compose hierarchies found") != true) throw e
+            0
+        }
 
     private fun hostIds(): List<Int> = AppWidgetHost(context, AndroidWidgetHost.HOST_ID).appWidgetIds.toList()
 
@@ -111,17 +127,12 @@ class WidgetDeviceTest {
         runCatching { compose.activityRule.scenario.onActivity { owned = it } }
         // A test that failed mid-flow may have left the consent dialog or a fixture configure activity in front: the
         // explicit start of home (singleTask) clears every activity above it in its task.
-        owned?.let { home -> if (!homeFocused(home)) runCatching { compose.bringHomeToFront(home, device) } }
+        // Always: bringHomeToFront returns at once when home is already focused, and otherwise waits until it is.
+        owned?.let { home -> compose.bringHomeToFront(home, device) }
         finishPickerAndFixtures()
         restore()
         replyThread.quitSafely()
         compose.coverForeignActivities(HomeActivity::class.java, owned)
-    }
-
-    private fun homeFocused(home: HomeActivity): Boolean {
-        var focused = false
-        instrumentation.runOnMainSync { focused = home.window.decorView.hasWindowFocus() }
-        return focused
     }
 
     /** Everything these tests change, put back synchronously. */
@@ -317,9 +328,7 @@ class WidgetDeviceTest {
 
     private fun waitNotAdded() {
         try {
-            compose.waitUntil(
-                STALL_MS,
-            ) { compose.onAllNodesWithText("Widget not added").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(STALL_MS) { countText("Widget not added") > 0 }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError("No \"Widget not added\". ${focusReport()}", e)
         }
