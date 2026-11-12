@@ -92,7 +92,13 @@ class DefaultBackupService(
     private val prepared = LinkedHashMap<String, Prepared>()
 
     override fun suggestedFileName(): String =
-        BackupFormat.fileName(LocalDate.ofInstant(Instant.ofEpochMilli(clock.nowMillis()), zone()))
+        // Not `LocalDate.ofInstant` (Java 9; on Android only from API 31).
+        BackupFormat.fileName(
+            Instant
+                .ofEpochMilli(clock.nowMillis())
+                .atZone(zone())
+                .toLocalDate(),
+        )
 
     // ---- start -----------------------------------------------------------------------------------------
 
