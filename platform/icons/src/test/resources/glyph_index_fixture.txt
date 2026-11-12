@@ -1,0 +1,8 @@
+# T-THEME-55 fixture index: present, shared, malformed and duplicate lines.
+com.example.mail envelope
+com.example.mail2 envelope   # shared glyph
+com.example.camera lens
+this line is malformed
+com.example.mail other       # duplicate package: skipped and reported
+Not.A-Package lens
+com.example.bad Bad-Id

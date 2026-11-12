@@ -2,7 +2,7 @@
 <!-- Strata Launcher. Skeleton: spec/ANDROID_PLATFORM.md §22 with the ARCHITECTURE §17 deltas.
      Components of §22 arrive with their milestones (M5: ThemeImportActivity, FileProvider; ThemesActivity is
      the non-exported theme library; M6: PinRequestActivity; M7: BadgeListenerService, WidgetHostRestoredReceiver,
-     and the non-exported WidgetPickerActivity). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
+     and the non-exported WidgetPickerActivity; M8: PermissionUsageActivity). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -90,6 +90,22 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Explains permission usage from the system privacy dashboard (FR-SET-03, ANDROID_PLATFORM §22). Only the
+             system can start it (START_VIEW_PERMISSION_USAGE, T-SEC-04); it opens Privacy & permissions and finishes. -->
+        <activity
+            android:name=".settings.PermissionUsageActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:taskAffinity="app.strata.launcher.settings"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

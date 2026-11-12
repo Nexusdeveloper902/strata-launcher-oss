@@ -2,14 +2,19 @@ package app.strata.launcher.testing.fakes
 
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppOverride
+import app.strata.launcher.core.model.IconCoverageEntry
 import app.strata.launcher.core.model.IconImage
 import app.strata.launcher.core.model.IconOverride
 import app.strata.launcher.core.model.IconPackInfo
 import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
+import app.strata.launcher.core.model.IconSource
+import app.strata.launcher.core.model.IconStyle
+import app.strata.launcher.core.model.IconTintMode
 import app.strata.launcher.core.model.PackDrawables
 import app.strata.launcher.core.model.ProfileKind
+import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.AddFavoriteResult
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LabelRules
@@ -201,6 +206,34 @@ class FakeIconProvider(
         sizePx: Int,
         densityDpi: Int,
     ): IconResult = IconResult.Monogram
+
+    /**
+     * FR-SET-07: the source per component when the icon is tinted. Override and pack sources stay under any tint;
+     * glyph, monochrome and desaturated become `PLAIN` when the style is untinted (THEME_SYSTEM §4.6). Unlisted
+     * components are desaturated (tinted) or plain.
+     */
+    val coverageSources = mutableMapOf<String, IconSource>()
+
+    /** Styles of every coverage call. */
+    val coverageCalls = mutableListOf<IconStyle>()
+
+    override suspend fun coverage(
+        apps: List<VisibleApp>,
+        style: IconStyle,
+    ): List<IconCoverageEntry> {
+        coverageCalls += style
+        val tinted = style.tint != IconTintMode.NONE || style.packFallbackMonochrome
+        return apps.filter { it.profileKind != ProfileKind.PRIVATE }.map { app ->
+            val tintedSource = coverageSources[app.key.component] ?: IconSource.DESATURATED
+            val source =
+                when {
+                    tintedSource == IconSource.OVERRIDE || tintedSource == IconSource.PACK -> tintedSource
+                    tinted -> tintedSource
+                    else -> IconSource.PLAIN
+                }
+            IconCoverageEntry(app.key, app.packageName, app.displayLabel, app.profileKind, source, app.systemLabel)
+        }
+    }
 
     /** Simulates installing or removing packs. */
     fun setPacks(vararg packs: IconPackInfo) {

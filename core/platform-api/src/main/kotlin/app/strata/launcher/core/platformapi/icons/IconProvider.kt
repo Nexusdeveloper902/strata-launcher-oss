@@ -1,10 +1,13 @@
 package app.strata.launcher.core.platformapi.icons
 
+import app.strata.launcher.core.model.IconCoverageEntry
 import app.strata.launcher.core.model.IconImage
 import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
+import app.strata.launcher.core.model.IconStyle
 import app.strata.launcher.core.model.PackDrawables
+import app.strata.launcher.core.model.VisibleApp
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -49,4 +52,14 @@ interface IconProvider {
         sizePx: Int,
         densityDpi: Int,
     ): IconResult
+
+    /**
+     * FR-SET-07 (ARCHITECTURE §9.1): the icon source of each of [apps] under [style], decided by the same precedence
+     * and reads as the renderer, so the coverage tool cannot disagree with what home draws. Private-space apps are
+     * skipped. Main-safe; the result is memory only.
+     */
+    suspend fun coverage(
+        apps: List<VisibleApp>,
+        style: IconStyle,
+    ): List<IconCoverageEntry>
 }

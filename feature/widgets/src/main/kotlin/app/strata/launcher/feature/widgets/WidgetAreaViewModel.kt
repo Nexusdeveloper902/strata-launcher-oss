@@ -200,11 +200,11 @@ class WidgetAreaViewModel(
             }
 
             WidgetAreaAction.Taller -> {
-                if (p != null) step(p, p.heightStep + 1)
+                if (p != null) stepBy(+1)
             }
 
             WidgetAreaAction.Shorter -> {
-                if (p != null) step(p, p.heightStep - 1)
+                if (p != null) stepBy(-1)
             }
 
             WidgetAreaAction.ToggleClock -> {
@@ -234,13 +234,21 @@ class WidgetAreaViewModel(
         }
     }
 
-    private fun step(
-        p: WidgetPlacement,
-        next: Int,
-    ) {
-        val clamped = WidgetHeights.clampStep(next)
-        if (clamped != p.heightStep) write { repository.setHeightStep(p.appWidgetId, clamped) }
-    }
+    /**
+     * One resize step from the **stored** height, serialised: quick taps (or a11y actions) must each count. Reading the
+     * published state instead lost steps when a second tap came before the first write had flowed back (CI run
+     * 43220546655, API 26 tWidget06: two Taller taps stored step 2, not 3).
+     */
+    private fun stepBy(delta: Int) =
+        write {
+            resizeLock.withLock {
+                val current = repository.current() ?: return@withLock
+                val clamped = WidgetHeights.clampStep(current.heightStep + delta)
+                if (clamped != current.heightStep) repository.setHeightStep(current.appWidgetId, clamped)
+            }
+        }
+
+    private val resizeLock = Mutex()
 
     private fun write(block: suspend () -> Unit) {
         viewModelScope.launch {

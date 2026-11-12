@@ -56,6 +56,20 @@ data class IconRequest(
  */
 enum class IconSource { OVERRIDE, PACK, GLYPH, PLATFORM_MONOCHROME, DESATURATED, PLAIN }
 
+/**
+ * One row of the icon coverage tool (FR-SET-07, ARCHITECTURE §9.1): the [source] the render pipeline uses for the
+ * app under the current theme. Memory only: never written to disk or the backup.
+ */
+data class IconCoverageEntry(
+    val key: AppKey,
+    val packageName: String,
+    val label: String,
+    val profileKind: ProfileKind,
+    val source: IconSource,
+    /** The app's own label (the export uses it; [label] may be a custom name). */
+    val systemLabel: String = label,
+)
+
 /** An installed icon pack (ADW convention, ANDROID_PLATFORM §11.1). */
 data class IconPackInfo(
     val packageName: String,

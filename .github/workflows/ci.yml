@@ -124,8 +124,8 @@ jobs:
           # Default installs the removed legacy 'tools' package and fails.
           packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
       - uses: gradle/actions/setup-gradle@v6
-      - name: T-CI-01 checkPermissions, T-CI-02 checkDependencies, T-CI-03 checkModuleGraph, T-CI-08 checkEntitlements
-        run: ./gradlew checkPermissions checkDependencies checkModuleGraph checkEntitlements --stacktrace
+      - name: T-CI-01 checkPermissions, T-CI-02 checkDependencies, T-CI-03 checkModuleGraph, T-CI-08 checkEntitlements, T-CI-05 checkLicences
+        run: ./gradlew checkPermissions checkDependencies checkModuleGraph checkEntitlements checkLicences --stacktrace
 
   gmd-smoke:
     name: GMD smoke (API ${{ matrix.api }})

@@ -1,0 +1,7 @@
+# Strata glyph index (ARCHITECTURE section 9.1, FR-THEME-35, D-014).
+# One line per app: <package name> <glyph id>. The glyph is res/drawable-nodpi/glyph_<id>.xml, a single-colour
+# vector on a 24 x 24 viewport. Several packages may share a glyph; a package appears once.
+# Adding a glyph = one drawable file and one line here; the build checks both (T-THEME-55) and versions the bundle.
+# Glyphs are original drawings made for this project, for personal use only (U-026). The set is authored from the
+# owner's exported coverage list (Settings > Icons > Export list).
+app.strata.launcher strata

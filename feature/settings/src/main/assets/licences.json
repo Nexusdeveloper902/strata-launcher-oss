@@ -1,0 +1,64 @@
+{
+  "formatVersion": 1,
+  "note": "Settings > About > Licences (FR-SET-06). checkLicences (T-CI-05) fails the build when a bundled font has no OFL entry or an allow-listed runtime artifact (config/dependency-allowlist.txt) is not covered here.",
+  "fonts": [],
+  "libraries": [
+    {
+      "name": "AndroidX (Jetpack): Core, Activity, Lifecycle, Compose, DataStore, Room, Startup",
+      "licence": "Apache-2.0",
+      "licenceFile": "licences/apache-2.0.txt",
+      "covers": ["androidx.*"]
+    },
+    {
+      "name": "Kotlin standard library",
+      "licence": "Apache-2.0",
+      "licenceFile": "licences/apache-2.0.txt",
+      "covers": ["org.jetbrains.kotlin:*", "org.jetbrains:annotations"]
+    },
+    {
+      "name": "kotlinx.coroutines",
+      "licence": "Apache-2.0",
+      "licenceFile": "licences/apache-2.0.txt",
+      "covers": [
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-android",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-bom"
+      ]
+    },
+    {
+      "name": "kotlinx.serialization (core)",
+      "licence": "Apache-2.0",
+      "licenceFile": "licences/apache-2.0.txt",
+      "covers": [
+        "org.jetbrains.kotlinx:kotlinx-serialization-core",
+        "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm",
+        "org.jetbrains.kotlinx:kotlinx-serialization-bom"
+      ]
+    },
+    {
+      "name": "Okio",
+      "licence": "Apache-2.0",
+      "licenceFile": "licences/apache-2.0.txt",
+      "covers": ["com.squareup.okio:okio", "com.squareup.okio:okio-jvm"]
+    },
+    {
+      "name": "Protocol Buffers (Java lite)",
+      "licence": "BSD-3-Clause",
+      "licenceFile": "licences/bsd-3-clause-protobuf.txt",
+      "covers": ["com.google.protobuf:protobuf-javalite"]
+    },
+    {
+      "name": "JSpecify annotations",
+      "licence": "Apache-2.0",
+      "licenceFile": "licences/apache-2.0.txt",
+      "covers": ["org.jspecify:jspecify"]
+    },
+    {
+      "name": "Guava ListenableFuture",
+      "licence": "Apache-2.0",
+      "licenceFile": "licences/apache-2.0.txt",
+      "covers": ["com.google.guava:listenablefuture"]
+    }
+  ]
+}

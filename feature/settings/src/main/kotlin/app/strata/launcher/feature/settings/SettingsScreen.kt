@@ -77,12 +77,30 @@ object SettingsTestTags {
     fun unhide(app: VisibleApp) = "settings_unhide_${app.key.component}_${app.key.userSerial}"
 }
 
-/** Which settings page is shown. */
-enum class SettingsPage { ROOT, HIDDEN_APPS }
+/** Which settings page is shown (S-SET and its sub-pages, INTERACTION_SPEC §1). */
+enum class SettingsPage {
+    ROOT,
+    HIDDEN_APPS,
+    ICONS,
+    PRIVACY,
+    ABOUT,
+    LICENCES,
+    LICENCE_TEXT,
+    ;
+
+    /** Back from this page (INTERACTION_SPEC §1: "S-SET pages → parent"). */
+    val parent: SettingsPage
+        get() =
+            when (this) {
+                LICENCE_TEXT -> LICENCES
+                LICENCES -> ABOUT
+                else -> ROOT
+            }
+}
 
 /**
- * Settings pages (M3 part): the root with the home, list, search, gesture, apps and privacy options, and Hidden apps.
- * [onBack] leaves the page stack (finish the activity).
+ * Settings (FR-SET-01): the root groups and the sub-pages. Back goes to the parent page; from [startPage] (the page
+ * the activity was opened on) [onBack] leaves the stack (finish the activity).
  */
 @Composable
 fun SettingsRoute(
@@ -95,6 +113,9 @@ fun SettingsRoute(
     onBack: () -> Unit,
     /** Effects that need the activity: [SettingsEffect.SetDefault], [SettingsEffect.OpenHomeSettings]. */
     onNavigate: (SettingsEffect) -> Unit = {},
+    /** FR-SET-07 Icons page. */
+    icons: IconCoverageState = IconCoverageState(),
+    onIconsAction: (IconCoverageAction) -> Unit = {},
 ) {
     val context = LocalContext.current
     val currentOnNavigate by rememberUpdatedState(onNavigate)
@@ -111,6 +132,7 @@ fun SettingsRoute(
                     SettingsEffect.SetDefault,
                     is SettingsEffect.OpenHomeSettings,
                     SettingsEffect.RequestContacts,
+                    SettingsEffect.OpenThemes,
                     -> null
                 }
             if (text != null) {
@@ -121,7 +143,7 @@ fun SettingsRoute(
         }
     }
     val currentOnBack by rememberUpdatedState(onBack)
-    BackHandler(enabled = page != startPage) { onPage(startPage) }
+    BackHandler(enabled = page != startPage) { onPage(if (page.parent == page) startPage else page.parent) }
     BackHandler(enabled = page == startPage) { currentOnBack() }
     Box(
         modifier =
@@ -132,8 +154,13 @@ fun SettingsRoute(
                 .semantics { testTagsAsResourceId = true },
     ) {
         when (page) {
-            SettingsPage.ROOT -> SettingsRoot(state, onAction) { onPage(SettingsPage.HIDDEN_APPS) }
+            SettingsPage.ROOT -> SettingsRoot(state, onAction, onPage)
             SettingsPage.HIDDEN_APPS -> HiddenAppsPage(state, onAction)
+            SettingsPage.ICONS -> IconCoveragePage(icons, onIconsAction)
+            SettingsPage.PRIVACY -> PrivacyPage(state, onAction)
+            SettingsPage.ABOUT -> AboutPage(state) { onPage(SettingsPage.LICENCES) }
+            SettingsPage.LICENCES -> LicencesPage(state, onAction) { onPage(SettingsPage.LICENCE_TEXT) }
+            SettingsPage.LICENCE_TEXT -> LicenceTextPage(state)
         }
         if (state.showLockDisclosure) LockDisclosure(onAction)
         if (state.optional.showBadgeDisclosure) BadgeDisclosure(state.optional.restrictedSettingsHint, onAction)
@@ -146,12 +173,14 @@ fun SettingsRoute(
 private fun SettingsRoot(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
-    onHiddenApps: () -> Unit,
+    onPage: (SettingsPage) -> Unit,
 ) {
     val s = state.settings ?: return
     LazyColumn(modifier = Modifier.fillMaxSize().safeDrawingPadding().testTag(SettingsTestTags.ROOT)) {
         item { Title(stringResource(R.string.settings_title)) }
-        group(R.string.settings_group_default_home) {
+        // T-SET-02 order: Home, App list, Search, Gestures, Notifications, Themes, Icons, Apps, Backup (M8 part 2),
+        // Privacy & permissions, About. "Default home" and "Uninstall Strata" (FR-SET-02) lead the Home group.
+        group(R.string.settings_group_home) {
             item {
                 ActionRow(
                     title = stringResource(R.string.settings_default_home),
@@ -171,8 +200,6 @@ private fun SettingsRoot(
                     tag = SettingsTestTags.UNINSTALL_STRATA,
                 ) { onAction(SettingsAction.UninstallStrata) }
             }
-        }
-        group(R.string.settings_group_home) {
             toggle(Toggle.HOME_PRESS_OPENS_SEARCH, R.string.settings_home_press_search, s, onAction)
             toggle(Toggle.HIDE_STATUS_BAR, R.string.settings_hide_status_bar, s, onAction)
             toggle(
@@ -229,6 +256,24 @@ private fun SettingsRoot(
         if (state.optional.badgeAccess != null) {
             group(R.string.settings_group_notifications) { badgeRows(state, onAction) }
         }
+        group(R.string.settings_group_themes) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.settings_themes),
+                    summary = stringResource(R.string.settings_themes_summary),
+                    tag = SettingsPageTags.THEMES,
+                ) { onAction(SettingsAction.OpenThemes) }
+            }
+        }
+        group(R.string.settings_group_icons) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.icons_coverage),
+                    summary = stringResource(R.string.icons_coverage_summary),
+                    tag = SettingsPageTags.ICONS_ROW,
+                ) { onPage(SettingsPage.ICONS) }
+            }
+        }
         group(R.string.settings_group_apps) {
             item {
                 ActionRow(
@@ -240,7 +285,7 @@ private fun SettingsRoot(
                             state.hiddenApps.size,
                         ),
                     tag = SettingsTestTags.HIDDEN_APPS_ROW,
-                    onClick = onHiddenApps,
+                    onClick = { onPage(SettingsPage.HIDDEN_APPS) },
                 )
             }
             if (state.privateSpaceSupported) {
@@ -254,6 +299,13 @@ private fun SettingsRoot(
             }
         }
         group(R.string.settings_group_privacy) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.privacy_page),
+                    summary = stringResource(R.string.privacy_page_summary),
+                    tag = SettingsPageTags.PRIVACY_ROW,
+                ) { onPage(SettingsPage.PRIVACY) }
+            }
             item {
                 SwitchRow(
                     title = stringResource(R.string.settings_pause_history),
@@ -269,6 +321,15 @@ private fun SettingsRoot(
                     summary = stringResource(R.string.settings_clear_history_summary),
                     tag = SettingsTestTags.CLEAR_HISTORY,
                 ) { onAction(SettingsAction.ClearHistory) }
+            }
+        }
+        group(R.string.settings_group_about) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.about_page),
+                    summary = stringResource(R.string.about_version, state.versionName),
+                    tag = SettingsPageTags.ABOUT_ROW,
+                ) { onPage(SettingsPage.ABOUT) }
             }
         }
     }
@@ -511,7 +572,7 @@ private fun UninstallGuidance(onAction: (SettingsAction) -> Unit) {
     )
 }
 
-private fun LazyListScope.group(
+internal fun LazyListScope.group(
     title: Int,
     content: LazyListScope.() -> Unit,
 ) {
@@ -549,7 +610,7 @@ private fun LazyListScope.toggle(
 }
 
 @Composable
-private fun Title(text: String) {
+internal fun Title(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.headlineMedium,
@@ -558,7 +619,7 @@ private fun Title(text: String) {
 }
 
 @Composable
-private fun SwitchRow(
+internal fun SwitchRow(
     title: String,
     summary: String?,
     checked: Boolean,
@@ -587,7 +648,7 @@ private fun SwitchRow(
 }
 
 @Composable
-private fun RadioRow(
+internal fun RadioRow(
     title: String,
     selected: Boolean,
     tag: String,
@@ -610,7 +671,7 @@ private fun RadioRow(
 }
 
 @Composable
-private fun NoteRow(
+internal fun NoteRow(
     text: String,
     tag: String,
 ) {
@@ -623,7 +684,7 @@ private fun NoteRow(
 }
 
 @Composable
-private fun ActionRow(
+internal fun ActionRow(
     title: String,
     summary: String?,
     tag: String? = null,

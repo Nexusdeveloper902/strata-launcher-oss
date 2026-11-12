@@ -116,6 +116,14 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
         return start(Intent.createChooser(send, title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
+    override fun shareText(
+        text: String,
+        title: String,
+    ): LaunchResult {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        return start(Intent.createChooser(send, title))
+    }
+
     override fun setWallpaper(contentUri: String): WallpaperHandoff {
         val uri = contentUri.toUri()
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return WallpaperHandoff.NO_HANDLER

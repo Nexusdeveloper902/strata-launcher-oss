@@ -20,11 +20,17 @@ import android.util.LruCache
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import app.strata.launcher.core.common.log.Logger
+import app.strata.launcher.core.model.IconCoverageEntry
 import app.strata.launcher.core.model.IconImage
+import app.strata.launcher.core.model.IconOverride
 import app.strata.launcher.core.model.IconPacks
 import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
+import app.strata.launcher.core.model.IconSource
+import app.strata.launcher.core.model.IconStyle
 import app.strata.launcher.core.model.PackDrawables
+import app.strata.launcher.core.model.ProfileKind
+import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.platform.icons.packs.IconPackRegistry
 import app.strata.launcher.platform.icons.packs.IconPackSource
@@ -42,11 +48,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The icon pipeline of ARCHITECTURE §9. Source by THEME_SYSTEM §4.6 precedence ([IconSourceResolver]): per-app
- * override, the theme's pack mapping, then (tinted only) glyph (M8), platform monochrome (API 33+), desaturated;
+ * override, the theme's pack mapping, then (tinted only) Strata glyph, platform monochrome (API 33+), desaturated;
  * untinted apps show their system icon in the theme's shape. Rendered by [IconRenderer] at the exact pixel size,
  * badged afterwards for other profiles. L1 = byte-sized [LruCache] of at most 1/8 of the memory class; L2 = files in
  * `cacheDir/icons/` (not backed up), LRU-capped at [DISK_CAP_BYTES]. The cache key covers every request field, the
- * package's `lastUpdateTime`, the packs' version and parse state and the calendar day for calendar icons.
+ * package's `lastUpdateTime`, the packs' version and parse state, the calendar day for calendar icons and the
+ * glyph bundle version (§9.1).
  */
 class AndroidIconProvider(
     context: Context,
@@ -63,6 +70,8 @@ class AndroidIconProvider(
     packSource: IconPackSource? = null,
     private val apiLevel: Int = Build.VERSION.SDK_INT,
     private val dayOfMonth: () -> Int = { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) },
+    /** The Strata glyph set (FR-THEME-35); default: the bundled index and drawables. */
+    glyphs: GlyphLookup? = null,
 ) : IconProvider {
     private val appContext = context.applicationContext
     private val diskDir: File by lazy { diskDir?.invoke() ?: File(appContext.cacheDir, "icons") }
@@ -70,6 +79,13 @@ class AndroidIconProvider(
     private val launcherApps by lazy { appContext.getSystemService(LauncherApps::class.java) }
     private val userManager by lazy { appContext.getSystemService(UserManager::class.java) }
     private val source: IconPackSource by lazy { packSource ?: PackageManagerIconPackSource(appContext) }
+    private val glyphs: GlyphLookup =
+        glyphs ?: BundledGlyphs({
+            appContext.resources
+                .openRawResource(
+                    BundledGlyphs.INDEX_RES,
+                ).use { it.readBytes().toString(Charsets.UTF_8) }
+        })
 
     /** Pack discovery and parsing: serial, off main (T-SEC-06: no ANR). */
     private val packWorker: CoroutineDispatcher by lazy {
@@ -227,10 +243,35 @@ class AndroidIconProvider(
         val component = ComponentName.unflattenFromString(req.key.component) ?: return null
         val user = userManager?.getUserForSerialNumber(req.key.userSerial) ?: return null
         val size = req.sizePx.coerceIn(1, MAX_SIZE_PX)
-        val style = req.style
+        val s = sources(component, req.key.component, user, req.style, req.override, req.densityDpi)
+        var bitmap = IconRenderer.render(s.kind, size, req.style, s.icon, s.layer, s.supplied) ?: return null
+        if (user != Process.myUserHandle()) bitmap = badged(bitmap, user, size)
+        return IconImage(bitmap, bitmap.width, bitmap.height)
+    }
 
-        val override = req.override?.takeIf { registry.isUsable(it.packPackage) }
-        val overrideDrawable = override?.let { source.drawable(it.packPackage, it.drawable, req.densityDpi) }
+    /** What [render] draws for one app: the [IconSourceResolver] step and the drawables it needs. */
+    private class Sources(
+        val kind: IconSource,
+        val icon: Drawable?,
+        val layer: Drawable?,
+        val supplied: Drawable?,
+    )
+
+    /**
+     * THEME_SYSTEM §4.6 inputs, loaded in precedence order (override, pack, glyph, monochrome, system icon) so the
+     * coverage tool and the renderer take the same decision from the same reads (ARCHITECTURE §9.1).
+     */
+    private fun sources(
+        component: ComponentName,
+        /** The key's component string, as the pack mapping is looked up (unchanged from M5). */
+        componentKey: String,
+        user: UserHandle,
+        style: IconStyle,
+        overrideRef: IconOverride?,
+        densityDpi: Int,
+    ): Sources {
+        val override = overrideRef?.takeIf { registry.isUsable(it.packPackage) }
+        val overrideDrawable = override?.let { source.drawable(it.packPackage, it.drawable, densityDpi) }
         val packDrawable =
             if (overrideDrawable != null) {
                 null
@@ -238,12 +279,16 @@ class AndroidIconProvider(
                 style.packPackage?.let { pack ->
                     registry
                         .mapping(pack)
-                        ?.drawableFor(req.key.component, dayOfMonth())
-                        ?.let { source.drawable(pack, it, req.densityDpi) }
+                        ?.drawableFor(componentKey, dayOfMonth())
+                        ?.let { source.drawable(pack, it, densityDpi) }
                 }
             }
+        val supplied = overrideDrawable ?: packDrawable
+        val glyphRes =
+            if (supplied == null && IconSourceResolver.isTinted(style)) glyphs.glyphRes(component.packageName) else null
+        val glyph = glyphRes?.let { glyphDrawable(it) }
         val icon: Drawable? =
-            if (overrideDrawable != null || packDrawable != null) null else systemIcon(component, user, req.densityDpi)
+            if (supplied != null || glyph != null) null else systemIcon(component, user, densityDpi)
         val monochrome =
             if (apiLevel >= IconSourceResolver.MONOCHROME_API &&
                 icon is AdaptiveIconDrawable
@@ -252,20 +297,60 @@ class AndroidIconProvider(
             } else {
                 null
             }
-        val sourceKind =
+        val kind =
             IconSourceResolver.resolve(
                 style = style,
                 overrideAvailable = overrideDrawable != null,
                 packMapped = packDrawable != null,
-                hasGlyph = false,
+                hasGlyph = glyph != null,
                 hasMonochromeLayer = monochrome != null,
                 apiLevel = apiLevel,
             )
-        val supplied = overrideDrawable ?: packDrawable
-        var bitmap = IconRenderer.render(sourceKind, size, style, icon, monochrome, supplied) ?: return null
-        if (user != Process.myUserHandle()) bitmap = badged(bitmap, user, size)
-        return IconImage(bitmap, bitmap.width, bitmap.height)
+        return Sources(kind, icon, if (kind == IconSource.GLYPH) glyph else monochrome, supplied)
     }
+
+    private fun glyphDrawable(res: Int): Drawable? =
+        try {
+            ContextCompat.getDrawable(appContext, res)
+        } catch (e: RuntimeException) {
+            logger.w(TAG, "glyph drawable failed", e)
+            null
+        }
+
+    /**
+     * FR-SET-07: the icon source of each app under [style], decided like [render] without drawing. Private-space apps
+     * are skipped (P-5); failures of one app give no row rather than a wrong one. Off main.
+     */
+    override suspend fun coverage(
+        apps: List<VisibleApp>,
+        style: IconStyle,
+    ): List<IconCoverageEntry> =
+        withContext(ioDispatcher) {
+            val density = appContext.resources.displayMetrics.densityDpi
+            apps.mapNotNull { app ->
+                if (app.profileKind == ProfileKind.PRIVATE) return@mapNotNull null
+                try {
+                    val component = ComponentName.unflattenFromString(app.key.component) ?: return@mapNotNull null
+                    val user = userManager?.getUserForSerialNumber(app.key.userSerial) ?: return@mapNotNull null
+                    val kind = sources(component, app.key.component, user, style, app.iconOverride, density).kind
+                    IconCoverageEntry(
+                        app.key,
+                        app.packageName,
+                        app.displayLabel,
+                        app.profileKind,
+                        kind,
+                        app.systemLabel,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.w(TAG, "coverage failed for one app", e)
+                    null
+                } catch (e: OutOfMemoryError) {
+                    null
+                }
+            }
+        }
 
     private fun systemIcon(
         component: ComponentName,
@@ -366,7 +451,7 @@ class AndroidIconProvider(
                     .append('|')
                     .append(apiLevel)
                     .append('|')
-                    .append(GLYPH_BUNDLE_VERSION)
+                    .append(glyphs.version)
             }
         return digest(raw)
     }
@@ -377,9 +462,6 @@ class AndroidIconProvider(
         private const val QUALITY = 100
         private const val MAX_SIZE_PX = 512
         private const val MAX_CHOICES = 20_000
-
-        /** The Strata glyph set (FR-THEME-35) is M8; its build-time bundle version joins the key then (§9.1). */
-        private const val GLYPH_BUNDLE_VERSION = "none"
 
         /** ARCHITECTURE §9: L2 is capped at 32 MB. */
         const val DISK_CAP_BYTES: Long = 32L * 1024 * 1024
