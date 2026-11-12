@@ -35,6 +35,9 @@ internal object IconRenderer {
     /** A legacy icon fills about 70 % of the visible 72/108 area of the plate (Proposed). */
     private const val LEGACY_INSET = 0.2667f
 
+    /** A glyph fills 40 % of the 108-unit layer, i.e. 60 % of the visible 72 (Proposed, like a monochrome layer). */
+    private const val GLYPH_INSET = 0.3f
+
     fun render(
         source: IconSource,
         size: Int,
@@ -48,7 +51,12 @@ internal object IconRenderer {
                 supplied?.let { asSupplied(it, size) }
             }
 
-            IconSource.GLYPH, IconSource.PLATFORM_MONOCHROME -> {
+            // A glyph is a 24-unit drawing with no safe-zone padding: inset it into the 108-unit layer.
+            IconSource.GLYPH -> {
+                layer?.let { themed(InsetDrawable(it, GLYPH_INSET), style, size) }
+            }
+
+            IconSource.PLATFORM_MONOCHROME -> {
                 layer?.let { themed(it, style, size) }
             }
 
