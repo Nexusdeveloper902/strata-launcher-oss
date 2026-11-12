@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://strata-launcher.invalid/schema/backup/1.0/backup.schema.json",
+  "title": "Strata Launcher backup, formatVersion 1 (minor 0)",
+  "description": "Schema of .strata-backup.json files (spec/ARCHITECTURE.md §12), written in M8 by the implementer of :backup. The app validates more than JSON Schema can express: the §12 parse limits (8 MiB, depth 24, 4096 items per array, 200000 values, strings of at most 4096 UTF-16 units), duplicate keys, strict UTF-8, label trimming, and each embedded theme through the THEME_SYSTEM §8 pipeline (spec/theme.schema.json). The app is lenient where this schema is strict: unknown keys (a newer formatMinor) are ignored and counted, and an invalid entry is dropped and counted instead of failing the file. Only 'format', 'formatVersion' and the JSON syntax can reject a whole file. Files written by the app always validate against this schema.",
+  "type": "object",
+  "required": [
+    "format",
+    "formatVersion"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "strata-backup"
+    },
+    "formatVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Major version. A higher value is rejected: 'Made with a newer version of Strata Launcher'."
+    },
+    "formatMinor": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Additive minor revision; unknown keys of a newer minor are ignored with a count."
+    },
+    "createdAt": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "appVersion": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Informational."
+    },
+    "contents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workProfile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Without it no entry has profile 'work' (the app drops such entries)."
+        },
+        "launchLog": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Without it there is no launchLog array."
+        }
+      }
+    },
+    "settings": {
+      "$ref": "#/$defs/settings"
+    },
+    "apps": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "#/$defs/app"
+      }
+    },
+    "favorites": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "$ref": "#/$defs/ref"
+      },
+      "description": "Ordered."
+    },
+    "themes": {
+      "$ref": "#/$defs/themes"
+    },
+    "widgets": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "$ref": "#/$defs/widget"
+      },
+      "description": "Provider identity and layout only; never widget IDs or RemoteViews. v1 has one widget area."
+    },
+    "launchLog": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "#/$defs/launchDay"
+      },
+      "description": "Only with contents.launchLog: day buckets, never timestamps."
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*/[A-Za-z0-9_.$]+$",
+      "description": "ComponentName.flattenToString()."
+    },
+    "profile": {
+      "enum": [
+        "main",
+        "work"
+      ],
+      "description": "Profile kind, never a user serial. There is deliberately no value for private space: its data is never written (FR-APPS-10, P-5)."
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "ref": {
+      "type": "object",
+      "required": [
+        "component",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "$ref": "#/$defs/component"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "required": [
+        "component",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "$ref": "#/$defs/component"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Custom label (FR-APPS-05), 1-60 characters after trimming; absent = the system label."
+        },
+        "icon": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "system"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind",
+                "pack",
+                "drawable"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "pack"
+                },
+                "pack": {
+                  "type": "string",
+                  "maxLength": 255,
+                  "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$"
+                },
+                "drawable": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_]{1,128}$"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "themes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "$ref": "#/$defs/uuid"
+        },
+        "builtinRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/uuid"
+          },
+          "description": "Built-ins referenced by id, never embedded."
+        },
+        "hiddenBuiltins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/uuid"
+          },
+          "uniqueItems": true
+        },
+        "embedded": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object"
+          },
+          "description": "Complete .strata-theme.json documents, verbatim including unknown keys. Each is validated as a theme (spec/theme.schema.json, THEME_SYSTEM §8, ≤ 256 KiB): an invalid one is excluded and listed, one with a newer schemaVersion is kept as 'Needs app update'."
+        }
+      }
+    },
+    "widget": {
+      "type": "object",
+      "required": [
+        "provider",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/component"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "heightStep": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 1
+        },
+        "replaceClock": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "launchDay": {
+      "type": "object",
+      "required": [
+        "component",
+        "profile",
+        "day",
+        "count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "$ref": "#/$defs/component"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "day": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "UTC day."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The ARCHITECTURE §4.2 rows with Export = yes, by settings.proto field name; enums as their proto value names. Absent = the catalogue default. Rows with Export = no (install_id, onboarding_done, contacts_hint_shown, default_home_banner_dismissed_until, private_space_container_hidden, catalogue_version) are never written.",
+      "properties": {
+        "list_two_column": {
+          "type": "boolean"
+        },
+        "haptics_enabled": {
+          "type": "boolean"
+        },
+        "show_hidden_in_search": {
+          "type": "boolean"
+        },
+        "recents_enabled": {
+          "type": "boolean"
+        },
+        "launch_log_paused": {
+          "type": "boolean"
+        },
+        "home_press_opens_search": {
+          "type": "boolean"
+        },
+        "allow_rotation": {
+          "type": "boolean"
+        },
+        "hide_status_bar": {
+          "type": "boolean"
+        },
+        "keep_back_gesture_on_index_side": {
+          "type": "boolean"
+        },
+        "badges_enabled": {
+          "type": "boolean",
+          "description": "Effective only while listener access is granted; access is never restored."
+        },
+        "badge_style": {
+          "enum": [
+            "BADGE_STYLE_DOT",
+            "BADGE_STYLE_COUNT"
+          ]
+        },
+        "contacts_search_enabled": {
+          "type": "boolean",
+          "description": "Effective only while READ_CONTACTS is granted; the permission is never restored."
+        },
+        "appearance_override": {
+          "enum": [
+            "APPEARANCE_FOLLOW_THEME",
+            "APPEARANCE_SYSTEM",
+            "APPEARANCE_LIGHT",
+            "APPEARANCE_DARK"
+          ]
+        },
+        "enforce_contrast": {
+          "type": "boolean"
+        },
+        "list_sort_by_usage": {
+          "type": "boolean"
+        },
+        "swipe_down_action": {
+          "enum": [
+            "SWIPE_DOWN_NONE",
+            "SWIPE_DOWN_NOTIFICATIONS"
+          ]
+        },
+        "lock_gesture_enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

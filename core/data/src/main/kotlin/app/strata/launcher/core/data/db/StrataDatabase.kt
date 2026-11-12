@@ -174,18 +174,51 @@ interface AppOverrideDao {
     @Query("DELETE FROM app_override WHERE missing_since IS NOT NULL AND missing_since < :cutoff")
     suspend fun purgeMissingBefore(cutoff: Long): Int
 
-    /** FR-LIFE-03: removed apps keep their records 30 days ([markMissing]); reinstalled apps get them back. */
+    /** Favourites whose record expires with [purgeMissingBefore] go with it (FR-LIFE-03, FR-BACKUP-03). */
+    @Query(
+        "DELETE FROM favorite WHERE EXISTS (SELECT 1 FROM app_override o WHERE o.component = favorite.component " +
+            "AND o.user_serial = favorite.user_serial AND o.missing_since IS NOT NULL AND o.missing_since < :cutoff)",
+    )
+    suspend fun purgeFavoritesMissingBefore(cutoff: Long): Int
+
+    /** A row that only marked a pending favourite (all defaults) is dropped once the app is back. */
+    @Query(
+        "DELETE FROM app_override WHERE component = :component AND user_serial = :userSerial AND hidden = 0 " +
+            "AND custom_label IS NULL AND icon_kind IS NULL AND icon_pack IS NULL AND icon_drawable IS NULL",
+    )
+    suspend fun deleteIfEmpty(
+        component: String,
+        userSerial: Long,
+    )
+
+    /**
+     * FR-LIFE-03: removed apps keep their records 30 days ([markMissing]); reinstalled apps get them back. Expired records
+     * (and their favourites) are purged **first**, so an app that comes back after 31 days is not given them (T-BACKUP-08).
+     * [markers] are favourites of missing apps without a record: they get an all-default row carrying `missing_since`.
+     */
     @Transaction
     suspend fun reconcile(
         present: List<Pair<String, Long>>,
         missing: List<Pair<String, Long>>,
         now: Long,
         purgeCutoff: Long,
+        markers: List<Pair<String, Long>> = emptyList(),
     ) {
-        present.forEach { (c, s) -> clearMissing(c, s) }
-        missing.forEach { (c, s) -> markMissing(c, s, now) }
+        purgeFavoritesMissingBefore(purgeCutoff)
         purgeMissingBefore(purgeCutoff)
+        present.forEach { (c, s) ->
+            clearMissing(c, s)
+            deleteIfEmpty(c, s)
+        }
+        missing.forEach { (c, s) -> markMissing(c, s, now) }
+        markers.forEach { (c, s) -> if (get(c, s) == null) upsert(AppOverrideEntity(c, s, missingSince = now)) }
     }
+
+    @Query("DELETE FROM app_override")
+    suspend fun deleteAll()
+
+    @Insert
+    suspend fun insertAll(rows: List<AppOverrideEntity>)
 }
 
 @Dao
@@ -231,6 +264,9 @@ interface WidgetPlacementDao {
 
     @Upsert
     suspend fun upsert(row: WidgetPlacementEntity)
+
+    @Insert
+    suspend fun insertAll(rows: List<WidgetPlacementEntity>)
 
     @Query("DELETE FROM widget_placement WHERE app_widget_id = :id")
     suspend fun delete(id: Int)

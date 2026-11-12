@@ -5,10 +5,12 @@ import app.strata.launcher.core.data.LazyResource
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
+import app.strata.launcher.core.platformapi.backup.LaunchDayCount
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import java.time.LocalDate
 
 /**
  * [LaunchLogRepository] over [LaunchLogDatabase]. Events older than 30 days are purged on every write and at
@@ -49,6 +51,13 @@ class RoomLaunchLogRepository(
             .dao()
             .countsSince(clock.nowMillis() - WINDOW_MS)
             .associate { AppKey(it.component, it.userSerial) to it.n }
+
+    override suspend fun dayCounts(): List<LaunchDayCount> =
+        database
+            .get()
+            .dao()
+            .dayCountsSince(clock.nowMillis() - WINDOW_MS)
+            .map { LaunchDayCount(AppKey(it.component, it.userSerial), LocalDate.ofEpochDay(it.day).toString(), it.n) }
 
     /** Deletes events older than the window; called once at start-up so expired rows never linger (NFR-PRIV-05). */
     suspend fun pruneExpired() {

@@ -46,6 +46,8 @@ import app.strata.launcher.core.theme.store.ImportCommit
 import app.strata.launcher.core.theme.store.ImportPreview
 import app.strata.launcher.core.theme.store.PackNotice
 import app.strata.launcher.core.theme.store.PreviewEnvironment
+import app.strata.launcher.core.theme.store.ThemeBackupData
+import app.strata.launcher.core.theme.store.ThemeBackupStore
 import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeBannerKind
 import app.strata.launcher.core.theme.store.ThemeEditorStore
@@ -55,6 +57,7 @@ import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeOrigin
 import app.strata.launcher.core.theme.store.ThemePair
 import app.strata.launcher.core.theme.store.ThemeRepository
+import app.strata.launcher.core.theme.store.ThemeRestoreTarget
 import app.strata.launcher.core.theme.store.ThemeState
 import app.strata.launcher.core.theme.store.ThemeSummary
 import kotlinx.coroutines.CancellationException
@@ -110,7 +113,8 @@ class DefaultThemeRepository(
     private val publishDispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
 ) : ThemeRepository,
     ThemeManager,
-    ThemeEditorStore {
+    ThemeEditorStore,
+    ThemeBackupStore {
     /** The document to render and what the boot said about it. */
     private data class Active(
         val document: ThemeDocument,
@@ -353,6 +357,34 @@ class DefaultThemeRepository(
     private fun changed() {
         revisionFlow.update { it + 1 }
     }
+
+    // ---- ThemeBackupStore (ARCHITECTURE §12, THEME_SYSTEM §11.4) -----------------------------------
+
+    override suspend fun backupData(): ThemeBackupData = withLibrary { it.backupData() }
+
+    override suspend fun restoreThemes(target: ThemeRestoreTarget) {
+        withLibrary { lib ->
+            val next = lib.restoreThemes(target)
+            changed()
+            if (next != null) {
+                lib.loadTheme(next).let { if (it is Outcome.Ok) showActive(it.value.document) }
+            }
+        }
+    }
+
+    override suspend fun revalidateStored(): Int =
+        withLibrary { lib ->
+            val activeBefore = lib.currentIndex.activeThemeId
+            val moved = lib.revalidateStored()
+            if (moved > 0) {
+                changed()
+                val active = lib.currentIndex.activeThemeId
+                if (!active.equals(activeBefore, ignoreCase = true)) {
+                    lib.loadTheme(active).let { if (it is Outcome.Ok) showActive(it.value.document) }
+                }
+            }
+            moved
+        }
 
     override suspend fun entries(): List<ThemeSummary> = withLibrary { it.summaries() }
 

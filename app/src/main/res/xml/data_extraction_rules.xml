@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- API 31+. Rules: ANDROID_PLATFORM §17. Paths for later milestones are listed now so the policy is
-     fixed from day one; `no_backup` (logs, launch_log.db) is always excluded by the platform. -->
+<!-- API 31+. Rules: ANDROID_PLATFORM §17, THEME_SYSTEM §11.4 (final in M8). Only the listed paths are carried.
+     Never carried: the launch log, logs, boot state and the install marker (all in `no_backup`, always excluded by
+     the platform), caches, `restore/` (undo snapshot and journal) and anything of private space (never written, P-5).
+     With includes present only the included paths are carried, so ANDROID_PLATFORM §17's excludes (themes/images/
+     for cloud, restore/, launch_log.db) are implied; listing them would be a lint error ("not in an included path").
+     SettingsPagesTest.tPriv05 checks that no include covers them. -->
 <data-extraction-rules>
     <cloud-backup disableIfNoEncryptionCapabilities="true">
         <include domain="file" path="datastore/" />

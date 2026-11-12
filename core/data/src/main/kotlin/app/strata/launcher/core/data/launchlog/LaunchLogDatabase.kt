@@ -43,6 +43,14 @@ data class KeyCount(
     val n: Int,
 )
 
+/** Launches of one key on one UTC day ([day] = epoch day). */
+data class KeyDayCount(
+    val component: String,
+    @ColumnInfo(name = "user_serial") val userSerial: Long,
+    val day: Long,
+    val n: Int,
+)
+
 data class KeyLast(
     val component: String,
     @ColumnInfo(name = "user_serial") val userSerial: Long,
@@ -74,6 +82,12 @@ interface LaunchEventDao {
             "GROUP BY component, user_serial",
     )
     suspend fun countsSince(since: Long): List<KeyCount>
+
+    @Query(
+        "SELECT component, user_serial, at / 86400000 AS day, COUNT(*) AS n FROM launch_event WHERE at >= :since " +
+            "GROUP BY component, user_serial, day",
+    )
+    suspend fun dayCountsSince(since: Long): List<KeyDayCount>
 
     @Query("SELECT COUNT(*) FROM launch_event")
     suspend fun size(): Int

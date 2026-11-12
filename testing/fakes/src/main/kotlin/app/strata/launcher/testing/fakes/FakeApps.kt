@@ -221,6 +221,19 @@ class FakeLaunchLogRepository(private val clock: FakeClock = FakeClock()) : Laun
 
     override suspend fun counts(): Map<AppKey, Int> = events.groupingBy { it.first }.eachCount()
 
+    override suspend fun dayCounts(): List<app.strata.launcher.core.platformapi.backup.LaunchDayCount> =
+        events
+            .groupingBy {
+                it.first to
+                    java.time.LocalDate
+                        .ofEpochDay(Math.floorDiv(it.second, DAY_MS))
+                        .toString()
+            }.eachCount()
+            .map { (k, n) ->
+                app.strata.launcher.core.platformapi.backup
+                    .LaunchDayCount(k.first, k.second, n)
+            }
+
     override suspend fun setPaused(paused: Boolean) {
         this.paused = paused
     }
@@ -228,5 +241,9 @@ class FakeLaunchLogRepository(private val clock: FakeClock = FakeClock()) : Laun
     override suspend fun clear() {
         events.clear()
         changeEvents.tryEmit(Unit)
+    }
+
+    private companion object {
+        const val DAY_MS = 86_400_000L
     }
 }

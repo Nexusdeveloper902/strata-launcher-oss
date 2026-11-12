@@ -5,10 +5,18 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.core.data.LazyResource
+import app.strata.launcher.core.data.backup.RoomBackupAppStore
 import app.strata.launcher.core.data.db.AppOverrideEntity
 import app.strata.launcher.core.data.db.StrataDatabase
+import app.strata.launcher.core.model.AppKey
+import app.strata.launcher.core.model.AppOverride
 import app.strata.launcher.core.model.Catalog
+import app.strata.launcher.core.model.IconOverride
 import app.strata.launcher.core.model.ProfileKind
+import app.strata.launcher.core.model.WidgetPlacement
+import app.strata.launcher.core.model.WidgetPlacementState
+import app.strata.launcher.core.model.WidgetProviderRef
+import app.strata.launcher.core.platformapi.backup.AppData
 import app.strata.launcher.testing.fakes.FakeAppCatalogSource
 import app.strata.launcher.testing.fakes.FakeClock
 import app.strata.launcher.testing.fakes.RecordingLogger
@@ -159,6 +167,102 @@ class AppCatalogRepositoryTest {
             clock.advanceBy(31L * DAY)
             repo.reconcileNow()
             assertThat(db.overrideDao().all()).isEmpty()
+        }
+    }
+
+    /**
+     * T-BACKUP-08 (R half): a restore left app Y pending (rename + favourite, `missing_since` = restore time). Y installed
+     * within 30 days → both apply without user action; installed after 31 days → both purged, never applied.
+     */
+    @Test
+    fun tBackup08_pendingRestoreEntriesApplyOnInstall_orPurgeAfter30Days() {
+        val y = app("Y", pkg = "fixture.y")
+        for ((wait, applied) in listOf(29L to true, 31L to false)) {
+            runBlocking {
+                RoomBackupAppStore(LazyResource(Dispatchers.IO) { db }).replace(
+                    AppData(
+                        overrides = listOf(AppOverride(y.key, customLabel = "Why", missingSince = clock.now)),
+                        favorites = listOf(y.key),
+                    ),
+                )
+                source.silentlySet(emptyList())
+                val repo = repo()
+                repo.reconcileNow()
+                clock.advanceBy(wait * DAY)
+                source.silentlySet(listOf(y))
+                repo.reconcileNow()
+                val rows = db.overrideDao().all()
+                val favs = db.favoriteDao().all().map { it.component }
+                if (applied) {
+                    assertThat(rows.single().customLabel).isEqualTo("Why")
+                    assertThat(rows.single().missingSince).isNull()
+                    assertThat(favs).containsExactly(y.key.component)
+                } else {
+                    assertThat(rows).isEmpty()
+                    assertThat(favs).isEmpty()
+                }
+            }
+        }
+    }
+
+    /** A favourite of an uninstalled app gets a marker row, so it expires with the 30 days too; the marker goes on reinstall. */
+    @Test
+    fun missingFavourite_getsAMarkerThatExpires() {
+        val f = app("Fav", pkg = "fixture.fav")
+        source.silentlySet(listOf(f))
+        val repo = repo()
+        runBlocking {
+            repo.reconcileNow()
+            db.favoriteDao().replaceAll(listOf(f.key.component to f.key.userSerial))
+            source.silentlySet(emptyList())
+            repo.reconcileNow()
+            assertThat(
+                db
+                    .overrideDao()
+                    .all()
+                    .single()
+                    .missingSince,
+            ).isEqualTo(clock.now)
+            source.silentlySet(listOf(f))
+            repo.reconcileNow()
+            assertThat(db.overrideDao().all()).isEmpty()
+            assertThat(db.favoriteDao().all()).hasSize(1)
+            source.silentlySet(emptyList())
+            repo.reconcileNow()
+            clock.advanceBy(31L * DAY)
+            repo.reconcileNow()
+            assertThat(db.favoriteDao().all()).isEmpty()
+        }
+    }
+
+    /** The restore port replaces the three tables at once and reads them back unchanged. */
+    @Test
+    fun backupAppStore_roundTrip() {
+        val store = RoomBackupAppStore(LazyResource(Dispatchers.IO) { db })
+        val data =
+            AppData(
+                overrides =
+                    listOf(
+                        AppOverride(AppKey("a.b/.C", 0), hidden = true),
+                        AppOverride(
+                            AppKey("a.b/.D", 10),
+                            customLabel = "Dee",
+                            icon = IconOverride("p.q", "d"),
+                            missingSince = 5,
+                        ),
+                    ),
+                favorites = listOf(AppKey("a.b/.D", 10), AppKey("a.b/.C", 0)),
+                widgets =
+                    listOf(
+                        WidgetPlacement(-1, WidgetProviderRef("w.x/.W", 0), 2, true, WidgetPlacementState.NEEDS_REBIND),
+                    ),
+            )
+        runBlocking {
+            db.overrideDao().upsert(AppOverrideEntity("old/.Old", 0, hidden = true))
+            store.replace(data)
+            assertThat(store.read()).isEqualTo(data)
+            store.replace(AppData())
+            assertThat(store.read()).isEqualTo(AppData())
         }
     }
 

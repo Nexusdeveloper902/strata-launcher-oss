@@ -144,11 +144,19 @@ class AppCatalogRepository(
                 it.missingSince == null && it.userSerial in loadedSerials &&
                     AppKey(it.component, it.userSerial) !in present
             }
+        val withRow = overrides.mapTo(HashSet()) { AppKey(it.component, it.userSerial) }
+        val markers =
+            db
+                .favoriteDao()
+                .all()
+                .map { AppKey(it.component, it.userSerial) }
+                .filter { it !in withRow && it.userSerial in loadedSerials && it !in present }
         db.overrideDao().reconcile(
             present = toClear.map { it.component to it.userSerial },
             missing = toMark.map { it.component to it.userSerial },
             now = now,
             purgeCutoff = now - RETENTION_MS,
+            markers = markers.map { it.component to it.userSerial },
         )
     }
 

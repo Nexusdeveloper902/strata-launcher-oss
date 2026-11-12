@@ -82,6 +82,7 @@ enum class SettingsPage {
     ROOT,
     HIDDEN_APPS,
     ICONS,
+    BACKUP,
     PRIVACY,
     ABOUT,
     LICENCES,
@@ -116,6 +117,9 @@ fun SettingsRoute(
     /** FR-SET-07 Icons page. */
     icons: IconCoverageState = IconCoverageState(),
     onIconsAction: (IconCoverageAction) -> Unit = {},
+    /** FR-BACKUP-01…03 Backup page. */
+    backup: BackupUiState = BackupUiState(),
+    onBackupAction: (BackupAction) -> Unit = {},
 ) {
     val context = LocalContext.current
     val currentOnNavigate by rememberUpdatedState(onNavigate)
@@ -157,6 +161,7 @@ fun SettingsRoute(
             SettingsPage.ROOT -> SettingsRoot(state, onAction, onPage)
             SettingsPage.HIDDEN_APPS -> HiddenAppsPage(state, onAction)
             SettingsPage.ICONS -> IconCoveragePage(icons, onIconsAction)
+            SettingsPage.BACKUP -> BackupPage(backup, onBackupAction)
             SettingsPage.PRIVACY -> PrivacyPage(state, onAction)
             SettingsPage.ABOUT -> AboutPage(state) { onPage(SettingsPage.LICENCES) }
             SettingsPage.LICENCES -> LicencesPage(state, onAction) { onPage(SettingsPage.LICENCE_TEXT) }
@@ -178,7 +183,7 @@ private fun SettingsRoot(
     val s = state.settings ?: return
     LazyColumn(modifier = Modifier.fillMaxSize().safeDrawingPadding().testTag(SettingsTestTags.ROOT)) {
         item { Title(stringResource(R.string.settings_title)) }
-        // T-SET-02 order: Home, App list, Search, Gestures, Notifications, Themes, Icons, Apps, Backup (M8 part 2),
+        // T-SET-02 order: Home, App list, Search, Gestures, Notifications, Themes, Icons, Apps, Backup,
         // Privacy & permissions, About. "Default home" and "Uninstall Strata" (FR-SET-02) lead the Home group.
         group(R.string.settings_group_home) {
             item {
@@ -296,6 +301,15 @@ private fun SettingsRoot(
                     onAction,
                     R.string.settings_show_private_space_summary,
                 )
+            }
+        }
+        group(R.string.settings_group_backup) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.backup_page),
+                    summary = stringResource(R.string.backup_page_summary),
+                    tag = BackupTags.ROW,
+                ) { onPage(SettingsPage.BACKUP) }
             }
         }
         group(R.string.settings_group_privacy) {

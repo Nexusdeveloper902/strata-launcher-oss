@@ -12,19 +12,25 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.BuildConfig
 import app.strata.launcher.appGraph
+import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.system.SystemIntent
 import app.strata.launcher.feature.onboarding.OnboardingAction
 import app.strata.launcher.feature.onboarding.OnboardingRoute
 import app.strata.launcher.feature.onboarding.OnboardingViewModel
 import app.strata.launcher.feature.onboarding.SetDefaultDialogs
 import app.strata.launcher.feature.onboarding.SetDefaultViewModel
+import app.strata.launcher.feature.settings.BackupAction
+import app.strata.launcher.feature.settings.BackupEffect
+import app.strata.launcher.feature.settings.BackupViewModel
 import app.strata.launcher.feature.settings.IconCoverageViewModel
 import app.strata.launcher.feature.settings.SettingsAction
 import app.strata.launcher.feature.settings.SettingsEffect
@@ -36,6 +42,7 @@ import app.strata.launcher.onboarding.SystemScreenLauncher
 import app.strata.launcher.theme.ThemeHost
 import app.strata.launcher.theme.ThemesActivity
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
@@ -86,6 +93,33 @@ class SettingsActivity : ComponentActivity() {
             }
         }
     }
+
+    /** Settings → Backup (FR-BACKUP-01…03); the picker in flight lives in its saved state. */
+    private val backupViewModel: BackupViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                BackupViewModel(
+                    service = graph.backup,
+                    logger = graph.logger,
+                    handle = createSavedStateHandle(),
+                    hasWorkProfile = graph.profiles.profiles.map { list -> list.any { it.kind == ProfileKind.WORK } },
+                )
+            }
+        }
+    }
+
+    /** ARCHITECTURE §12.2: `ACTION_CREATE_DOCUMENT`, `application/json`. */
+    private val createBackup =
+        registerForActivityResult(ActivityResultContracts.CreateDocument(BACKUP_MIME)) { uri ->
+            backupViewModel.onAction(BackupAction.ExportTo(uri?.toString()))
+        }
+
+    /** THEME_SYSTEM §3.1 "Backup restore" types. */
+    private val openBackup =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            backupViewModel.onAction(BackupAction.RestoreFrom(uri?.toString()))
+        }
 
     /** First run from the launcher icon (D-008, FR-ONBOARD-01). */
     private val onboardingViewModel: OnboardingViewModel by viewModels {
@@ -160,6 +194,8 @@ class SettingsActivity : ComponentActivity() {
                 }
                 ?: startPage
         appGraph.startTheme()
+        // Hidden apps, the icon tool and backup need the catalog (and backup its start steps) even without home.
+        appGraph.startCatalog()
         systemScreens.bind(onboardingViewModel.setDefault)
         systemScreens.bind(setDefaultViewModel.flow)
         // The settings rows' home-settings screen (FR-SET-02); ignored unless the settings view model opened it.
@@ -183,6 +219,7 @@ class SettingsActivity : ComponentActivity() {
                     EntryRoute.SETTINGS_ROOT -> {
                         val state by viewModel.state.collectAsStateWithLifecycle()
                         val icons by iconCoverage.state.collectAsStateWithLifecycle()
+                        val backup by backupViewModel.state.collectAsStateWithLifecycle()
                         SettingsRoute(
                             state = state,
                             effects = settingsEffects,
@@ -194,6 +231,8 @@ class SettingsActivity : ComponentActivity() {
                             onNavigate = ::navigate,
                             icons = icons,
                             onIconsAction = iconCoverage::onAction,
+                            backup = backup,
+                            onBackupAction = backupViewModel::onAction,
                         )
                         val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
                         SetDefaultDialogs(setDefault, setDefaultViewModel.flow)
@@ -204,6 +243,9 @@ class SettingsActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { backupViewModel.effects.collect(::onBackupEffect) }
         }
         lifecycleScope.launch {
             val done =
@@ -273,6 +315,35 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 
+    private fun onBackupEffect(effect: BackupEffect) {
+        val started =
+            try {
+                when (effect) {
+                    is BackupEffect.CreateDocument -> {
+                        createBackup.launch(effect.suggestedName)
+                    }
+
+                    BackupEffect.OpenDocument -> {
+                        openBackup.launch(BACKUP_OPEN_TYPES)
+                    }
+
+                    is BackupEffect.ShareDocument -> {
+                        val send =
+                            Intent(Intent.ACTION_SEND)
+                                .setType(BACKUP_MIME)
+                                .putExtra(Intent.EXTRA_STREAM, android.net.Uri.parse(effect.uri))
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        startActivity(Intent.createChooser(send, null))
+                    }
+                }
+                true
+            } catch (e: android.content.ActivityNotFoundException) {
+                appGraph.logger.w(TAG, "no handler for a backup document", e)
+                false
+            }
+        if (!started) backupViewModel.onAction(BackupAction.PickerUnavailable)
+    }
+
     private fun show(route: EntryRoute) {
         appGraph.logger.d(TAG, "entry route $route")
         if (route == EntryRoute.HOME) openHome() else screen = route
@@ -286,6 +357,10 @@ class SettingsActivity : ComponentActivity() {
     companion object {
         private const val TAG = "Entry"
         private const val STATE_PAGE = "settings_page"
+        private const val BACKUP_MIME = "application/json"
+
+        /** THEME_SYSTEM §3.1: backup restore accepts these types (not offered to other apps). */
+        private val BACKUP_OPEN_TYPES = arrayOf("application/json", "application/octet-stream", "text/plain")
 
         /** Explicit start from the list end (FR-LIST-06) and the empty-list action: the hidden-apps page. */
         const val ACTION_HIDDEN_APPS = "app.strata.launcher.action.HIDDEN_APPS"

@@ -49,6 +49,9 @@ interface LaunchLogRepository {
 
     /** Emits after every write or clear, so recents can be re-queried. */
     val changes: Flow<Unit>
+
+    /** Launch counts per key and UTC day in the window, for the opt-in backup export (ARCHITECTURE §12.1). */
+    suspend fun dayCounts(): List<app.strata.launcher.core.platformapi.backup.LaunchDayCount> = emptyList()
 }
 
 /** Limits of FR-APPS-05 (custom labels). */

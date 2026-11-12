@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- API ≤ 30 Auto Backup: the cloud set of data_extraction_rules.xml (ANDROID_PLATFORM §17). -->
+<!-- API ≤ 30 Auto Backup: the cloud set of data_extraction_rules.xml (ANDROID_PLATFORM §17, final in M8). Only the includes are
+     carried; themes/images/, restore/ and launch_log.db are outside them (see data_extraction_rules.xml). -->
 <full-backup-content>
     <include domain="file" path="datastore/" />
     <include domain="file" path="themes/user/" />

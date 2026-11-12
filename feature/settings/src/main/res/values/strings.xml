@@ -133,4 +133,97 @@
     <string name="licences_entry">%1$s · %2$s</string>
     <string name="licences_unreadable">The licence list couldn\'t be read.</string>
     <string name="licences_text_unreadable">This licence text couldn\'t be read.</string>
+    <!-- FR-BACKUP-01…03 Backup (J-11, ARCHITECTURE §12) -->
+    <string name="settings_group_backup">Backup</string>
+    <string name="backup_page">Backup and restore</string>
+    <string name="backup_page_summary">Save your setup to a file, or restore it</string>
+    <string name="backup_export">Export</string>
+    <string name="backup_export_summary">Save settings, favourites, names, hidden apps and themes to a file</string>
+    <string name="backup_restore">Restore from file</string>
+    <string name="backup_restore_summary">Replace your setup with a backup file</string>
+    <string name="backup_undo">Undo restore</string>
+    <string name="backup_undo_summary">Put back the setup from before the restore (until Strata restarts)</string>
+    <string name="backup_export_title">Export a backup</string>
+    <string name="backup_export_warning">This file lists the apps on your phone and your Strata settings. Anyone with the file can see that list. It contains no messages, contacts or passwords.</string>
+    <string name="backup_include_work">Include work profile</string>
+    <string name="backup_include_log">Include launch history</string>
+    <string name="backup_include_log_summary">Launches per app and day, no times</string>
+    <string name="backup_export_confirm">Export</string>
+    <string name="backup_busy_exporting">Saving the backup…</string>
+    <string name="backup_busy_reading">Checking the file…</string>
+    <string name="backup_busy_restoring">Restoring…</string>
+    <string name="backup_busy_undoing">Undoing the restore…</string>
+    <string name="backup_exported">Backup saved.</string>
+    <string name="backup_share">Share</string>
+    <string name="backup_restored">Your setup was restored.</string>
+    <string name="backup_undone">The restore was undone.</string>
+    <string name="backup_dismiss">Dismiss</string>
+    <string name="backup_preview_title">Restore this backup?</string>
+    <string name="backup_preview_created">Made on %1$s</string>
+    <string name="backup_preview_missing_title">Not installed (applied when you install them, for 30 days):</string>
+    <string name="backup_preview_replace_note">Your current setup is replaced. You can undo this until Strata restarts.</string>
+    <string name="backup_replace">Replace current setup</string>
+    <string name="backup_cancel">Cancel</string>
+    <string name="backup_error_not_backup">This file isn\'t a Strata backup.</string>
+    <string name="backup_error_damaged_at">This backup is damaged (line %1$d, column %2$d).</string>
+    <string name="backup_error_damaged">This backup is damaged.</string>
+    <string name="backup_error_too_large">This backup is too large.</string>
+    <string name="backup_error_newer">Made with a newer version of Strata Launcher. Update the app to restore it.</string>
+    <string name="backup_error_unreadable">The file couldn\'t be read.</string>
+    <string name="backup_error_write">The backup couldn\'t be saved.</string>
+    <string name="backup_error_not_ready">Your apps aren\'t loaded yet. Try again in a moment.</string>
+    <string name="backup_error_expired">This restore is no longer ready. Pick the file again.</string>
+    <string name="backup_error_failed">The restore didn\'t finish. Your previous setup was kept.</string>
+    <string name="backup_error_incomplete">The restore didn\'t finish and your previous setup couldn\'t be put back completely. Tap Undo restore to try again.</string>
+    <string name="backup_error_nothing_to_undo">There is nothing to undo.</string>
+    <plurals name="backup_count_settings">
+        <item quantity="one">%1$d setting</item>
+        <item quantity="other">%1$d settings</item>
+    </plurals>
+    <plurals name="backup_count_favorites">
+        <item quantity="one">%1$d favourite</item>
+        <item quantity="other">%1$d favourites</item>
+    </plurals>
+    <plurals name="backup_count_hidden">
+        <item quantity="one">%1$d hidden app</item>
+        <item quantity="other">%1$d hidden apps</item>
+    </plurals>
+    <plurals name="backup_count_renames">
+        <item quantity="one">%1$d renamed app</item>
+        <item quantity="other">%1$d renamed apps</item>
+    </plurals>
+    <plurals name="backup_count_icons">
+        <item quantity="one">%1$d icon override</item>
+        <item quantity="other">%1$d icon overrides</item>
+    </plurals>
+    <plurals name="backup_count_themes">
+        <item quantity="one">%1$d theme</item>
+        <item quantity="other">%1$d themes</item>
+    </plurals>
+    <plurals name="backup_count_widgets">
+        <item quantity="one">%1$d widget to re-add</item>
+        <item quantity="other">%1$d widgets to re-add</item>
+    </plurals>
+    <plurals name="backup_count_missing">
+        <item quantity="one">%1$d app not installed</item>
+        <item quantity="other">%1$d apps not installed</item>
+    </plurals>
+    <plurals name="backup_count_newer">
+        <item quantity="one">%1$d newer setting will be ignored</item>
+        <item quantity="other">%1$d newer settings will be ignored</item>
+    </plurals>
+    <plurals name="backup_count_dropped">
+        <item quantity="one">%1$d invalid entry will be skipped</item>
+        <item quantity="other">%1$d invalid entries will be skipped</item>
+    </plurals>
+    <plurals name="backup_count_work_skipped">
+        <item quantity="one">%1$d work-profile entry skipped: this phone has no work profile</item>
+        <item quantity="other">%1$d work-profile entries skipped: this phone has no work profile</item>
+    </plurals>
+    <plurals name="backup_count_log_days">
+        <item quantity="one">%1$d day of launch history</item>
+        <item quantity="other">%1$d days of launch history</item>
+    </plurals>
+    <string name="backup_theme_excluded">Not restored (damaged theme): %1$s</string>
+    <string name="backup_theme_needs_update">Needs app update: %1$s</string>
 </resources>
