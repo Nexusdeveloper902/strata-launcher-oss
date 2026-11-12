@@ -194,6 +194,8 @@ class SettingsActivity : ComponentActivity() {
                 }
                 ?: startPage
         appGraph.startTheme()
+        // Hidden apps, the icon tool and backup need the catalog (and backup its start steps) even without home.
+        appGraph.startCatalog()
         systemScreens.bind(onboardingViewModel.setDefault)
         systemScreens.bind(setDefaultViewModel.flow)
         // The settings rows' home-settings screen (FR-SET-02); ignored unless the settings view model opened it.

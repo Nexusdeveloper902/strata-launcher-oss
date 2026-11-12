@@ -135,7 +135,9 @@ class RestoreKillTest {
             val old = ref.dump()
             val refSwitch = Switch()
             val rs = service(ref, refSwitch)
-            rs.restore((rs.preview("content://b") as Outcome.Ok).value.token)
+            val refToken = (rs.preview("content://b") as Outcome.Ok).value.token
+            refSwitch.writes = 0 // count only the writes of Replace
+            rs.restore(refToken)
             val new = ref.dump()
             val writes = refSwitch.writes
             assertThat(new).isNotEqualTo(old)
@@ -146,9 +148,11 @@ class RestoreKillTest {
             repeat(100) {
                 val h = harness()
                 val killAt = random.nextInt(writes)
-                val s = Switch(killAt)
+                val s = Switch()
                 val svc = service(h, s)
                 val token = (svc.preview("content://b") as Outcome.Ok).value.token
+                s.writes = 0
+                s.killAt = killAt
                 val died =
                     try {
                         svc.restore(token)

@@ -78,5 +78,6 @@ dependencies {
     testImplementation(libs.androidx.room.runtime) // T-PRIV-05 opens the real launch-log database
     androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(projects.testing.fakes)
+    androidTestImplementation(projects.testing.fixtures)
     androidTestImplementation(libs.androidx.room.runtime)
 }

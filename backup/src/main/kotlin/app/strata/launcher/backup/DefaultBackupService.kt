@@ -112,12 +112,20 @@ class DefaultBackupService(
     suspend fun onProcessStart(): StartReport =
         withContext(io) {
             mutex.withLock {
+                startReport?.let { return@withLock it }
                 val replayed = replayJournal()
                 safe("delete undo") { files.delete(UNDO) }
                 undo.value = false
-                StartReport(replayed, detectRestore())
+                StartReport(replayed, detectRestore()).also { startReport = it }
             }
         }
+
+    /** Set once [onProcessStart] ran; every operation runs it first, whichever screen started the process. */
+    @Volatile private var startReport: StartReport? = null
+
+    private suspend fun ensureStarted() {
+        if (startReport == null) onProcessStart()
+    }
 
     private suspend fun replayJournal(): Boolean {
         val bytes = safe("read journal") { files.read(JOURNAL, RestoreStateCodec.MAX_BYTES) } ?: return false
@@ -168,6 +176,7 @@ class DefaultBackupService(
         options: ExportOptions,
     ): Outcome<ExportReport, BackupError> =
         withContext(io) {
+            ensureStarted()
             mutex.withLock {
                 guarded {
                     val kinds = profileKinds() ?: return@guarded Outcome.Err(BackupError.NotReady)
@@ -278,6 +287,7 @@ class DefaultBackupService(
 
     override suspend fun preview(uri: String): Outcome<RestorePreview, BackupError> =
         withContext(io) {
+            ensureStarted()
             val bytes =
                 when (val r = documents.read(uri, BackupFormat.MAX_BYTES)) {
                     is DocumentRead.Ok -> r.bytes
@@ -360,6 +370,7 @@ class DefaultBackupService(
 
     override suspend fun restore(token: String): Outcome<RestorePreview, BackupError> =
         withContext(io + NonCancellable) {
+            ensureStarted()
             mutex.withLock {
                 val p =
                     synchronized(prepared) { prepared.remove(token) }
@@ -418,6 +429,7 @@ class DefaultBackupService(
 
     override suspend fun undoRestore(): Outcome<Unit, BackupError> =
         withContext(io + NonCancellable) {
+            ensureStarted()
             mutex.withLock {
                 if (!undo.value) return@withLock Outcome.Err(BackupError.NothingToUndo)
                 val bytes =

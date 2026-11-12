@@ -593,8 +593,8 @@ theme). At most 200 embedded themes.
 - **Excluded by construction:** notification content, contact data, search queries, private-space
   data, widget IDs and RemoteViews, user font/image binaries (themes referencing them keep their
   hash references and fall back with a warning on another device, THEME_SYSTEM §10.2), icon caches,
-  device identifiers, account data. *JSON Schema file:* `spec/backup.schema.json` is to be written in M8
-  (owned by the implementer of `:backup`). This section is normative until then.
+  device identifiers, account data. *JSON Schema file:* `spec/backup.schema.json` (written in M8 by the
+  implementer of `:backup`; this section stays normative where the two differ).
 
 ### 12.2 Export
 User opens Settings → Backup → Export. A sheet shows what will be included, with the toggles work
