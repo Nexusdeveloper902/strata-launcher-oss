@@ -30,6 +30,8 @@ import app.strata.launcher.testing.fakes.FakeThemeEditorStore
 import app.strata.launcher.testing.fakes.FakeThemeManager
 import app.strata.launcher.testing.fakes.FakeThemeRepository
 import app.strata.launcher.testing.fakes.FakeTimeTicks
+import app.strata.launcher.testing.fakes.FakeWidgetHost
+import app.strata.launcher.testing.fakes.FakeWidgetRepository
 import app.strata.launcher.testing.fakes.RecordingLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +65,8 @@ class TestAppGraph(
     override val shortcuts: FakeShortcutSource = FakeShortcutSource(),
     override val badges: FakeBadgeSource = FakeBadgeSource(),
     override val contacts: FakeContactsSource = FakeContactsSource(),
+    override val widgetHost: FakeWidgetHost = FakeWidgetHost(),
+    override val widgets: FakeWidgetRepository = FakeWidgetRepository(),
 ) : AppGraph {
     constructor(roleController: FakeRoleController = FakeRoleController(), onboarded: Boolean) :
         this(roleController, FakeSettingsRepository(Settings(onboardingDone = onboarded)))

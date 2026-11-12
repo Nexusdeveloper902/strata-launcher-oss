@@ -10,7 +10,15 @@
      non-exported receiver of the test APK cannot receive its broadcasts. A permission guard is not possible either
      (Strata would have to declare it; the permission gate forbids that). Instead the receiver refuses any sender but
      Strata on API 34+ (shared broadcast identity), and it can only touch the test package's own notifications and the
-     contacts of its own fixture account. AGP uninstalls the test APK after a connected run. The permissions below belong to the test APK only, never to Strata; the tests grant
+     contacts of its own fixture account.
+     WIDGET_FIX (M7 part 2, WidgetDeviceTest.kt): FixtureWidgetProvider and its three subclasses are widget providers of
+     the test package (a scrollable list via FixtureListService; the subclasses name the configure activities Back /
+     RESULT_FIRST_USER / crash). Providers must be exported for the system's APPWIDGET_UPDATE; the list service is guarded
+     by BIND_REMOTEVIEWS. WidgetFixtureReceiver turns a provider off and on (T-WIDGET-09), with the same sender check as
+     AccessFixtureReceiver. The crashing configure activity runs in its own process (":crash"): a crash in the fixture
+     receiver's process left it unanswering on API 26 (CI run 43161519075). The configure fixtures are not noHistory: a
+     transient loss of visibility must not finish them before the test answers them; teardown clears them by bringing
+     home to front. AGP uninstalls the test APK after a connected run. The permissions below belong to the test APK only, never to Strata; the tests grant
      them with `pm grant app.strata.launcher.test …`. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -48,5 +56,81 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/fixture_shortcuts" />
         </activity>
+        <receiver
+            android:name="app.strata.launcher.widget.FixtureWidgetProvider"
+            android:exported="true"
+            android:label="@string/fixture_widget_list">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/fixture_widget_plain" />
+        </receiver>
+        <receiver
+            android:name="app.strata.launcher.widget.FixtureWidgetProvider$BackConfig"
+            android:exported="true"
+            android:label="@string/fixture_widget_back">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/fixture_widget_back" />
+        </receiver>
+        <receiver
+            android:name="app.strata.launcher.widget.FixtureWidgetProvider$FirstUserConfig"
+            android:exported="true"
+            android:label="@string/fixture_widget_first_user">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/fixture_widget_first_user" />
+        </receiver>
+        <receiver
+            android:name="app.strata.launcher.widget.FixtureWidgetProvider$CrashConfig"
+            android:exported="true"
+            android:label="@string/fixture_widget_crash">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/fixture_widget_crash" />
+        </receiver>
+        <activity
+            android:name="app.strata.launcher.widget.FixtureConfigureActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="app.strata.launcher.widget.FixtureConfigureActivity$FirstUser"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="app.strata.launcher.widget.FixtureConfigureActivity$Crash"
+            android:exported="true"
+            android:process=":crash"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name="app.strata.launcher.widget.FixtureListService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <receiver
+            android:name="app.strata.launcher.widget.WidgetFixtureReceiver"
+            android:exported="true" />
     </application>
 </manifest>

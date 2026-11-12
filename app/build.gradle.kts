@@ -58,11 +58,13 @@ dependencies {
     implementation(projects.platform.apps)
     implementation(projects.platform.icons)
     implementation(projects.platform.notifications)
+    implementation(projects.platform.widgets)
     implementation(projects.feature.home)
     implementation(projects.feature.search)
     implementation(projects.feature.onboarding)
     implementation(projects.feature.settings)
     implementation(projects.feature.theme)
+    implementation(projects.feature.widgets)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
