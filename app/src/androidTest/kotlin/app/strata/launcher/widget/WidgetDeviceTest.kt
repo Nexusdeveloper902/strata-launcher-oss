@@ -307,6 +307,12 @@ class WidgetDeviceTest {
         compose.waitForIdle()
     }
 
+    /** The focused window is not one of Strata's: the system consent dialog (`ACTION_APPWIDGET_BIND`) is in front. */
+    private fun consentDialogFocused(): Boolean {
+        val focus = Regex("mCurrentFocus=Window\\{[^}]*\\}").find(focusReport())?.value ?: return false
+        return !focus.contains(context.packageName + "/") && !focus.contains("Application Error")
+    }
+
     /** The picker's bind flow is running (set synchronously by the tap that picks). */
     private fun pickerBusy(): Boolean {
         var busy = false
@@ -370,25 +376,17 @@ class WidgetDeviceTest {
 
     @Test
     fun tWidget03_bindDenied_idDeleted() {
-        // No grant: the system consent dialog appears; Back declines it.
+        // No grant: the system consent dialog appears and the user declines it.
         openPickerFromHomeMenu()
         pick(list)
-        try {
-            compose.waitUntil(STALL_MS) {
-                var focused = true
-                instrumentation.runOnMainSync {
-                    focused =
-                        ActivityLifecycleMonitorRegistry
-                            .getInstance()
-                            .getActivitiesInStage(Stage.RESUMED)
-                            .any { it is WidgetPickerActivity && it.hasWindowFocus() }
-                }
-                !focused
-            }
-        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
-            throw AssertionError("The consent dialog did not appear. ${focusReport()}", e)
-        }
-        device.pressBack()
+        // Wait until the dialog itself holds input focus: the picker loses focus before the dialog window gets it, and
+        // a key sent in between is lost (CI run 43208833512, API 26: Back went nowhere and the dialog stayed).
+        val end = android.os.SystemClock.uptimeMillis() + STALL_MS
+        while (!consentDialogFocused() && android.os.SystemClock.uptimeMillis() < end) device.waitForIdle()
+        assertWithMessage("consent dialog focused. ${focusReport()}").that(consentDialogFocused()).isTrue()
+        // Decline with the dialog's negative button (button2); Back where the dialog has none.
+        val deny = device.findObject(By.res("android", "button2"))
+        if (deny != null) deny.click() else device.pressBack()
         waitNotAdded()
         assertThat(hostIds()).isEmpty()
         assertThat(placement()).isNull()

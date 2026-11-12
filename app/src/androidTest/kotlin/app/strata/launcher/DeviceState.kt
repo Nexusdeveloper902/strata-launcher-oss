@@ -28,6 +28,9 @@ import java.io.File
 /** Shared device-state helpers for the HomeActivity device tests (search, home). */
 private const val TAG = "DeviceState"
 
+/** The focused window is a crash dialog ("Application Error: <package>"). */
+private val CRASH_DIALOG_FOCUS = Regex("mCurrentFocus=Window\\{[^}]*Application Error: ")
+
 /**
  * Runs [command] as the shell user. This is a plain exec, not a shell: no pipes, quoting or redirection,
  * so filter the output in Kotlin.
@@ -63,7 +66,16 @@ fun focusReport(): String {
 fun closeSystemErrorDialog(device: UiDevice): Boolean {
     val close = device.findObject(By.res("android", "aerr_close"))
     val wait = device.findObject(By.res("android", "aerr_wait"))
-    if (close == null && wait == null) return false
+    if (close == null && wait == null) {
+        // API 26: the crash dialog of a background process (the test APK's ":crash" fixture) holds focus but its buttons
+        // are not reachable by id (CI run 43208833512, tWidget05 teardown). A crash dialog is cancelable and Back
+        // answers it like "Close". ANR dialogs keep the branch below (their "Wait" matters for System UI).
+        val focused = focusReport()
+        if (!CRASH_DIALOG_FOCUS.containsMatchIn(focused)) return false
+        Log.w(TAG, "Closing a crash dialog with Back: $focused")
+        device.pressBack()
+        return true
+    }
     val focus = focusReport()
     val systemUi = focus.contains("Not Responding: com.android.systemui")
     val button = if (systemUi) wait ?: close else close ?: wait
