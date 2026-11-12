@@ -24,6 +24,8 @@ import app.strata.launcher.core.platformapi.system.SharedFiles
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
+import app.strata.launcher.core.platformapi.widgets.WidgetHostController
+import app.strata.launcher.core.platformapi.widgets.WidgetRepository
 import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
@@ -67,6 +69,12 @@ interface AppGraph {
 
     /** Contact search (FR-SEARCH-06): opt-in, `READ_CONTACTS` requested only when turned on. */
     val contacts: ContactsSource
+
+    /** The platform widget host (FR-WIDGET-01…04): bind, consent, configure, host views. */
+    val widgetHost: WidgetHostController
+
+    /** The header widget's placement (Room `widget_placement`). */
+    val widgets: WidgetRepository
 
     /** Active theme and library (ARCHITECTURE §4); [ThemeRepository.start] boots it off the main thread. */
     val themeRepository: ThemeRepository

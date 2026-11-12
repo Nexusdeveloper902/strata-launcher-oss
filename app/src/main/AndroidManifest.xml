@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Strata Launcher. Skeleton: spec/ANDROID_PLATFORM.md §22 with the ARCHITECTURE §17 deltas.
      Components of §22 arrive with their milestones (M5: ThemeImportActivity, FileProvider; ThemesActivity is
-     the non-exported theme library; M6: PinRequestActivity; M7: BadgeListenerService). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
+     the non-exported theme library; M6: PinRequestActivity; M7: BadgeListenerService, WidgetHostRestoredReceiver,
+     and the non-exported WidgetPickerActivity). Permissions = ANDROID_PLATFORM §23 Required + Optional (T-CI-01, T-PRIV-03). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -106,6 +107,24 @@
                 <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
             </intent-filter>
         </activity>
+
+        <!-- S-WPICK and the widget bind flow (FR-WIDGET-02, J-10), started from home. Not exported. BIND_APPWIDGET is
+             never declared (ANDROID_PLATFORM §7, §23): binding is bindAppWidgetIdIfAllowed, then the user's consent. -->
+        <activity
+            android:name=".widget.WidgetPickerActivity"
+            android:exported="false"
+            android:label="@string/widget_picker_label"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Widget-ID remap after restore (FR-WIDGET-04; protected system broadcast, ANDROID_PLATFORM §22). The
+             receiver checks the action, our host ID and the extras (ARCHITECTURE §13). -->
+        <receiver
+            android:name=".widget.WidgetHostRestoredReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_HOST_RESTORED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Optional: notification badges (FR-NOTIF-01). The system binds it only after the user grants listener access
              in the system settings; only the system can bind it (BIND_NOTIFICATION_LISTENER_SERVICE). Counts only,

@@ -6,6 +6,7 @@
     <string name="icon_chooser_label">App icon</string>
     <string name="theme_editor_label">Edit theme</string>
     <string name="theme_import_label">Import theme</string>
+    <string name="widget_picker_label">Widgets</string>
     <!-- Shown in the system notification-access list. -->
     <string name="badge_service_label">Strata notification badges</string>
 </resources>

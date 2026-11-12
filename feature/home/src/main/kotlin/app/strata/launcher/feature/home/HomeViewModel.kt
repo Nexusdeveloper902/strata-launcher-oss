@@ -348,7 +348,7 @@ sealed interface HomeAction {
 }
 
 /** Features that arrive in a later milestone; the menu item explains that instead of doing nothing. */
-enum class LaterFeature { WIDGETS, THEMES }
+enum class LaterFeature { THEMES, }
 
 sealed interface HomeEffect {
     /** Collapse open layers and return to HOME_REST (favourites to start). */
@@ -374,6 +374,9 @@ sealed interface HomeEffect {
 
     /** The theme switch (debug builds only until the M5 theme library). */
     data object OpenThemes : HomeEffect
+
+    /** J-10: the home menu's "Widgets" opens S-WPICK (FR-WIDGET-02). */
+    data object OpenWidgetPicker : HomeEffect
 
     /** FR-APPS-06: S-ICON for [key]. */
     data class OpenIconChooser(val key: AppKey) : HomeEffect
@@ -816,7 +819,7 @@ class HomeViewModel(
             }
 
             HomeAction.MenuWidgets -> {
-                closeModalThen(HomeEffect.NotYetAvailable(LaterFeature.WIDGETS))
+                closeModalThen(HomeEffect.OpenWidgetPicker)
             }
 
             HomeAction.MenuThemes -> {

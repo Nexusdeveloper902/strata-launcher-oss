@@ -26,6 +26,7 @@ import app.strata.launcher.core.data.theme.AtomicFileThemeFileStore
 import app.strata.launcher.core.data.theme.BootAttempts
 import app.strata.launcher.core.data.theme.DataStoreThemeIndexStore
 import app.strata.launcher.core.data.theme.DefaultThemeRepository
+import app.strata.launcher.core.data.widgets.RoomWidgetRepository
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.AppListSource
@@ -47,6 +48,8 @@ import app.strata.launcher.core.platformapi.system.SharedFiles
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
+import app.strata.launcher.core.platformapi.widgets.WidgetHostController
+import app.strata.launcher.core.platformapi.widgets.WidgetRepository
 import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeLibrary
 import app.strata.launcher.core.theme.store.ThemeManager
@@ -70,6 +73,7 @@ import app.strata.launcher.platform.system.AndroidTimeTicks
 import app.strata.launcher.platform.system.AndroidWallpaperColorsSource
 import app.strata.launcher.platform.system.IcuCollation
 import app.strata.launcher.platform.system.ViewHaptics
+import app.strata.launcher.platform.widgets.AndroidWidgetHost
 import app.strata.launcher.theme.FileProviderSharedFiles
 import app.strata.launcher.theme.PlatformThemeInputs
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -330,6 +334,11 @@ class DefaultAppGraph(context: Context) : AppGraph {
     override val badges: BadgeSource get() = badgeSource
 
     override val contacts: ContactsSource by lazy { AndroidContactsSource(appContext, dispatchers.io, logger) }
+
+    /** Lazy (ARCHITECTURE §10): the host is created when home first starts listening. */
+    override val widgetHost: WidgetHostController by lazy { AndroidWidgetHost(appContext, dispatchers.io, logger) }
+
+    override val widgets: WidgetRepository by lazy { RoomWidgetRepository(strataDb) }
 
     override fun startCatalog() {
         profileSource

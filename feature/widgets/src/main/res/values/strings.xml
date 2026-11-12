@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- S-WPICK, the widget picker (FR-WIDGET-02, J-10) -->
+    <string name="widget_picker_title">Widgets</string>
+    <string name="widget_picker_search">Search widgets</string>
+    <string name="widget_picker_empty">No widgets found</string>
+    <string name="widget_picker_loading">Loading widgets</string>
+    <string name="widget_picker_back">Back</string>
+    <!-- Accessible name of one provider: widget label, then the app that provides it. -->
+    <string name="widget_provider_description">%1$s, widget from %2$s</string>
+    <string name="widget_provider_work">%1$s, work</string>
+    <string name="widget_not_added">Widget not added</string>
+    <!-- J-10: the first add asks whether the widget replaces the clock. -->
+    <string name="widget_replace_clock_title">Replace the clock?</string>
+    <string name="widget_replace_clock_text">Show this widget in place of the clock, or below it.</string>
+    <string name="widget_replace_clock_yes">Replace clock</string>
+    <string name="widget_replace_clock_no">Keep clock</string>
+
+    <!-- The header widget area (FR-WIDGET-01/03/04) -->
+    <string name="widget_area_description">Widget</string>
+    <string name="widget_menu_resize">Resize</string>
+    <string name="widget_menu_replace">Replace</string>
+    <string name="widget_menu_remove">Remove</string>
+    <string name="widget_menu_show_clock">Show clock</string>
+    <string name="widget_menu_hide_clock">Replace clock</string>
+    <string name="widget_action_options">Widget options</string>
+    <string name="widget_action_taller">Resize taller</string>
+    <string name="widget_action_shorter">Resize shorter</string>
+    <string name="widget_resize_taller">Taller</string>
+    <string name="widget_resize_shorter">Shorter</string>
+    <string name="widget_resize_done">Done</string>
+    <!-- Resize step, e.g. "Height 3 of 4". -->
+    <string name="widget_resize_step">Height %1$d of %2$d</string>
+    <string name="widget_unavailable">Widget unavailable</string>
+    <string name="widget_readd">Re-add</string>
+    <string name="widget_remove">Remove</string>
+    <string name="widget_error">This widget can\'t be shown</string>
+</resources>

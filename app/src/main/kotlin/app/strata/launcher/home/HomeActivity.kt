@@ -24,9 +24,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.BuildConfig
@@ -40,6 +42,7 @@ import app.strata.launcher.feature.home.HomeLayer
 import app.strata.launcher.feature.home.HomeModal
 import app.strata.launcher.feature.home.HomeRoute
 import app.strata.launcher.feature.home.HomeViewModel
+import app.strata.launcher.feature.home.HomeWidgetSlot
 import app.strata.launcher.feature.home.rememberAppActions
 import app.strata.launcher.feature.onboarding.OnboardingAction
 import app.strata.launcher.feature.onboarding.OnboardingRoute
@@ -49,12 +52,19 @@ import app.strata.launcher.feature.onboarding.SetDefaultViewModel
 import app.strata.launcher.feature.search.SearchAction
 import app.strata.launcher.feature.search.SearchRoute
 import app.strata.launcher.feature.search.SearchViewModel
+import app.strata.launcher.feature.widgets.WidgetArea
+import app.strata.launcher.feature.widgets.WidgetAreaEffect
+import app.strata.launcher.feature.widgets.WidgetAreaViewModel
+import app.strata.launcher.feature.widgets.WidgetMenu
 import app.strata.launcher.onboarding.SystemScreenLauncher
 import app.strata.launcher.settings.SettingsActivity
 import app.strata.launcher.theme.IconChooserActivity
 import app.strata.launcher.theme.ThemeHost
 import app.strata.launcher.theme.ThemesActivity
+import app.strata.launcher.widget.HostedWidget
+import app.strata.launcher.widget.WidgetPickerActivity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -139,6 +149,21 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    /** The header widget area (FR-WIDGET-01…04); safe mode suppresses it (ARCHITECTURE §10). */
+    private val widgetArea: WidgetAreaViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                WidgetAreaViewModel(
+                    host = graph.widgetHost,
+                    repository = graph.widgets,
+                    logger = graph.logger,
+                    safeMode = graph.themeRepository.state.map { it.safeMode },
+                )
+            }
+        }
+    }
+
     private val systemScreens = SystemScreenLauncher(this) { appGraph.logger }
 
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
@@ -161,6 +186,15 @@ class HomeActivity : ComponentActivity() {
         systemScreens.bind(onboardingViewModel.setDefault)
         systemScreens.bind(setDefaultViewModel.flow)
         themeHost.holdFirstFrame(window.decorView)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                widgetArea.effects.collect { effect ->
+                    if (effect is WidgetAreaEffect.OpenPicker) {
+                        startActivity(WidgetPickerActivity.intent(this@HomeActivity, effect.readd))
+                    }
+                }
+            }
+        }
         setContent {
             themeHost.Content(window) {
                 CompositionLocalProvider(LocalIconLoader provides iconLoader) {
@@ -178,6 +212,11 @@ class HomeActivity : ComponentActivity() {
                         showSetDefaultButton = true,
                         onSetDefault = { setDefaultViewModel.flow.setAsDefault() },
                         timeTicks = appGraph.timeTicks.ticks,
+                        widgetSlot = widgetSlot(),
+                        overlay = {
+                            val area by widgetArea.state.collectAsStateWithLifecycle()
+                            WidgetMenu(area, widgetArea::onAction)
+                        },
                         searchLayer = { session ->
                             val searchState by searchViewModel.state.collectAsStateWithLifecycle()
                             SearchRoute(
@@ -211,6 +250,28 @@ class HomeActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    /** The header widget (FR-WIDGET-01): null without a placement and in safe mode (the clock is shown). */
+    @Composable
+    private fun widgetSlot(): HomeWidgetSlot? {
+        val area by widgetArea.state.collectAsStateWithLifecycle()
+        if (!area.shown) return null
+        val graph = appGraph
+        return HomeWidgetSlot(replacesClock = area.replacesClock) { modifier ->
+            WidgetArea(
+                state = area,
+                onAction = widgetArea::onAction,
+                hostContent = {
+                    id,
+                    onLongPress,
+                    m,
+                    ->
+                    HostedWidget(graph.widgetHost, id, onLongPress, graph.logger, m)
+                },
+                modifier = modifier,
+            )
         }
     }
 
@@ -272,9 +333,13 @@ class HomeActivity : ComponentActivity() {
         // Callbacks are missed while not registered: reconcile on every start (ANDROID_PLATFORM §3.1).
         appGraph.appCatalog.requestReconcile()
         appGraph.profiles.refresh()
+        // ANDROID_PLATFORM §7: the host listens while home is started; widgets are re-created on startListening.
+        appGraph.widgetHost.startListening()
+        widgetArea.refresh()
     }
 
     override fun onStop() {
+        appGraph.widgetHost.stopListening()
         themeHost.onStop()
         super.onStop()
     }
@@ -304,6 +369,11 @@ class HomeActivity : ComponentActivity() {
 
                 HomeEffect.LockHint -> {
                     appGraph.systemIntents.accessibilitySettings()
+                    return
+                }
+
+                HomeEffect.OpenWidgetPicker -> {
+                    startActivity(WidgetPickerActivity.intent(this))
                     return
                 }
 

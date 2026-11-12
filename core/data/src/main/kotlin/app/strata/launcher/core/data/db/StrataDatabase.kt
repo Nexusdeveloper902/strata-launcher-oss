@@ -35,6 +35,8 @@ abstract class StrataDatabase : RoomDatabase() {
 
     abstract fun favoriteDao(): FavoriteDao
 
+    abstract fun widgetPlacementDao(): WidgetPlacementDao
+
     companion object {
         const val VERSION = 1
         const val FILE_NAME = "strata.db"
@@ -212,5 +214,73 @@ interface FavoriteDao {
     suspend fun update(transform: (List<Pair<String, Long>>) -> List<Pair<String, Long>>?) {
         val next = transform(all().map { it.component to it.userSerial }) ?: return
         replaceAll(next)
+    }
+}
+
+/** The widget area's placement (FR-WIDGET-01…04). v1 keeps at most one row. */
+@Dao
+interface WidgetPlacementDao {
+    @Query("SELECT * FROM widget_placement ORDER BY app_widget_id LIMIT 1")
+    fun observe(): Flow<WidgetPlacementEntity?>
+
+    @Query("SELECT * FROM widget_placement")
+    suspend fun all(): List<WidgetPlacementEntity>
+
+    @Query("DELETE FROM widget_placement")
+    suspend fun deleteAll()
+
+    @Upsert
+    suspend fun upsert(row: WidgetPlacementEntity)
+
+    @Query("DELETE FROM widget_placement WHERE app_widget_id = :id")
+    suspend fun delete(id: Int)
+
+    @Query("UPDATE widget_placement SET height_step = :step WHERE app_widget_id = :id")
+    suspend fun setHeightStep(
+        id: Int,
+        step: Int,
+    )
+
+    @Query("UPDATE widget_placement SET replace_clock = :replaceClock WHERE app_widget_id = :id")
+    suspend fun setReplaceClock(
+        id: Int,
+        replaceClock: Boolean,
+    )
+
+    @Query("UPDATE widget_placement SET state = :state WHERE app_widget_id = :id")
+    suspend fun setState(
+        id: Int,
+        state: Int,
+    )
+
+    /** The new row is the only one; returns the IDs it replaced. */
+    @Transaction
+    suspend fun replaceAll(row: WidgetPlacementEntity): List<Int> {
+        val old = all().map { it.appWidgetId }.filter { it != row.appWidgetId }
+        deleteAll()
+        upsert(row)
+        return old
+    }
+
+    /** `APPWIDGET_HOST_RESTORED`: rows move to their new IDs in one transaction ([newState] per row). */
+    @Transaction
+    suspend fun remap(
+        map: Map<Int, Int?>,
+        bound: Int,
+        unavailable: Int,
+    ) {
+        val rows = all()
+        val moved =
+            rows.filter { it.appWidgetId in map }.map { row ->
+                val target = map[row.appWidgetId]
+                if (target != null && target > 0) {
+                    row.copy(appWidgetId = target, state = bound)
+                } else {
+                    row.copy(state = unavailable)
+                }
+            }
+        if (moved.isEmpty()) return
+        rows.filter { it.appWidgetId in map }.forEach { delete(it.appWidgetId) }
+        moved.forEach { upsert(it) }
     }
 }

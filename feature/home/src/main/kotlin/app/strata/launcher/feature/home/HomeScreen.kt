@@ -138,6 +138,10 @@ fun HomeRoute(
     searchLayer: @Composable (SearchSession) -> Unit = {},
     /** Minute ticks for the header clock (ARCHITECTURE §3 `Clock.ticks`). */
     timeTicks: Flow<Unit> = flowOf(Unit),
+    /** The header widget (FR-WIDGET-01), supplied by `:app`; null = clock only. */
+    widgetSlot: HomeWidgetSlot? = null,
+    /** Drawn above everything else (the widget menu sheet), supplied by `:app`. */
+    overlay: @Composable () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -214,7 +218,6 @@ fun HomeRoute(
                 is HomeEffect.NotYetAvailable -> {
                     val text =
                         when (effect.feature) {
-                            LaterFeature.WIDGETS -> R.string.later_widgets
                             LaterFeature.THEMES -> R.string.later_themes
                         }
                     launch { snackbar.showSnackbar(resources.getString(text)) }
@@ -285,6 +288,7 @@ fun HomeRoute(
                 appActions = actions,
                 favoritesScroll = favoritesScroll,
                 timeTicks = timeTicks,
+                widgetSlot = widgetSlot,
                 indexExclusion = if (listShown || state.layer == HomeLayer.FAV_EDIT) IndexExclusion.NONE else exclusion,
             )
             val list = state.list
@@ -325,6 +329,7 @@ fun HomeRoute(
         }
         if (search != null) searchLayer(search)
         HomeModals(state = state, onAction = onAction)
+        overlay()
         val list = state.list
         if (letterGrid && list != null && listShown) {
             LetterGrid(
@@ -406,6 +411,18 @@ internal fun Modifier.sheetKey(
         }
     }
 
+/**
+ * The header widget area supplied by `:app` (FR-WIDGET-01; ARCHITECTURE §3: only `:app` unwraps the host view).
+ * [replacesClock] hides the clock and date while the widget is shown.
+ */
+class HomeWidgetSlot(
+    val replacesClock: Boolean,
+    val content: @Composable (Modifier) -> Unit,
+)
+
+private val WIDGET_MIN_WINDOW_HEIGHT = 360.dp
+private val WIDGET_GAP = 12.dp
+
 /** INTERACTION_SPEC §7 "HOME → SEARCH": home content fades to 0.3 α. */
 private const val UNDER_SEARCH_ALPHA = 0.3f
 
@@ -428,6 +445,7 @@ fun HomeScreen(
     favoritesScroll: ScrollState = rememberScrollState(),
     timeTicks: Flow<Unit> = flowOf(Unit),
     indexExclusion: IndexExclusion = IndexExclusion.NONE,
+    widgetSlot: HomeWidgetSlot? = null,
 ) {
     val theme = Strata.theme
     val rootActions = homeRootActions(state, onAction)
@@ -453,6 +471,7 @@ fun HomeScreen(
         val atEnd = theme.alphabetIndex.side == IndexSide.END
         val indexReserve = if (showIndex) INDEX_RESERVE else 0.dp
         val landscape = maxWidth > maxHeight
+        val widgetFits = maxHeight >= WIDGET_MIN_WINDOW_HEIGHT
         val sidePadding = if (maxWidth >= MEDIUM_WIDTH) MEDIUM_SIDE_PADDING else 0.dp
         Column(
             modifier =
@@ -482,13 +501,26 @@ fun HomeScreen(
                     if (iconNotice != null) IconNoticeCard(iconNotice, onAction)
                 }
             }
+            // INTERACTION_SPEC §10 / VISUAL_SPEC §8.1: below 360 dp of height the widget is hidden (clock only).
+            val widget = widgetSlot.takeIf { widgetFits }
             val header: @Composable (Modifier) -> Unit = { m ->
-                HomeHeader(
-                    ticks = timeTicks,
-                    onClock = { onAction(HomeAction.OpenClock) },
-                    onDate = { onAction(HomeAction.OpenCalendar) },
-                    modifier = m.padding(top = HEADER_TOP, start = 16.dp, end = 16.dp),
-                )
+                Column(modifier = m) {
+                    if (widget == null || !widget.replacesClock) {
+                        HomeHeader(
+                            ticks = timeTicks,
+                            onClock = { onAction(HomeAction.OpenClock) },
+                            onDate = { onAction(HomeAction.OpenCalendar) },
+                            modifier = Modifier.padding(top = HEADER_TOP, start = 16.dp, end = 16.dp),
+                        )
+                    }
+                    widget?.content(
+                        Modifier.padding(
+                            top = if (widget.replacesClock) HEADER_TOP else WIDGET_GAP,
+                            start = 16.dp,
+                            end = 16.dp,
+                        ),
+                    )
+                }
             }
             val pill: @Composable () -> Unit = {
                 if (theme.search.position != SearchPosition.HIDDEN) {

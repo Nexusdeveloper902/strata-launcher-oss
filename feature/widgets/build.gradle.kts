@@ -1,7 +1,15 @@
-// Empty until its milestone (IMPLEMENTATION_ROADMAP §1); the compose plugin is added then.
-plugins { alias(libs.plugins.strata.android.library) }
+plugins {
+    alias(libs.plugins.strata.android.library)
+    alias(libs.plugins.strata.android.compose)
+}
 
 dependencies {
     implementation(projects.core.ui)
     implementation(projects.core.platformApi)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+
+    testImplementation(projects.testing.fakes)
+    testImplementation(projects.testing.fixtures)
 }
