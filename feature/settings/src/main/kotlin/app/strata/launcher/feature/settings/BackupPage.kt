@@ -196,6 +196,10 @@ internal fun errorText(e: BackupError): String =
             stringResource(R.string.backup_error_failed)
         }
 
+        BackupError.RestoreIncomplete -> {
+            stringResource(R.string.backup_error_incomplete)
+        }
+
         BackupError.NothingToUndo -> {
             stringResource(R.string.backup_error_nothing_to_undo)
         }

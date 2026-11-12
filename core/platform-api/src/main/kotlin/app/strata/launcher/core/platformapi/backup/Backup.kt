@@ -86,6 +86,9 @@ sealed interface BackupError {
     /** A restore step failed; the previous state was put back. */
     data object RestoreFailed : BackupError
 
+    /** A restore step failed and putting the previous state back failed too: "Undo restore" can try again. */
+    data object RestoreIncomplete : BackupError
+
     /** "Undo restore" is no longer available (next start, or nothing restored). */
     data object NothingToUndo : BackupError
 }
@@ -158,6 +161,9 @@ interface RestoreFileStore {
     )
 
     fun delete(name: String)
+
+    /** True when [name] exists, whatever its size (a file [read] refuses as too large still exists). */
+    fun exists(name: String): Boolean
 }
 
 /** `noBackupFilesDir/install_marker` (ARCHITECTURE §12.3 step 6): never part of any backup. */

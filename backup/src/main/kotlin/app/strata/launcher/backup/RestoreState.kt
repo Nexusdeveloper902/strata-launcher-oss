@@ -99,6 +99,7 @@ object RestoreStateCodec {
         m["themes"] =
             JsonObject(
                 "exact" to JsonBool.of(t.exact),
+                "knownIds" to JsonArray(t.knownIds.sorted().map(::JsonString)),
                 "active" to (t.activeId?.let(::JsonString) ?: JsonNull),
                 "hiddenBuiltins" to (
                     t.hiddenBuiltins?.let { h ->
@@ -179,6 +180,11 @@ object RestoreStateCodec {
                     activeId = str(t["active"]),
                     hiddenBuiltins = hidden,
                     exact = (t["exact"] as? JsonBool)?.value == true,
+                    knownIds =
+                        (t["knownIds"] as? JsonArray)
+                            ?.mapNotNull { (it as? JsonString)?.value }
+                            ?.toSet()
+                            .orEmpty(),
                 ),
         )
     }

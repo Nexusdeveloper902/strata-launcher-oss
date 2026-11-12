@@ -113,10 +113,17 @@ class DefaultBackupService(
         withContext(io) {
             mutex.withLock {
                 startReport?.let { return@withLock it }
-                val replayed = replayJournal()
-                safe("delete undo") { files.delete(UNDO) }
-                undo.value = false
-                StartReport(replayed, detectRestore()).also { startReport = it }
+                val journal = replayJournal()
+                if (journal == Journal.NOT_APPLIED) {
+                    // The journal could not be applied (damaged, too large, or the replay failed): the state may be
+                    // mixed, so the snapshot of the state before stays and "Undo restore" is offered.
+                    undo.value = safe("read undo") { files.read(UNDO, RestoreStateCodec.MAX_BYTES) }
+                        ?.let(RestoreStateCodec::decode) != null
+                } else {
+                    safe("delete undo") { files.delete(UNDO) }
+                    undo.value = false
+                }
+                StartReport(journal == Journal.REPLAYED, detectRestore()).also { startReport = it }
             }
         }
 
@@ -127,25 +134,33 @@ class DefaultBackupService(
         if (startReport == null) onProcessStart()
     }
 
-    private suspend fun replayJournal(): Boolean {
-        val bytes = safe("read journal") { files.read(JOURNAL, RestoreStateCodec.MAX_BYTES) } ?: return false
+    private enum class Journal { NONE, REPLAYED, NOT_APPLIED }
+
+    private suspend fun replayJournal(): Journal {
+        val bytes = safe("read journal") { files.read(JOURNAL, RestoreStateCodec.MAX_BYTES) }
+        if (bytes == null) {
+            if (safe("check journal") { files.exists(JOURNAL) } != true) return Journal.NONE
+            logger.w(TAG, "restore journal too large; discarded")
+            safe("delete journal") { files.delete(JOURNAL) }
+            return Journal.NOT_APPLIED
+        }
         val state = RestoreStateCodec.decode(bytes)
         if (state == null) {
             logger.w(TAG, "restore journal unreadable; discarded")
             safe("delete journal") { files.delete(JOURNAL) }
-            return false
+            return Journal.NOT_APPLIED
         }
         logger.w(TAG, "interrupted restore found; writing it again")
         return try {
             write(state)
             files.delete(JOURNAL)
-            true
+            Journal.REPLAYED
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // Kept: the next start tries again.
             logger.e(TAG, "restore replay failed", e)
-            false
+            Journal.NOT_APPLIED
         }
     }
 
@@ -334,12 +349,14 @@ class DefaultBackupService(
                 0
             }
 
+        val loaded = loadedSerials()
+
         fun missing(
             component: String,
             profile: BackupProfile,
         ): Boolean {
             val serial = serials[profile] ?: return false
-            return AppKey(component, serial) !in installed
+            return serial in loaded && AppKey(component, serial) !in installed
         }
         val missing =
             (
@@ -378,7 +395,7 @@ class DefaultBackupService(
                 val kinds = profileKinds() ?: return@withLock Outcome.Err(BackupError.NotReady)
                 val before =
                     try {
-                        snapshot()
+                        snapshot(kinds)
                     } catch (e: Exception) {
                         logger.e(TAG, "snapshot failed; nothing restored", e)
                         return@withLock Outcome.Err(BackupError.RestoreFailed)
@@ -401,30 +418,44 @@ class DefaultBackupService(
                     Outcome.Ok(p.preview)
                 } catch (e: Exception) {
                     logger.e(TAG, "restore failed; rolling back", e)
-                    rollBack(undoBytes, before)
-                    Outcome.Err(BackupError.RestoreFailed)
+                    rolledBack(undoBytes, before)
                 } catch (e: OutOfMemoryError) {
                     logger.e(TAG, "restore ran out of memory; rolling back", e)
-                    rollBack(undoBytes, before)
-                    Outcome.Err(BackupError.RestoreFailed)
+                    rolledBack(undoBytes, before)
                 }
             }
         }
 
-    private suspend fun rollBack(
+    /**
+     * Writes [before] back after a failed step. The journal on disk must never describe something other than what a
+     * replay should produce: if it cannot be rewritten as the snapshot, the restore's journal is deleted (otherwise the
+     * next start would apply the restore that was just reported as failed), and [before] is written anyway.
+     */
+    private suspend fun rolledBack(
         undoBytes: ByteArray,
         before: RestoreState,
-    ) {
-        try {
-            files.write(JOURNAL, undoBytes)
+    ): Outcome<RestorePreview, BackupError> {
+        val journalIsSnapshot =
+            try {
+                files.write(JOURNAL, undoBytes)
+                true
+            } catch (e: Exception) {
+                logger.e(TAG, "rollback journal not written", e)
+                safe("delete restore journal") { files.delete(JOURNAL) }
+                false
+            }
+        return try {
             write(before)
-            files.delete(JOURNAL)
-            files.delete(UNDO)
+            safe("delete journal") { files.delete(JOURNAL) }
+            safe("delete undo") { files.delete(UNDO) }
+            undo.value = false
+            Outcome.Err(BackupError.RestoreFailed)
         } catch (e: Exception) {
-            // The journal (= the old state) stays: the next start writes it again.
-            logger.e(TAG, "rollback failed; retried at next start", e)
+            // Not fully back. With the journal = the snapshot, the next start finishes it; "Undo restore" can try now.
+            logger.e(TAG, "rollback failed (journal is snapshot: $journalIsSnapshot)", e)
+            undo.value = true
+            Outcome.Err(BackupError.RestoreIncomplete)
         }
-        undo.value = false
     }
 
     override suspend fun undoRestore(): Outcome<Unit, BackupError> =
@@ -453,13 +484,23 @@ class DefaultBackupService(
             }
         }
 
-    /** The current state, exact (the undo snapshot, §12.3 (a)). Includes work-profile rows; never the launch log. */
-    private suspend fun snapshot(): RestoreState {
+    /**
+     * The current state (the undo snapshot, §12.3 (a)): exact for the main and work profiles; never the launch log.
+     * Fail closed (P-5): rows of any other serial (private space, unknown profile types, gone profiles) are left out,
+     * so no such component ever reaches `restore/`; the restore replaces the tables as a whole, so they are not kept.
+     */
+    private suspend fun snapshot(kinds: Map<Long, BackupProfile>): RestoreState {
         val t = themes.backupData()
+        val data = apps.read()
         return RestoreState(
             settings = settings.settings.first(),
-            apps = apps.read(),
-            themes = ThemeRestoreTarget(t.themes, t.activeId, t.hiddenBuiltins, exact = true),
+            apps =
+                AppData(
+                    overrides = data.overrides.filter { it.key.userSerial in kinds },
+                    favorites = data.favorites.filter { it.userSerial in kinds },
+                    widgets = data.widgets.filter { it.provider.userSerial in kinds },
+                ),
+            themes = ThemeRestoreTarget(t.themes, t.activeId, t.hiddenBuiltins, exact = true, knownIds = t.storedIds),
         )
     }
 
@@ -478,6 +519,7 @@ class DefaultBackupService(
     ): RestoreState {
         val serials = serialsOf(kinds)
         val installed = installedKeys()
+        val loaded = loadedSerials()
         val now = clock.nowMillis()
 
         fun keyOf(
@@ -485,7 +527,9 @@ class DefaultBackupService(
             profile: BackupProfile,
         ): AppKey? = serials[profile]?.let { AppKey(component, it) }
 
-        fun since(key: AppKey): Long? = if (key in installed) null else now
+        // Like the catalog's own marking: only a profile whose apps were loaded can say an app is missing. A paused
+        // work profile's entries stay active and are marked by the reconcile once it is loaded.
+        fun since(key: AppKey): Long? = if (key in installed || key.userSerial !in loaded) null else now
         val overrides = LinkedHashMap<AppKey, AppOverride>()
         for (a in doc.apps) {
             val key = keyOf(a.component, a.profile) ?: continue
@@ -494,7 +538,13 @@ class DefaultBackupService(
         }
         val favorites = doc.favorites.mapNotNull { keyOf(it.component, it.profile) }.distinct()
         // FR-BACKUP-03: a favourite of an app that is not installed is kept pending with the same 30 days as a record.
-        for (k in favorites) if (k !in installed && k !in overrides) overrides[k] = AppOverride(k, missingSince = now)
+        for (k in favorites) {
+            if (k !in installed && k.userSerial in loaded &&
+                k !in overrides
+            ) {
+                overrides[k] = AppOverride(k, missingSince = now)
+            }
+        }
         val widgets =
             doc.widgets
                 .mapNotNull { w ->
@@ -536,6 +586,17 @@ class DefaultBackupService(
         // `main` → the main user; `work` → the first managed profile (lowest serial, stable order).
         for ((serial, p) in kinds.entries.sortedBy { it.key }) out.putIfAbsent(p, serial)
         return out
+    }
+
+    /** Serials whose apps the catalog holds now: an available profile with at least one app listed. */
+    private fun loadedSerials(): Set<Long> {
+        val available =
+            profiles.profiles.value
+                .filter { it.available }
+                .mapTo(HashSet()) { it.serial }
+        return catalog.catalog.value.entries
+            .mapTo(HashSet()) { it.key.userSerial }
+            .filterTo(HashSet()) { it in available }
     }
 
     private fun installedKeys(): Set<AppKey> =

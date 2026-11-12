@@ -628,6 +628,10 @@ class ThemeLibrary(
                     .toSet(),
             themes = themes,
             builtInIds = builtInIds.keys + StrataDefault.ID.lowercase(),
+            storedIds =
+                index.entries
+                    .filter { it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null }
+                    .mapTo(HashSet()) { it.id.lowercase() },
         )
     }
 
@@ -668,9 +672,13 @@ class ThemeLibrary(
             written += id
         }
         if (target.exact) {
+            // Only themes the restore added: a stored theme the snapshot could not carry (unreadable, id mismatch,
+            // failed validation) is in its index ids and is kept.
+            val known = target.knownIds.mapTo(HashSet()) { it.lowercase() }
             val extra =
                 index.entries.filter {
-                    it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null && it.id.lowercase() !in written
+                    it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null && it.id.lowercase() !in written &&
+                        it.id.lowercase() !in known
                 }
             for (e in extra) {
                 safeDelete(userFile(e.id))

@@ -99,6 +99,33 @@ class ThemeBackupLibraryTest {
         assertThat(files.read(ThemeLibrary.userFile(idB))).isNull()
     }
 
+    /** Review fix 3: an exact restore of a snapshot deletes only themes added since, never one it could not read. */
+    @Test
+    fun exactRestore_keepsStoredThemesTheSnapshotSkipped() {
+        val lib = process()
+        lib.save(theme(idA, "A"))
+        lib.save(theme(idB, "B"))
+        // B's file is damaged after the index was written: backupData cannot carry it.
+        files.write(ThemeLibrary.userFile(idB), "{ damaged".toByteArray())
+        val snapshot = lib.backupData()
+        assertThat(snapshot.themes.map { it.id }).containsExactly(idA)
+        assertThat(snapshot.storedIds).containsExactly(idA, idB)
+        // A restore adds C; the undo removes C only.
+        lib.restoreThemes(ThemeRestoreTarget(listOf(StoredThemeFile(idC, theme(idC, "C"))), null, null, exact = false))
+        lib.restoreThemes(
+            ThemeRestoreTarget(
+                snapshot.themes,
+                snapshot.activeId,
+                snapshot.hiddenBuiltins,
+                exact = true,
+                knownIds = snapshot.storedIds,
+            ),
+        )
+        assertThat(lib.currentIndex.entry(idC)).isNull()
+        assertThat(lib.currentIndex.entry(idB)).isNotNull()
+        assertThat(files.read(ThemeLibrary.userFile(idB))).isNotNull()
+    }
+
     @Test
     fun restore_ignoresUnsafeIds() {
         val lib = process()

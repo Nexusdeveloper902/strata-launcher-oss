@@ -78,7 +78,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup01_defaultExport_hasNoPrivateWorkOrLogData() =
-        runBlocking {
+        runBlocking<Unit> {
             seed()
             h.launchLog.record(main("com.a/.A"), ProfileKind.MAIN)
             val s = h.service()
@@ -105,7 +105,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup02_optIns_addWorkEntriesAndDayBuckets() =
-        runBlocking {
+        runBlocking<Unit> {
             seed()
             h.launchLog.record(main("com.a/.A"), ProfileKind.MAIN)
             h.launchLog.record(main("com.a/.A"), ProfileKind.MAIN)
@@ -126,7 +126,7 @@ class BackupServiceTest {
 
     @Test
     fun export_failsClosed_withoutProfilesAndOnWriteFailure() =
-        runBlocking {
+        runBlocking<Unit> {
             h.profiles.profiles.value = emptyList()
             assertThat(h.service().export("content://x", ExportOptions())).isEqualTo(Outcome.Err(BackupError.NotReady))
             h.profiles.profiles.value = listOf(Profile(MAIN, ProfileKind.MAIN, false, true))
@@ -138,7 +138,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup04_restoreThenUndo_canonicalDumpsMatch() =
-        runBlocking {
+        runBlocking<Unit> {
             // S1 → backup B.
             seed()
             val s = h.service()
@@ -196,7 +196,7 @@ class BackupServiceTest {
 
     @Test
     fun undo_isGoneAfterTheNextStart() =
-        runBlocking {
+        runBlocking<Unit> {
             seed()
             h.service().export("content://b", ExportOptions()).ok()
             val s = h.service()
@@ -210,7 +210,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup05_06_rejectedFiles_changeNothing() =
-        runBlocking {
+        runBlocking<Unit> {
             seed()
             val before = h.dump()
             val s = h.service()
@@ -234,7 +234,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup07_newerMinor_previewCountsUnknownsAndRestoresKnown() =
-        runBlocking {
+        runBlocking<Unit> {
             h.documents.documents["content://m"] = BackupFixtures.newerMinor()
             val s = h.service()
             val p = s.preview("content://m").ok()
@@ -246,7 +246,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup08_missingApps_listedAndKeptPending() =
-        runBlocking {
+        runBlocking<Unit> {
             h.install("com.example.maps/.MainActivity", "com.example.mail/.Inbox")
             h.documents.documents["content://v"] = BackupFixtures.validBytes()
             val s = h.service()
@@ -265,7 +265,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup09_validThemeRestored_invalidListed() =
-        runBlocking {
+        runBlocking<Unit> {
             h.documents.documents["content://t"] = BackupFixtures.mixedThemes()
             val s = h.service()
             val p = s.preview("content://t").ok()
@@ -277,7 +277,7 @@ class BackupServiceTest {
 
     @Test
     fun newerTheme_restoredAsNeedsUpdate() =
-        runBlocking {
+        runBlocking<Unit> {
             h.documents.documents["content://n"] = BackupFixtures.newerTheme()
             val s = h.service()
             val p = s.preview("content://n").ok()
@@ -292,7 +292,7 @@ class BackupServiceTest {
 
     @Test
     fun tWidget10_restoredWidget_isAReAddPlaceholder() =
-        runBlocking {
+        runBlocking<Unit> {
             h.documents.documents["content://w"] = BackupFixtures.validBytes()
             val s = h.service()
             val p = s.preview("content://w").ok()
@@ -309,7 +309,7 @@ class BackupServiceTest {
 
     @Test
     fun workEntries_withoutWorkProfile_areSkippedAndCounted() =
-        runBlocking {
+        runBlocking<Unit> {
             h.documents.documents["content://w"] =
                 BackupFixtures
                     .valid(
@@ -328,7 +328,7 @@ class BackupServiceTest {
 
     @Test
     fun failedStep_rollsBackToTheSnapshot() =
-        runBlocking {
+        runBlocking<Unit> {
             seed()
             val before = h.dump()
             h.documents.documents["content://v"] = BackupFixtures.validBytes()
@@ -336,15 +336,156 @@ class BackupServiceTest {
             val p = s.preview("content://v").ok()
             h.themes.failNextRestore = true
             assertThat(s.restore(p.token)).isEqualTo(Outcome.Err(BackupError.RestoreFailed))
-            assertThat(h.dump()).isEqualTo(before)
+            assertThat(h.dump()).isEqualTo(before.withoutPrivate())
             assertThat(h.files.files).isEmpty()
             assertThat(s.undoAvailable.value).isFalse()
             assertThat(s.restore(p.token)).isEqualTo(Outcome.Err(BackupError.Expired))
         }
 
+    /** Rows of the private serial are never kept by a snapshot (fail closed), so the comparison leaves them out. */
+    private fun BackupHarness.Dump.withoutPrivate() =
+        copy(
+            apps =
+                AppData(
+                    apps.overrides.filter { it.key.userSerial != PRIVATE },
+                    apps.favorites.filter { it.userSerial != PRIVATE },
+                    apps.widgets.filter { it.provider.userSerial != PRIVATE },
+                ),
+        )
+
+    /** Review fix 1: the rollback's journal write fails; the old state is still written and no journal replays the restore. */
+    @Test
+    fun rollback_whenTheJournalWriteFails_stillWritesTheOldState() =
+        runBlocking<Unit> {
+            seed()
+            val before = h.dump().withoutPrivate()
+            h.documents.documents["content://v"] = BackupFixtures.validBytes()
+            val s = h.service()
+            val p = s.preview("content://v").ok()
+            h.themes.failNextRestore = true
+            // Write 0 of the journal is the restore's commit point; write 1 is the rollback's.
+            h.files.failWrite = { name, n -> name == DefaultBackupService.JOURNAL && n == 1 }
+            assertThat(s.restore(p.token)).isEqualTo(Outcome.Err(BackupError.RestoreFailed))
+            assertThat(h.dump()).isEqualTo(before)
+            assertThat(h.files.files).isEmpty()
+            // The next start has nothing to replay: still the old state.
+            h.service().onProcessStart()
+            assertThat(h.dump()).isEqualTo(before)
+        }
+
+    /** Both the step and the rollback fail: an honest error, the journal = the snapshot, Undo can finish it. */
+    @Test
+    fun rollback_thatFailsToo_isReportedAndRecoverable() =
+        runBlocking<Unit> {
+            seed()
+            val before = h.dump().withoutPrivate()
+            h.documents.documents["content://v"] = BackupFixtures.validBytes()
+            val s = h.service()
+            val p = s.preview("content://v").ok()
+            h.themes.failRestores = 2
+            assertThat(s.restore(p.token)).isEqualTo(Outcome.Err(BackupError.RestoreIncomplete))
+            assertThat(s.undoAvailable.value).isTrue()
+            assertThat(RestoreStateCodec.decode(h.files.files.getValue(DefaultBackupService.JOURNAL))!!.apps)
+                .isEqualTo(before.apps)
+            assertThat(s.undoRestore()).isEqualTo(Outcome.Ok(Unit))
+            assertThat(h.dump()).isEqualTo(before)
+            assertThat(h.files.files).isEmpty()
+        }
+
+    /** Review fix 2: no private-space serial or component ever reaches `restore/` (undo snapshot, journal). */
+    @Test
+    fun restoreFiles_neverHoldPrivateRows() =
+        runBlocking<Unit> {
+            seed()
+            h.documents.documents["content://v"] = BackupFixtures.validBytes()
+            val s = h.service()
+            val p = s.preview("content://v").ok()
+            val seen = mutableListOf<String>()
+            h.files.failWrite = { _, _ -> false }
+            // Capture every file while it exists: after the journal write and at the end.
+            h.themes.beforeWrite = {
+                h.files.files.values
+                    .forEach { seen += String(it) }
+            }
+            s.restore(p.token).ok()
+            h.files.files.values
+                .forEach { seen += String(it) }
+            assertThat(seen).isNotEmpty()
+            for (text in seen) {
+                assertThat(text).doesNotContain("com.secret.diary")
+                assertThat(text).doesNotContain("Secret")
+                assertThat(text).doesNotContain("\"userSerial\":$PRIVATE")
+            }
+        }
+
+    /** Review fix 3: an exact undo keeps a stored theme the snapshot could not carry (unreadable file). */
+    @Test
+    fun undo_keepsThemesTheSnapshotCouldNotRead() =
+        runBlocking<Unit> {
+            val broken = "4f506172-8394-4ea5-9fb6-d7e8f9a0b1c2"
+            h.themes.stored[broken] = StoredThemeFile(broken, themeTree(broken, "Broken on disk"))
+            h.themes.unreadable += broken
+            h.documents.documents["content://v"] = BackupFixtures.validBytes()
+            val s = h.service()
+            s.restore(s.preview("content://v").ok().token).ok()
+            assertThat(h.themes.stored.keys).containsAtLeast(broken, BackupFixtures.THEME_A)
+            s.undoRestore()
+            assertThat(h.themes.stored.keys).containsExactly(broken)
+        }
+
+    /** Review fix 5: entries of a profile that is not loaded (paused work profile) are not stamped missing. */
+    @Test
+    fun pausedWorkProfile_entriesAreNotMarkedMissing() =
+        runBlocking<Unit> {
+            h.profiles.profiles.value =
+                h.profiles.profiles.value + Profile(WORK, ProfileKind.WORK, quietMode = true, available = false)
+            h.install("com.example.maps/.MainActivity")
+            h.documents.documents["content://w"] =
+                BackupFixtures
+                    .valid(
+                        work = true,
+                        workEntries = """, { "component": "com.work/.W", "profile": "work", "hidden": true }""",
+                    ).toByteArray()
+            val s = h.service()
+            val p = s.preview("content://w").ok()
+            assertThat(p.missingApps).doesNotContain("com.work")
+            s.restore(p.token).ok()
+            val work =
+                h.apps.data.overrides
+                    .single { it.key.userSerial == WORK }
+            assertThat(work.hidden).isTrue()
+            assertThat(work.missingSince).isNull()
+            // The main profile is loaded: its missing app is still pending.
+            assertThat(
+                h.apps.data.overrides
+                    .single { it.key.component == "com.example.missing/.Main" }
+                    .missingSince,
+            ).isEqualTo(h.clock.now)
+        }
+
+    /** Review fix 6: a damaged or oversize journal is discarded, but the undo snapshot stays and Undo is offered. */
+    @Test
+    fun damagedJournal_keepsTheUndoSnapshot() =
+        runBlocking<Unit> {
+            for (journal in listOf("{ damaged".toByteArray(), ByteArray(RestoreStateCodec.MAX_BYTES + 1))) {
+                seed()
+                val before = h.dump().withoutPrivate()
+                h.documents.documents["content://v"] = BackupFixtures.validBytes()
+                val s = h.service()
+                s.restore(s.preview("content://v").ok().token).ok()
+                h.files.files[DefaultBackupService.JOURNAL] = journal
+                val next = h.service()
+                assertThat(next.onProcessStart().journalReplayed).isFalse()
+                assertThat(h.files.files.keys).containsExactly(DefaultBackupService.UNDO)
+                assertThat(next.undoAvailable.value).isTrue()
+                assertThat(next.undoRestore()).isEqualTo(Outcome.Ok(Unit))
+                assertThat(h.dump()).isEqualTo(before)
+            }
+        }
+
     @Test
     fun snapshotWriteFailure_restoresNothing() =
-        runBlocking {
+        runBlocking<Unit> {
             seed()
             val before = h.dump()
             h.documents.documents["content://v"] = BackupFixtures.validBytes()
@@ -357,7 +498,7 @@ class BackupServiceTest {
 
     @Test
     fun tBackup11_restoreDetection_runsPostRestoreStepsOnce() =
-        runBlocking {
+        runBlocking<Unit> {
             // Auto Backup brought settings (with install_id) but not the marker (no_backup is never backed up).
             val id = h.settings.value.installId
             val r1 = h.service().onProcessStart()
@@ -377,7 +518,7 @@ class BackupServiceTest {
 
     @Test
     fun preview_tokensExpireAndCanBeDiscarded() =
-        runBlocking {
+        runBlocking<Unit> {
             h.documents.documents["content://v"] = BackupFixtures.validBytes()
             val s = h.service()
             val first: RestorePreview = s.preview("content://v").ok()

@@ -14,10 +14,15 @@ import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.json.JsonObject
 import app.strata.launcher.core.json.JsonParser
 import app.strata.launcher.core.model.AppKey
+import app.strata.launcher.core.model.AppOverride
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.Settings
+import app.strata.launcher.core.model.WidgetPlacement
 import app.strata.launcher.core.model.WidgetPlacementState
 import app.strata.launcher.core.platformapi.backup.ExportOptions
+import app.strata.launcher.core.theme.store.ThemeBackupData
+import app.strata.launcher.core.theme.store.ThemeBackupStore
+import app.strata.launcher.core.theme.store.ThemeRestoreTarget
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.feature.widgets.WidgetTestTags
@@ -30,6 +35,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -55,12 +61,19 @@ class BackupDeviceTest {
 
     private var original: Snapshot? = null
 
-    /** What the tests change, to put it back (global state, any test order). */
+    /**
+     * Everything a restore can change, to put it back even when an undo fails (global state, any test order): overrides,
+     * favourites, the widget placement, the theme library and the settings.
+     */
     private data class Snapshot(
+        val overrides: Map<AppKey, AppOverride>,
         val favorites: List<AppKey>,
+        val widget: WidgetPlacement?,
+        val themes: ThemeBackupData?,
         val settings: Settings,
-        val label: String?,
     )
+
+    private val themeBackup get() = graph.themeManager as? ThemeBackupStore
 
     private fun self(): AppKey =
         runBlocking {
@@ -92,35 +105,68 @@ class BackupDeviceTest {
     fun before() =
         runBlocking {
             graph.startCatalog()
-            val key = self()
             original =
                 Snapshot(
+                    overrides = graph.overrides.overrides.first(),
                     favorites = graph.favorites.favorites.first(),
+                    widget = graph.widgets.current(),
+                    themes = themeBackup?.backupData(),
                     settings = graph.settingsRepository.settings.first(),
-                    label =
-                        graph.overrides.overrides
-                            .first()[key]
-                            ?.customLabel,
                 )
         }
 
     @After
     fun after() =
         runBlocking {
-            // Undo any restore of this test, then put back what the test changed directly.
-            if (graph.backup.undoAvailable.value) graph.backup.undoRestore()
-            val o = original ?: return@runBlocking
-            val key = self()
-            graph.favorites.saveEdit(
-                o.favorites,
-                graph.favorites.favorites
-                    .first()
-                    .toSet(),
-            )
-            graph.overrides.setCustomLabel(key, ProfileKind.MAIN, o.label)
-            graph.settingsRepository.update { o.settings.copy(installId = it.installId) }
+            // Undo any restore of this test (and require it to work), then put back everything a test may have changed,
+            // so a failed undo can never leave the phone with a replaced setup.
+            val undo = if (graph.backup.undoAvailable.value) graph.backup.undoRestore() else null
+            original?.let { putBack(it) }
             dir.deleteRecursively()
+            assertWithMessage("undo restore").that(undo ?: Outcome.Ok(Unit)).isEqualTo(Outcome.Ok(Unit))
         }
+
+    private suspend fun putBack(o: Snapshot) {
+        val now = graph.overrides.overrides.first()
+        // Rows the test or a restore added: back to defaults, which deletes them.
+        for (key in now.keys - o.overrides.keys) {
+            graph.overrides.setHidden(key, ProfileKind.MAIN, false)
+            graph.overrides.setCustomLabel(key, ProfileKind.MAIN, null)
+            graph.overrides.setIconOverride(key, ProfileKind.MAIN, null)
+        }
+        for ((key, row) in o.overrides) {
+            graph.overrides.setHidden(key, ProfileKind.MAIN, row.hidden)
+            graph.overrides.setCustomLabel(key, ProfileKind.MAIN, row.customLabel)
+            graph.overrides.setIconOverride(key, ProfileKind.MAIN, row.icon)
+        }
+        graph.favorites.saveEdit(
+            o.favorites,
+            graph.favorites.favorites
+                .first()
+                .toSet(),
+        )
+        val widget = graph.widgets.current()
+        if (o.widget != null) {
+            if (widget != o.widget) graph.widgets.place(o.widget)
+        } else if (widget != null) {
+            graph.widgets.remove(widget.appWidgetId)
+        }
+        o.themes?.let { t ->
+            themeBackup?.restoreThemes(
+                ThemeRestoreTarget(t.themes, t.activeId, t.hiddenBuiltins, exact = true, knownIds = t.storedIds),
+            )
+        }
+        graph.settingsRepository.update { o.settings.copy(installId = it.installId) }
+    }
+
+    /** Components of private space that no other profile has (null-safe for devices without private space). */
+    private fun privateOnlyComponents(): List<String> {
+        val entries = graph.appCatalog.catalog.value.entries
+        return entries
+            .filter { it.profileKind == ProfileKind.PRIVATE }
+            .map { it.key.component }
+            .filter { c -> entries.none { it.key.component == c && it.profileKind != ProfileKind.PRIVATE } }
+    }
 
     /** T-BACKUP-01 (I): the default export validates and holds no work entries, no launch log, nothing private. */
     @Test
@@ -146,21 +192,14 @@ class BackupDeviceTest {
             val text = b.toString(Charsets.UTF_8)
             assertThat(text).contains("Renamed for backup")
             assertThat(text).doesNotContain("\"profile\": \"work\"")
-            // Private space (API 35+, unlocked): none of its components is in the file.
-            val privateComponents =
-                graph.appCatalog.catalog.value.entries
-                    .filter { it.profileKind == ProfileKind.PRIVATE }
-                    .map { it.key.component }
-            for (c in privateComponents) {
-                // The same component may exist in the main profile; only a private-only one must be absent.
-                if (graph.appCatalog.catalog.value.entries.none {
-                        it.key.component == c &&
-                            it.profileKind != ProfileKind.PRIVATE
-                    }
-                ) {
-                    assertThat(text).doesNotContain(c)
-                }
-            }
+            // Private space (API 35+, unlocked, with an app): none of its components is in the file. Without one this
+            // half is reported as skipped, not passed. Private-serial rows cannot be seeded: the repositories refuse them.
+            val privateOnly = privateOnlyComponents()
+            assumeTrue(
+                "No unlocked private space with apps on this device: private-space half skipped",
+                privateOnly.isNotEmpty(),
+            )
+            for (c in privateOnly) assertThat(text).doesNotContain(c)
         }
 
     /** T-BACKUP-04 (I): restore B (state S1) over S2, then undo: S1, then S2 again (DB, settings, themes). */
@@ -229,18 +268,8 @@ class BackupDeviceTest {
             assertThat(graph.backup.export(uri("p.json"), ExportOptions(workProfile = true, launchLog = true)))
                 .isInstanceOf(Outcome.Ok::class.java)
             val export = bytes("p.json").toString(Charsets.ISO_8859_1)
-            assertThat(export).doesNotContain("zz-secret")
-            val privateOnly =
-                graph.appCatalog.catalog.value.entries
-                    .filter { it.profileKind == ProfileKind.PRIVATE }
-                    .map { it.key.component }
-                    .filter { c ->
-                        graph.appCatalog.catalog.value.entries.none {
-                            it.key.component == c &&
-                                it.profileKind != ProfileKind.PRIVATE
-                        }
-                    }
-            for (c in privateOnly) assertThat(export).doesNotContain(c)
+            val privateOnly = privateOnlyComponents()
+            val needles = listOf("zz-secret") + privateOnly
             // The test documents live in cacheDir/share/backup-test (our own files); everything else is scanned.
             val roots =
                 listOf(
@@ -256,11 +285,18 @@ class BackupDeviceTest {
                         .filter { it.isFile && !it.path.startsWith(dir.path) && it.length() < 32L * 1024 * 1024 }
                         .filter { f ->
                             val text = f.readBytes().toString(Charsets.ISO_8859_1)
-                            text.contains("zz-secret") || privateOnly.any { text.contains(it) }
+                            needles.any { text.contains(it) }
                         }.map { it.path }
                         .toList()
                 }
+            assertThat(export).doesNotContain("zz-secret")
             assertWithMessage("sensitive data found").that(hits).isEmpty()
+            // The private-space half needs an unlocked private space with an app; otherwise it is reported as skipped.
+            assumeTrue(
+                "No unlocked private space with apps on this device: private-space half skipped",
+                privateOnly.isNotEmpty(),
+            )
+            for (c in privateOnly) assertThat(export).doesNotContain(c)
         }
 
     /** The comparable state of T-BACKUP-04: overrides and favourites, exported settings, theme library and active id. */

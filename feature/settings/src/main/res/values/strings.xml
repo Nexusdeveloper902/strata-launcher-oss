@@ -174,6 +174,7 @@
     <string name="backup_error_not_ready">Your apps aren\'t loaded yet. Try again in a moment.</string>
     <string name="backup_error_expired">This restore is no longer ready. Pick the file again.</string>
     <string name="backup_error_failed">The restore didn\'t finish. Your previous setup was kept.</string>
+    <string name="backup_error_incomplete">The restore didn\'t finish and your previous setup couldn\'t be put back completely. Tap Undo restore to try again.</string>
     <string name="backup_error_nothing_to_undo">There is nothing to undo.</string>
     <plurals name="backup_count_settings">
         <item quantity="one">%1$d setting</item>

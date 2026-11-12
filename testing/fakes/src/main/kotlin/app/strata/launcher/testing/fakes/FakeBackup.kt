@@ -47,6 +47,12 @@ class FakeThemeBackupStore(
 ) : ThemeBackupStore {
     var failNextRestore = false
 
+    /** Stored themes [backupData] cannot carry (an unreadable file): listed only in `storedIds`. */
+    val unreadable = mutableSetOf<String>()
+
+    /** Number of further restores that fail (rollback tests). */
+    var failRestores = 0
+
     /** Called before each theme write (kill-point tests). */
     var beforeWrite: () -> Unit = {}
 
@@ -54,11 +60,18 @@ class FakeThemeBackupStore(
         private set
 
     override suspend fun backupData(): ThemeBackupData =
-        ThemeBackupData(activeId, hiddenBuiltins, stored.values.toList(), builtInIds)
+        ThemeBackupData(
+            activeId,
+            hiddenBuiltins,
+            stored.values.filterNot { it.id in unreadable },
+            builtInIds,
+            storedIds = stored.keys.toSet(),
+        )
 
     override suspend fun restoreThemes(target: ThemeRestoreTarget) {
-        if (failNextRestore) {
+        if (failNextRestore || failRestores > 0) {
             failNextRestore = false
+            if (failRestores > 0) failRestores--
             throw java.io.IOException("simulated theme write failure")
         }
         for (t in target.themes) {
@@ -66,7 +79,7 @@ class FakeThemeBackupStore(
             beforeWrite()
             stored[t.id] = t
         }
-        if (target.exact) stored.keys.retainAll(target.themes.map { it.id }.toSet())
+        if (target.exact) stored.keys.retainAll(target.themes.map { it.id }.toSet() + target.knownIds)
         target.hiddenBuiltins?.let { hiddenBuiltins = it }
         target.activeId?.let { if (it in stored || it in builtInIds) activeId = it }
     }
@@ -82,6 +95,12 @@ class FakeRestoreFiles : RestoreFileStore {
     val files = linkedMapOf<String, ByteArray>()
     var failWrites = false
 
+    /** Fails the write when it returns true for (name, how many writes of that name came before). */
+    var failWrite: (String, Int) -> Boolean = { _, _ -> false }
+    private val writesOf = HashMap<String, Int>()
+
+    override fun exists(name: String): Boolean = name in files
+
     override fun read(
         name: String,
         maxBytes: Int,
@@ -91,7 +110,8 @@ class FakeRestoreFiles : RestoreFileStore {
         name: String,
         bytes: ByteArray,
     ) {
-        if (failWrites) throw java.io.IOException("simulated")
+        val n = writesOf.merge(name, 1, Int::plus)!! - 1
+        if (failWrites || failWrite(name, n)) throw java.io.IOException("simulated")
         files[name] = bytes.copyOf()
     }
 

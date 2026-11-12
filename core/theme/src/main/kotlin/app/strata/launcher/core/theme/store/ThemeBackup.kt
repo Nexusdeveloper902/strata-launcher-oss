@@ -18,18 +18,25 @@ data class ThemeBackupData(
     val themes: List<StoredThemeFile>,
     /** Ids of the built-in presets and Strata Default (referenced, never embedded). */
     val builtInIds: Set<String>,
+    /**
+     * Every stored user theme the index knows, lowercase, including files [themes] had to skip (unreadable, id mismatch,
+     * failed validation). An exact restore of this snapshot never deletes these.
+     */
+    val storedIds: Set<String> = themes.mapTo(HashSet()) { it.id.lowercase() },
 )
 
 /**
  * What a restore writes (ARCHITECTURE §12.3 step 3d). A restore adds or replaces [themes] (same id → Replace) and
- * keeps the others; an undo ([exact]) also deletes stored themes that are not in [themes]. [activeId] is applied when
- * it can be loaded, else the current theme is kept. [hiddenBuiltins] null = unchanged.
+ * keeps the others; an undo or rollback ([exact]) also deletes stored themes that the restore added, i.e. those in
+ * neither [themes] nor [knownIds] (the snapshot's index). [activeId] is applied when it can be loaded, else the
+ * current theme is kept. [hiddenBuiltins] null = unchanged.
  */
 data class ThemeRestoreTarget(
     val themes: List<StoredThemeFile>,
     val activeId: String?,
     val hiddenBuiltins: Set<String>?,
     val exact: Boolean,
+    val knownIds: Set<String> = emptySet(),
 )
 
 /**

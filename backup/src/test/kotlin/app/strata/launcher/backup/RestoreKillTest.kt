@@ -182,4 +182,116 @@ class RestoreKillTest {
             }
             assertThat(outcomes.keys).containsExactly("old", "new")
         }
+
+    /** Old/new outcome after the next start; fails on a mixed state. Also checks that `restore/` is empty again. */
+    private suspend fun outcomeAfterRestart(
+        h: BackupHarness,
+        old: BackupHarness.Dump,
+        new: BackupHarness.Dump,
+        label: String,
+    ): String {
+        h.themes.beforeWrite = {}
+        // The injected step failure was transient (a full disk, say); the next process does not see it.
+        h.themes.failNextRestore = false
+        service(h, Switch()).onProcessStart()
+        val after = h.dump()
+        val which =
+            when (after) {
+                old -> "old"
+                new -> "new"
+                else -> "mixed ($label): $after"
+            }
+        assertThat(which).isAnyOf("old", "new")
+        assertThat(h.files.files).isEmpty()
+        return which
+    }
+
+    /** Review fix 11: a step fails, and the process dies at a random write of the rollback. */
+    @Test
+    fun killDuringRollback_isAllOldOrAllNew() =
+        runBlocking<Unit> {
+            fun failing(h: BackupHarness) = h.also { it.themes.failNextRestore = true }
+            val ref = failing(harness())
+            val old = ref.dump()
+            val newRef = harness()
+            val ns = service(newRef, Switch())
+            ns.restore((ns.preview("content://b") as Outcome.Ok).value.token)
+            val new = newRef.dump()
+            val refSwitch = Switch()
+            val rs = service(ref, refSwitch)
+            val token = (rs.preview("content://b") as Outcome.Ok).value.token
+            refSwitch.writes = 0
+            assertThat(
+                rs.restore(token),
+            ).isEqualTo(Outcome.Err(app.strata.launcher.core.platformapi.backup.BackupError.RestoreFailed))
+            assertThat(ref.dump()).isEqualTo(old)
+            val writes = refSwitch.writes
+            val random = Random(11)
+            val outcomes = HashSet<String>()
+            repeat(60) {
+                val h = failing(harness())
+                val s = Switch()
+                val svc = service(h, s)
+                val t = (svc.preview("content://b") as Outcome.Ok).value.token
+                s.writes = 0
+                s.killAt = random.nextInt(writes)
+                try {
+                    svc.restore(t)
+                } catch (e: Killed) {
+                    // the process died
+                }
+                outcomes += outcomeAfterRestart(h, old, new, "rollback write ${s.killAt}")
+            }
+            assertThat(outcomes).contains("old")
+        }
+
+    /** Review fix 11: the process dies at a random write of "Undo restore". */
+    @Test
+    fun killDuringUndo_isAllOldOrAllNew() =
+        runBlocking<Unit> {
+            val ref = harness()
+            val old = ref.dump()
+            val refSwitch = Switch()
+            val rs = service(ref, refSwitch)
+            rs.restore((rs.preview("content://b") as Outcome.Ok).value.token)
+            val new = ref.dump()
+            refSwitch.writes = 0
+            assertThat(rs.undoRestore()).isEqualTo(Outcome.Ok(Unit))
+            assertThat(ref.dump()).isEqualTo(old)
+            val writes = refSwitch.writes
+            val random = Random(12)
+            val outcomes = HashSet<String>()
+            repeat(60) {
+                val h = harness()
+                val s = Switch()
+                val svc = service(h, s)
+                svc.restore((svc.preview("content://b") as Outcome.Ok).value.token)
+                s.writes = 0
+                s.killAt = random.nextInt(writes)
+                try {
+                    svc.undoRestore()
+                } catch (e: Killed) {
+                    // the process died
+                }
+                outcomes += outcomeAfterRestart(h, old, new, "undo write ${s.killAt}")
+            }
+            assertThat(outcomes).containsExactly("old", "new")
+        }
+
+    /** Undo whose write fails (no kill): the journal = the snapshot, and the next start finishes the undo. */
+    @Test
+    fun failedUndo_isFinishedByTheNextStart() =
+        runBlocking<Unit> {
+            val h = harness()
+            val old = h.dump()
+            val svc = service(h, Switch())
+            svc.restore((svc.preview("content://b") as Outcome.Ok).value.token)
+            h.themes.failNextRestore = true
+            assertThat(
+                svc.undoRestore(),
+            ).isEqualTo(Outcome.Err(app.strata.launcher.core.platformapi.backup.BackupError.RestoreFailed))
+            service(h, Switch()).onProcessStart()
+            assertThat(h.dump()).isEqualTo(old)
+            assertThat(h.files.files).isEmpty()
+        }
 }

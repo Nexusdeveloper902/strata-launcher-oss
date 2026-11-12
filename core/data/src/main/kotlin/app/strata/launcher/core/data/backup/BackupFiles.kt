@@ -10,9 +10,16 @@ import java.io.File
  * bytes, never a mix. The directory is outside every Auto Backup include and excluded explicitly (ANDROID_PLATFORM §17).
  */
 class AtomicRestoreFileStore(
-    root: () -> File,
+    private val root: () -> File,
 ) : RestoreFileStore {
     private val store = AtomicFileThemeFileStore(root)
+
+    override fun exists(name: String): Boolean {
+        require(name.isNotEmpty() && '/' !in name && name != "..") { "bad restore file name" }
+        // A legacy `.bak` copy is what AtomicFile reads after an interrupted old-style write; a `.new` is an unfinished
+        // write that AtomicFile discards, so it does not count.
+        return listOf(name, "$name.bak").any { File(root(), it).isFile }
+    }
 
     override fun read(
         name: String,
