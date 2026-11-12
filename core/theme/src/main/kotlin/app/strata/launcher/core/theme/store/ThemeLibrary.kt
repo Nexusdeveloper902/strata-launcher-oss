@@ -2,8 +2,11 @@ package app.strata.launcher.core.theme.store
 
 import app.strata.launcher.core.common.Clock
 import app.strata.launcher.core.common.Outcome
+import app.strata.launcher.core.json.JsonLimits
 import app.strata.launcher.core.json.JsonObject
+import app.strata.launcher.core.json.JsonParser
 import app.strata.launcher.core.json.JsonString
+import app.strata.launcher.core.json.JsonWriter
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.contrast.Contrast
 import app.strata.launcher.core.theme.contrast.ContrastStatus
@@ -599,6 +602,146 @@ class ThemeLibrary(
 
     private fun copyName(name: String): String = "$name (copy)"
 
+    // ---- M8: backup and restore (ARCHITECTURE §12, THEME_SYSTEM §11.4) ------------------------------
+
+    /** Stored user themes as their file trees (verbatim), the active id and hidden built-ins. */
+    fun backupData(): ThemeBackupData {
+        val themes =
+            index.entries
+                .filter { it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null }
+                .mapNotNull { e ->
+                    val bytes = safeRead(userFile(e.id)) ?: return@mapNotNull null
+                    val parsed = parser.parse(bytes)
+                    val newer = parsed is Outcome.Err && parsed.error is ThemeError.NewerVersion
+                    if (parsed !is Outcome.Ok && !newer) return@mapNotNull null
+                    val tree =
+                        (JsonParser.parse(bytes, JsonLimits.THEME) as? Outcome.Ok)?.value as? JsonObject
+                            ?: return@mapNotNull null
+                    StoredThemeFile(e.id.lowercase(), tree, needsAppUpdate = newer)
+                }
+        return ThemeBackupData(
+            activeId = index.activeThemeId.ifEmpty { StrataDefault.ID },
+            hiddenBuiltins =
+                index.entries
+                    .filter { it.hidden }
+                    .map { it.id.lowercase() }
+                    .toSet(),
+            themes = themes,
+            builtInIds = builtInIds.keys + StrataDefault.ID.lowercase(),
+        )
+    }
+
+    /**
+     * Writes [target] (ARCHITECTURE §12.3 step 3d): each theme file first, then the index. Valid themes are written in
+     * the writer format; newer ones untouched with `needsAppUpdate`. Built-in ids are never written. No garbage
+     * collection runs here: an undo may bring back themes whose fonts and images must still be there. Returns the id to
+     * render, or null to keep the current one. Throws [java.io.IOException] when a write fails.
+     */
+    fun restoreThemes(target: ThemeRestoreTarget): String? {
+        val now = clock.nowMillis()
+        val written = HashSet<String>()
+        for (t in target.themes) {
+            val id = t.id.lowercase()
+            if (builtInName(id) != null || id == StrataDefault.ID.lowercase() || !id.matches(ID_PATTERN)) continue
+            val parsed = if (t.needsAppUpdate) null else (parser.validate(t.tree) as? Outcome.Ok)?.value
+            if (parsed == null && !t.needsAppUpdate) continue
+            if (parsed != null && !parsed.document.id.equals(id, ignoreCase = true)) continue
+            val bytes = if (parsed != null) ThemeWriter.write(parsed.tree) else JsonWriter.prettyBytes(t.tree)
+            files.write(userFile(id), bytes)
+            replacedVersions.remove(id)
+            migratedOriginals.remove(id)
+            val old = index.entry(id)
+            index =
+                index.withEntry(
+                    ThemeIndexEntry(
+                        id = id,
+                        name = parsed?.document?.name ?: (t.tree["name"] as? JsonString)?.value ?: id,
+                        origin = old?.origin ?: ThemeOrigin.IMPORTED,
+                        fileSha256 = sha256(bytes),
+                        createdAt = old?.createdAt ?: now,
+                        modifiedAt = now,
+                        lastAppliedAt = old?.lastAppliedAt ?: 0,
+                        contrastStatus = parsed?.let { contrastStatus(it.document) },
+                        needsAppUpdate = parsed == null,
+                    ),
+                )
+            written += id
+        }
+        if (target.exact) {
+            val extra =
+                index.entries.filter {
+                    it.origin != ThemeOrigin.BUILTIN && builtInName(it.id) == null && it.id.lowercase() !in written
+                }
+            for (e in extra) {
+                safeDelete(userFile(e.id))
+                replacedVersions.remove(e.id.lowercase())
+            }
+            val gone = extra.mapTo(HashSet()) { it.id.lowercase() }
+            index = index.copy(entries = index.entries.filterNot { it.id.lowercase() in gone })
+        }
+        target.hiddenBuiltins?.let { hidden ->
+            for (id in builtInIds.keys + StrataDefault.ID.lowercase()) {
+                val want = id in hidden
+                val e = index.entry(id)
+                if ((e?.hidden ?: false) == want) continue
+                index =
+                    index.withEntry(
+                        (e ?: ThemeIndexEntry(id = id, name = id, origin = ThemeOrigin.BUILTIN)).copy(hidden = want),
+                    )
+            }
+        }
+        persistIndex()
+        val wanted = target.activeId?.takeIf { loadTheme(it) is Outcome.Ok }
+        val currentGone = index.activeThemeId.isNotEmpty() && loadTheme(index.activeThemeId) !is Outcome.Ok
+        val next = wanted ?: if (currentGone) StrataDefault.ID else null
+        if (next != null) apply(next)
+        return next
+    }
+
+    /**
+     * After an Auto Backup restore (§11.4): every stored file is parsed again. Invalid files move to the quarantine and
+     * leave the index; newer ones are marked "Needs app update"; valid ones get a fresh entry. Returns how many moved.
+     */
+    fun revalidateStored(): Int {
+        var moved = 0
+        for (name in safeList(USER_DIR).filter { it.endsWith(SUFFIX) }) {
+            val id = name.removeSuffix(SUFFIX).lowercase()
+            val bytes = safeRead("$USER_DIR/$name")
+            val old = index.entry(id)
+            when (val r = parseBytes(bytes)) {
+                is Outcome.Ok -> {
+                    index =
+                        index.withEntry(
+                            (old ?: ThemeIndexEntry(id, r.value.document.name, ThemeOrigin.USER)).copy(
+                                name = r.value.document.name,
+                                fileSha256 = bytes?.let(::sha256) ?: "",
+                                needsAppUpdate = false,
+                                contrastStatus = contrastStatus(r.value.document),
+                            ),
+                        )
+                }
+
+                is Outcome.Err -> {
+                    if (r.error is ThemeError.NewerVersion) {
+                        index =
+                            index.withEntry(
+                                (old ?: ThemeIndexEntry(id, id, ThemeOrigin.USER)).copy(needsAppUpdate = true),
+                            )
+                    } else {
+                        quarantine(name)
+                        moved++
+                        index = index.copy(entries = index.entries.filterNot { it.id.equals(id, ignoreCase = true) })
+                        if (index.activeThemeId.equals(id, ignoreCase = true)) {
+                            index = index.copy(activeThemeId = StrataDefault.ID, applyInProgress = false)
+                        }
+                    }
+                }
+            }
+        }
+        persistIndex()
+        return moved
+    }
+
     // ---- index ------------------------------------------------------------------------------------
 
     /**
@@ -822,6 +965,9 @@ class ThemeLibrary(
         const val CRASH_WINDOW_MS = 5 * 60 * 1000L
 
         fun userFile(id: String): String = "$USER_DIR/${id.lowercase()}$SUFFIX"
+
+        /** Theme ids that may become file names (THEME_SYSTEM §4: UUID-like; nothing that could leave `user/`). */
+        private val ID_PATTERN = Regex("^[a-z0-9][a-z0-9-]{0,63}$")
 
         private val MISSING =
             ThemeError.NotATheme(
