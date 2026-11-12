@@ -126,7 +126,10 @@ class WidgetDeviceTest {
 
     /** Everything these tests change, put back synchronously. */
     private fun restore() {
-        listOf(list, backConfig, firstUserConfig, crashConfig).forEach { setProviderEnabled(it, true) }
+        val fixtures = listOf(list, backConfig, firstUserConfig, crashConfig)
+        fixtures.forEach { setProviderEnabled(it, true) }
+        // A provider re-enabled by a failed test comes back only after the delayed PACKAGE_CHANGED.
+        compose.waitUntil(STALL_MS) { fixtures.all(::providerInstalled) }
         val host = AppWidgetHost(context, AndroidWidgetHost.HOST_ID)
         host.appWidgetIds.forEach { host.deleteAppWidgetId(it) }
         runBlocking { graph.widgets.current()?.let { graph.widgets.remove(it.appWidgetId) } }
@@ -246,6 +249,9 @@ class WidgetDeviceTest {
         check(step is BindStep.Bound) { "appwidget grantbind did not take effect: $step" }
         return step.id
     }
+
+    private fun providerInstalled(provider: ComponentName): Boolean =
+        AppWidgetManager.getInstance(context).installedProviders.any { it.provider == provider }
 
     private fun ref(provider: ComponentName) = WidgetProviderRef(provider.flattenToString(), 0L)
 
@@ -408,7 +414,11 @@ class WidgetDeviceTest {
         waitNotAdded()
         assertThat(hostIds()).isEmpty()
         pick(crashConfig)
-        compose.waitUntil(STALL_MS) { !pickerBusy() && hostIds().isEmpty() }
+        compose.waitUntil(STALL_MS) {
+            // API 26 may show the "has stopped" dialog for the fixture despite hide_error_dialogs.
+            app.strata.launcher.closeSystemErrorDialog(device)
+            !pickerBusy() && hostIds().isEmpty()
+        }
         assertThat(placement()).isNull()
         // Strata is alive and its picker is still usable.
         assertThat(count(WidgetTestTags.PICKER_LIST)).isEqualTo(1)
@@ -487,6 +497,9 @@ class WidgetDeviceTest {
             count(WidgetTestTags.PLACEHOLDER) == 1
         }
         setProviderEnabled(list, true)
+        // The component change reaches the widget service through a delayed PACKAGE_CHANGED (about 10 s on API 26):
+        // Re-add only once the provider is installed again.
+        compose.waitUntil(STALL_MS) { providerInstalled(list) }
         compose.onNodeWithTag(WidgetTestTags.READD).performClick()
         compose.waitUntil(STALL_MS) { !pickerLive() && count(WidgetTestTags.HOST) == 1 }
         val p = placement()!!

@@ -2,7 +2,6 @@ package app.strata.launcher.widget;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.os.Process;
 import android.widget.TextView;
 
 /**
@@ -33,15 +32,16 @@ public class FixtureConfigureActivity extends Activity {
     }
 
     /**
-     * Its process dies while it is in front ("crashes"). Killing the process instead of throwing keeps the system's
-     * "has stopped" dialog away, which API 26 shows despite {@code hide_error_dialogs} (M7 review fix 7); for the
-     * host the outcome is the same: RESULT_CANCELED.
+     * Crashes in {@code onCreate}: the system finishes the crashed activity and the host gets RESULT_CANCELED. A real
+     * crash, not {@code Process.killProcess}: a process killed with its activity on top is restarted by the activity
+     * manager, which on API 26 relaunched it in a kill loop and never answered the host (CI run 43159847399). API 26
+     * may show the "has stopped" dialog despite {@code hide_error_dialogs}; the test closes it.
      */
     public static class Crash extends Activity {
         @Override
         protected void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
-            Process.killProcess(Process.myPid());
+            throw new IllegalStateException("WIDGET_FIX configure crash (expected by WidgetDeviceTest)");
         }
     }
 }
