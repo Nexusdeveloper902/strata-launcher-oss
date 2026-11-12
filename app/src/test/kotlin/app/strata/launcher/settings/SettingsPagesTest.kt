@@ -218,6 +218,16 @@ class SettingsPagesTest {
             assertThat(includes.none { it.contains("launch_log") || it.contains("no_backup") }).isTrue()
             // Every include names a domain other than no_backup, which the platform always excludes (D-010).
             assertThat(includes.all { it.contains("domain=\"file\"") || it.contains("domain=\"database\"") }).isTrue()
+            // Final M8 rules: both files also exclude the log and the restore snapshot explicitly (defence in depth).
+            val excludes = Regex("<exclude[^>]*>").findAll(text).map { it.value }.toList()
+            assertThat(excludes.any { it.contains("path=\"launch_log.db\"") }).isTrue()
+            assertThat(excludes.any { it.contains("path=\"restore/\"") }).isTrue()
         }
+        // THEME_SYSTEM §11.4: theme images go with a device transfer but not to the cloud.
+        val rules = File(res, "data_extraction_rules.xml").readText()
+        val cloud = rules.substringAfter("<cloud-backup").substringBefore("</cloud-backup>")
+        val transfer = rules.substringAfter("<device-transfer").substringBefore("</device-transfer>")
+        assertThat(cloud).contains("<exclude domain=\"file\" path=\"themes/images/\" />")
+        assertThat(transfer).contains("<include domain=\"file\" path=\"themes/images/\" />")
     }
 }

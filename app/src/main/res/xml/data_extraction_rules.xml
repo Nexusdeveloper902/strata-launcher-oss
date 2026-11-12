@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- API 31+. Rules: ANDROID_PLATFORM §17. Paths for later milestones are listed now so the policy is
-     fixed from day one; `no_backup` (logs, launch_log.db) is always excluded by the platform. -->
+<!-- API 31+. Rules: ANDROID_PLATFORM §17, THEME_SYSTEM §11.4 (final in M8). Only the listed paths are carried.
+     Never carried: the launch log, logs, boot state and the install marker (all in `no_backup`, always excluded by
+     the platform), caches, `restore/` (undo snapshot and journal) and anything of private space (never written, P-5).
+     The excludes repeat that as defence in depth, so a later move of a file cannot leak it. -->
 <data-extraction-rules>
     <cloud-backup disableIfNoEncryptionCapabilities="true">
         <include domain="file" path="datastore/" />
@@ -10,6 +12,9 @@
         <include domain="database" path="strata.db" />
         <include domain="database" path="strata.db-wal" />
         <include domain="database" path="strata.db-shm" />
+        <exclude domain="file" path="themes/images/" />
+        <exclude domain="file" path="restore/" />
+        <exclude domain="database" path="launch_log.db" />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="datastore/" />
@@ -20,5 +25,7 @@
         <include domain="database" path="strata.db" />
         <include domain="database" path="strata.db-wal" />
         <include domain="database" path="strata.db-shm" />
+        <exclude domain="file" path="restore/" />
+        <exclude domain="database" path="launch_log.db" />
     </device-transfer>
 </data-extraction-rules>

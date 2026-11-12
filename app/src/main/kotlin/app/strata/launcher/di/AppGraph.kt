@@ -11,6 +11,7 @@ import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.apps.ProfileSource
 import app.strata.launcher.core.platformapi.apps.ShortcutSource
+import app.strata.launcher.core.platformapi.backup.BackupService
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.settings.ResetNotices
@@ -90,6 +91,9 @@ interface AppGraph {
 
     /** Temporary `cacheDir/share/` copies behind the FileProvider. */
     val sharedFiles: SharedFiles
+
+    /** Manual backup and restore (FR-BACKUP-01…04); bound to `:backup`. */
+    val backup: BackupService
 
     /** BCP-47 tags of the current configuration's locales (sections, collation). */
     val locales: MutableStateFlow<List<String>>

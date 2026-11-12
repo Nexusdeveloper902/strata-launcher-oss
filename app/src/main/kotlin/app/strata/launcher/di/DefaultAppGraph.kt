@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.view.View
 import app.strata.launcher.BuildConfig
+import app.strata.launcher.backup.DefaultBackupService
 import app.strata.launcher.badges.BadgeListenerService
 import app.strata.launcher.core.common.AppDispatchers
 import app.strata.launcher.core.common.Clock
@@ -14,6 +15,9 @@ import app.strata.launcher.core.common.log.RotatingFileLogSink
 import app.strata.launcher.core.data.Databases
 import app.strata.launcher.core.data.LazyResource
 import app.strata.launcher.core.data.ResetNoticeBoard
+import app.strata.launcher.core.data.backup.AtomicRestoreFileStore
+import app.strata.launcher.core.data.backup.FileInstallMarker
+import app.strata.launcher.core.data.backup.RoomBackupAppStore
 import app.strata.launcher.core.data.catalog.AppCatalogRepository
 import app.strata.launcher.core.data.launchlog.RoomLaunchLogRepository
 import app.strata.launcher.core.data.list.AssembledAppListSource
@@ -35,6 +39,7 @@ import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.OverridesRepository
 import app.strata.launcher.core.platformapi.apps.ProfileSource
 import app.strata.launcher.core.platformapi.apps.ShortcutSource
+import app.strata.launcher.core.platformapi.backup.BackupService
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.settings.ResetNotices
@@ -340,10 +345,42 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     override val widgets: WidgetRepository by lazy { RoomWidgetRepository(strataDb) }
 
+    private val backupService by lazy {
+        DefaultBackupService(
+            documents = documents,
+            apps = RoomBackupAppStore(strataDb),
+            settings = settingsRepository,
+            themes = defaultThemeRepository,
+            profiles = profileSource,
+            catalog = catalogRepository,
+            launchLog = roomLaunchLog,
+            files = AtomicRestoreFileStore { File(appContext.filesDir, RESTORE_DIR) },
+            marker = FileInstallMarker { File(appContext.noBackupFilesDir, FileInstallMarker.FILE_NAME) },
+            clock = Clock.System,
+            io = dispatchers.io,
+            logger = logger,
+            appVersion = BuildConfig.VERSION_NAME,
+        )
+    }
+
+    override val backup: BackupService get() = backupService
+
+    private val backupStarted =
+        java.util.concurrent.atomic
+            .AtomicBoolean(false)
+
     override fun startCatalog() {
         profileSource
         catalogRepository.start()
         appScope.launch(dispatchers.io) { runCatching { roomLaunchLog.pruneExpired() } }
+        // ARCHITECTURE §12.3 steps 5–6: replay an interrupted restore, drop the last undo snapshot, detect an Auto
+        // Backup restore. Off main; the catalog start above is not delayed (its first frame comes from the snapshot).
+        if (backupStarted.compareAndSet(false, true)) {
+            appScope.launch(dispatchers.io) {
+                val report = backupService.onProcessStart()
+                if (report.journalReplayed || report.restoreDetected) logger.i(TAG, "backup start: $report")
+            }
+        }
     }
 
     override fun attachWindow(view: View?) {
@@ -354,6 +391,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
         const val TAG = "AppGraph"
         const val ICON_PARALLELISM = 4
         const val THEMES_DIR = "themes"
+        const val RESTORE_DIR = "restore"
         const val IMPORT_CACHE_MAX_AGE_MS = 60 * 60 * 1000L
     }
 }

@@ -79,7 +79,7 @@ class SettingsGraphTest {
         idle()
     }
 
-    /** T-SET-02: the root's groups in the FR-SET-01 order (Backup joins in M8 part 2). */
+    /** T-SET-02: the root's groups in the FR-SET-01 order. */
     @Test
     fun tSet02_groupsInOrder() {
         graph()
@@ -101,6 +101,7 @@ class SettingsGraphTest {
                 "Themes",
                 "Icons",
                 "Apps",
+                "Backup",
                 "Privacy & permissions",
                 "About",
             ).inOrder()

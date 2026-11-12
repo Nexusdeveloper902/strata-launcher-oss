@@ -9,6 +9,7 @@ import app.strata.launcher.di.AppGraph
 import app.strata.launcher.testing.fakes.FakeAppCatalog
 import app.strata.launcher.testing.fakes.FakeAppLauncher
 import app.strata.launcher.testing.fakes.FakeAppListSource
+import app.strata.launcher.testing.fakes.FakeBackupService
 import app.strata.launcher.testing.fakes.FakeBadgeSource
 import app.strata.launcher.testing.fakes.FakeContactsSource
 import app.strata.launcher.testing.fakes.FakeDocumentIO
@@ -67,6 +68,7 @@ class TestAppGraph(
     override val contacts: FakeContactsSource = FakeContactsSource(),
     override val widgetHost: FakeWidgetHost = FakeWidgetHost(),
     override val widgets: FakeWidgetRepository = FakeWidgetRepository(),
+    override val backup: FakeBackupService = FakeBackupService(),
 ) : AppGraph {
     constructor(roleController: FakeRoleController = FakeRoleController(), onboarded: Boolean) :
         this(roleController, FakeSettingsRepository(Settings(onboardingDone = onboarded)))
