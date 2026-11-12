@@ -1,6 +1,7 @@
 package app.strata.launcher.feature.widgets
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.strata.launcher.core.model.WidgetHeights
 import app.strata.launcher.core.model.WidgetPlacement
 import app.strata.launcher.core.model.WidgetPlacementState
 import app.strata.launcher.feature.widgets.WidgetFixtures.clock
@@ -169,5 +170,29 @@ class WidgetAreaViewModelTest {
         assertThat(repo.state.value!!.replaceClock).isTrue()
         vm.onAction(WidgetAreaAction.Replace)
         assertThat(effects).containsExactly(WidgetAreaEffect.OpenPicker(null))
+    }
+
+    /**
+     * CI run 43220546655 (API 26 tWidget06): taps that arrive before the previous write has flowed back to the state
+     * must each count. The published flow here lags (it never re-emits after the first value); steps come from storage.
+     */
+    @Test
+    fun quickResizeTapsEachCount_evenWhenThePublishedStateLags() {
+        val id = placed()
+        val lagging =
+            object : app.strata.launcher.core.platformapi.widgets.WidgetRepository by repo {
+                override val placement = MutableStateFlow(repo.state.value)
+            }
+        val vm = WidgetAreaViewModel(host, lagging, RecordingLogger(), safeMode)
+        vm.refresh()
+        vm.onAction(WidgetAreaAction.StartResize)
+        vm.onAction(WidgetAreaAction.Taller)
+        vm.onAction(WidgetAreaAction.Taller)
+        assertThat(repo.state.value?.heightStep).isEqualTo(3)
+        repeat(5) { vm.onAction(WidgetAreaAction.Taller) }
+        assertThat(repo.state.value?.heightStep).isEqualTo(WidgetHeights.MAX_STEP)
+        repeat(9) { vm.onAction(WidgetAreaAction.Shorter) }
+        assertThat(repo.state.value?.heightStep).isEqualTo(WidgetHeights.MIN_STEP)
+        assertThat(repo.state.value?.appWidgetId).isEqualTo(id)
     }
 }
