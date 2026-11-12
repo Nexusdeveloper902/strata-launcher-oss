@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test APK only: WIDGET_FIX provider info (plain). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/fixture_widget_list"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:resizeMode="vertical"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />
