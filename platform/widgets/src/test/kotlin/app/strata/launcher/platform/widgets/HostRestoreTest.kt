@@ -14,8 +14,8 @@ class HostRestoreTest {
     @Test
     fun otherHostOrMissingHostId() {
         assertThat(HostRestore.parse(1, 2, intArrayOf(5), intArrayOf(9))).isNull()
-        // Some platform versions omit the host ID: the arrays alone are accepted.
-        assertThat(HostRestore.parse(1, null, intArrayOf(5), intArrayOf(9))).containsExactly(5, 9)
+        // EXTRA_HOST_ID is required.
+        assertThat(HostRestore.parse(1, null, intArrayOf(5), intArrayOf(9))).isNull()
     }
 
     @Test

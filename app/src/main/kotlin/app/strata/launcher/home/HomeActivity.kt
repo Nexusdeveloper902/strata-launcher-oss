@@ -158,7 +158,8 @@ class HomeActivity : ComponentActivity() {
                     host = graph.widgetHost,
                     repository = graph.widgets,
                     logger = graph.logger,
-                    safeMode = graph.themeRepository.state.map { it.safeMode },
+                    // ARCHITECTURE §10: no widget before the boot result is known, none in safe mode.
+                    suppressed = graph.themeRepository.state.map { !it.loaded || it.safeMode },
                 )
             }
         }
@@ -268,7 +269,7 @@ class HomeActivity : ComponentActivity() {
                     onLongPress,
                     m,
                     ->
-                    HostedWidget(graph.widgetHost, id, onLongPress, graph.logger, m)
+                    HostedWidget(graph.widgetHost, id, onLongPress, m)
                 },
                 modifier = modifier,
             )

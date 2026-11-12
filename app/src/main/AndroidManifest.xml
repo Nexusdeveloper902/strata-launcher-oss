@@ -114,7 +114,7 @@
             android:name=".widget.WidgetPickerActivity"
             android:exported="false"
             android:label="@string/widget_picker_label"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <!-- Widget-ID remap after restore (FR-WIDGET-04; protected system broadcast, ANDROID_PLATFORM §22). The
              receiver checks the action, our host ID and the extras (ARCHITECTURE §13). -->

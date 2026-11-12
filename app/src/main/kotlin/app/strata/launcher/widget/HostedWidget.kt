@@ -1,9 +1,6 @@
 package app.strata.launcher.widget
 
 import android.appwidget.AppWidgetHostView
-import android.os.Build
-import android.os.Bundle
-import android.util.SizeF
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
@@ -19,7 +16,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
-import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.platformapi.widgets.WidgetHostController
 import app.strata.launcher.feature.widgets.WidgetErrorTile
 import app.strata.launcher.platform.widgets.StrataWidgetHostView
@@ -35,7 +31,6 @@ fun HostedWidget(
     host: WidgetHostController,
     id: Int,
     onLongPress: () -> Unit,
-    logger: Logger,
     modifier: Modifier = Modifier,
 ) {
     key(id) {
@@ -43,16 +38,17 @@ fun HostedWidget(
         if (view == null) {
             WidgetErrorTile(modifier)
         } else {
-            HostView(view, onLongPress, logger, modifier)
+            HostView(host, id, view, onLongPress, modifier)
         }
     }
 }
 
 @Composable
 private fun HostView(
+    host: WidgetHostController,
+    id: Int,
     view: AppWidgetHostView,
     onLongPress: () -> Unit,
-    logger: Logger,
     modifier: Modifier,
 ) {
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -67,19 +63,8 @@ private fun HostView(
         modifier = modifier.onSizeChanged { size = it },
         onRelease = { released: View -> (released as? StrataWidgetHostView)?.longPressListener = null },
     )
-    LaunchedEffect(view, size) {
-        if (size == IntSize.Zero) return@LaunchedEffect
-        val w = size.width / density
-        val h = size.height / density
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                view.updateAppWidgetSize(Bundle(), listOf(SizeF(w, h)))
-            } else {
-                @Suppress("DEPRECATION")
-                view.updateAppWidgetSize(null, w.toInt(), h.toInt(), w.toInt(), h.toInt())
-            }
-        } catch (e: RuntimeException) {
-            logger.w("WidgetHost", "size update failed", e)
-        }
+    LaunchedEffect(id, size) {
+        // The provider learns the area's size; the binder calls run on the host's IO dispatcher.
+        if (size != IntSize.Zero) host.updateSize(id, size.width / density, size.height / density)
     }
 }

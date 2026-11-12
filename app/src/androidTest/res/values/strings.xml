@@ -10,4 +10,5 @@
     <string name="fixture_widget_first_user">Strata fixture configure first user</string>
     <string name="fixture_widget_crash">Strata fixture configure crash</string>
     <string name="fixture_widget_empty">Fixture empty</string>
+    <string name="fixture_widget_title">Fixture title</string>
 </resources>

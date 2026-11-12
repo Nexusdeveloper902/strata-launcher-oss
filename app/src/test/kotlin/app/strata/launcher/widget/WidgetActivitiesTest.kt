@@ -146,6 +146,26 @@ class WidgetActivitiesTest {
         assertThat(count(HomeTestTags.CLOCK)).isEqualTo(1)
     }
 
+    /** Review of PR #25 item 2: before the theme boot result is known, no widget is inflated (it may be safe mode). */
+    @Test
+    fun themeNotLoaded_noWidgetUntilTheBootResult() {
+        val host = FakeWidgetHost(providers)
+        val theme = FakeThemeRepository(ThemeState(loaded = false))
+        TestAppGraph(
+            roleController = FakeRoleController(defaultHome = true),
+            settingsRepository = FakeSettingsRepository(Settings(onboardingDone = true)),
+            themeRepository = theme,
+            widgetHost = host,
+            widgets = placed(host, replaceClock = true),
+        ).install()
+        startHome()
+        assertThat(count(WidgetTestTags.AREA)).isEqualTo(0)
+        theme.state.value = ThemeState(loaded = true)
+        frames()
+        assertThat(count(WidgetTestTags.HOST)).isEqualTo(1)
+        assertThat(count(HomeTestTags.CLOCK)).isEqualTo(0)
+    }
+
     @Test
     fun tWidget09_lostProvider_placeholder_reAddStartsPickerForSameProvider() {
         val host = FakeWidgetHost(providers)

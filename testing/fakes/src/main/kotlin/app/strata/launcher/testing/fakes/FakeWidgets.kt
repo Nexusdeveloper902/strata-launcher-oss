@@ -73,10 +73,29 @@ class FakeWidgetHost(
         sizePx: Int,
     ): IconImage? = null
 
+    /** IDs allocated by [allocateAndBind] and not settled or deleted. */
+    val inFlight = linkedSetOf<Int>()
+    val sizes = mutableMapOf<Int, Pair<Float, Float>>()
+
+    override fun inFlightIds(): Set<Int> = inFlight.toSet()
+
+    override fun settled(id: Int) {
+        inFlight.remove(id)
+    }
+
+    override suspend fun updateSize(
+        id: Int,
+        widthDp: Float,
+        heightDp: Float,
+    ) {
+        sizes[id] = widthDp to heightDp
+    }
+
     override suspend fun allocateAndBind(ref: WidgetProviderRef): BindStep {
         model(ref) ?: return BindStep.Failed(BindError.PROVIDER_GONE)
         val id = nextId++
         providerOf[id] = ref
+        inFlight += id
         return if (silentBind) {
             boundIds += id
             afterBind(id)
@@ -117,6 +136,7 @@ class FakeWidgetHost(
 
     override suspend fun delete(id: Int) {
         deleted += id
+        inFlight.remove(id)
         boundIds.remove(id)
         allocated.remove(id)
     }

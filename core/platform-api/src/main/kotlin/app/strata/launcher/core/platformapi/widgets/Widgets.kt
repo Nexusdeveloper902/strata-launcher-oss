@@ -129,6 +129,19 @@ interface WidgetHostController {
     /** IDs the platform holds for this host (orphans are deleted at home start). */
     suspend fun hostIds(): List<Int>
 
+    /** IDs a bind flow allocated and has not placed yet ([settled] or deleted): never orphans. */
+    fun inFlightIds(): Set<Int>
+
+    /** [id] is placed (or handed to the caller): it stops being in flight. */
+    fun settled(id: Int)
+
+    /** Passes the area's size to the provider (`updateAppWidgetSize`), off the main thread. */
+    suspend fun updateSize(
+        id: Int,
+        widthDp: Float,
+        heightDp: Float,
+    )
+
     /** The provider's `minHeight` in dp for the bound [id], or null. */
     suspend fun minHeightDp(id: Int): Int?
 
@@ -151,7 +164,10 @@ interface WidgetHostController {
         requestCode: Int,
     ): Boolean
 
-    /** The kept host view of [id] (created once, re-attached on configuration changes), or null if it cannot be made. */
+    /**
+     * The kept host view of [id] (created once, re-attached on configuration changes), or null if it cannot be made.
+     * Main only; makes no binder call: [isBound] must have confirmed [id] first.
+     */
     fun hostView(id: Int): WidgetViewHandle?
 
     fun startListening()

@@ -143,7 +143,7 @@ class WidgetScreensTest {
 
     @Test
     fun safeMode_nothingRendered() {
-        area(WidgetAreaState(WidgetPlacement(3, clock.ref), safeMode = true))
+        area(WidgetAreaState(WidgetPlacement(3, clock.ref), suppressed = true))
         assertThat(compose.onAllNodesWithTag(WidgetTestTags.AREA).fetchSemanticsNodes()).isEmpty()
     }
 }

@@ -29,10 +29,12 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.core.model.WidgetHeights
 import app.strata.launcher.core.model.WidgetPlacement
 import app.strata.launcher.core.model.WidgetPlacementState
 import app.strata.launcher.core.model.WidgetProviderRef
+import app.strata.launcher.core.platformapi.widgets.BindStep
 import app.strata.launcher.coverForeignActivities
 import app.strata.launcher.feature.home.HomeLayer
 import app.strata.launcher.feature.home.HomeModal
@@ -105,12 +107,21 @@ class WidgetDeviceTest {
 
     @After
     fun tearDown() {
+        var owned: HomeActivity? = null
+        runCatching { compose.activityRule.scenario.onActivity { owned = it } }
+        // A test that failed mid-flow may have left the consent dialog or a fixture configure activity in front: the
+        // explicit start of home (singleTask) clears every activity above it in its task.
+        owned?.let { home -> if (!homeFocused(home)) runCatching { compose.bringHomeToFront(home, device) } }
         finishPickerAndFixtures()
         restore()
         replyThread.quitSafely()
-        var owned: HomeActivity? = null
-        runCatching { compose.activityRule.scenario.onActivity { owned = it } }
         compose.coverForeignActivities(HomeActivity::class.java, owned)
+    }
+
+    private fun homeFocused(home: HomeActivity): Boolean {
+        var focused = false
+        instrumentation.runOnMainSync { focused = home.window.decorView.hasWindowFocus() }
+        return focused
     }
 
     /** Everything these tests change, put back synchronously. */
@@ -119,11 +130,18 @@ class WidgetDeviceTest {
         val host = AppWidgetHost(context, AndroidWidgetHost.HOST_ID)
         host.appWidgetIds.forEach { host.deleteAppWidgetId(it) }
         runBlocking { graph.widgets.current()?.let { graph.widgets.remove(it.appWidgetId) } }
-        shell("appwidget revokebind --package ${context.packageName} --user current")
+        shell("appwidget revokebind --package ${context.packageName} --user $userId")
     }
 
+    /**
+     * The numeric user of the instrumented process. Not "current": on API 26 the `appwidget` command passes
+     * `USER_CURRENT` (-2) through to the service, which rejects it ("User -2 must be unlocked for widgets to be
+     * available", CI run 43158002484), so the grant never happened.
+     */
+    private val userId: Int get() = android.os.Process.myUid() / PER_USER_RANGE
+
     private fun grantBind() {
-        shell("appwidget grantbind --package ${context.packageName} --user current")
+        shell("appwidget grantbind --package ${context.packageName} --user $userId")
     }
 
     /** Finishes a picker or fixture activity a failed test may have left (they must not stay in front). */
@@ -154,13 +172,20 @@ class WidgetDeviceTest {
     private fun setProviderEnabled(
         provider: ComponentName,
         enabled: Boolean,
+    ) = fixture(WidgetFixtureReceiver.ACTION_SET_PROVIDER) {
+        putExtra(WidgetFixtureReceiver.EXTRA_CLASS, provider.className)
+        putExtra(WidgetFixtureReceiver.EXTRA_ENABLED, enabled)
+    }
+
+    private fun fixture(
+        action: String,
+        extras: Intent.() -> Unit,
     ) {
         val intent =
-            Intent(WidgetFixtureReceiver.ACTION_SET_PROVIDER)
+            Intent(action)
                 .setComponent(ComponentName(TEST_PACKAGE, WidgetFixtureReceiver::class.java.name))
                 .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-                .putExtra(WidgetFixtureReceiver.EXTRA_CLASS, provider.className)
-                .putExtra(WidgetFixtureReceiver.EXTRA_ENABLED, enabled)
+                .apply(extras)
         val done = CountDownLatch(1)
         val result = AtomicInteger(WidgetFixtureReceiver.RESULT_NOT_DELIVERED)
         val reply =
@@ -203,15 +228,23 @@ class WidgetDeviceTest {
         replaceClock: Boolean = true,
         step: Int = WidgetHeights.MIN_STEP,
     ): Int {
-        grantBind()
-        val host = AppWidgetHost(context, AndroidWidgetHost.HOST_ID)
-        val id = host.allocateAppWidgetId()
-        val bound = AppWidgetManager.getInstance(context).bindAppWidgetIdIfAllowed(id, provider)
-        check(bound) { "appwidget grantbind did not take effect" }
+        val id = bindInFlight(provider)
         runBlocking { graph.widgets.place(WidgetPlacement(id, ref(provider), step, replaceClock)) }
+        graph.widgetHost.settled(id)
         area().refresh()
         compose.waitUntil(STALL_MS) { count(WidgetTestTags.HOST) == 1 }
         return id
+    }
+
+    /**
+     * Binds [provider] through Strata's own host (bind grant through the shell). The ID stays "in flight" until the test
+     * calls `settled`, so home's orphan sweep (onStart, host events) cannot delete it between the bind and the placement.
+     */
+    private fun bindInFlight(provider: ComponentName): Int {
+        grantBind()
+        val step = runBlocking { graph.widgetHost.allocateAndBind(ref(provider)) }
+        check(step is BindStep.Bound) { "appwidget grantbind did not take effect: $step" }
+        return step.id
     }
 
     private fun ref(provider: ComponentName) = WidgetProviderRef(provider.flattenToString(), 0L)
@@ -224,9 +257,15 @@ class WidgetDeviceTest {
     }
 
     private fun pick(provider: ComponentName) {
-        val tag = WidgetTestTags.provider(provider.flattenToString())
-        compose.onNodeWithTag(WidgetTestTags.PICKER_LIST).performScrollToNode(hasTestTag(tag))
+        val tag = scrollTo(WidgetTestTags.provider(provider.flattenToString()))
         compose.onNodeWithTag(tag).performClick()
+    }
+
+    /** Scrolls the picker to [tag] and waits until that row is composed (the lazy list may re-lay out meanwhile). */
+    private fun scrollTo(tag: String): String {
+        compose.onNodeWithTag(WidgetTestTags.PICKER_LIST).performScrollToNode(hasTestTag(tag))
+        compose.waitUntil(STALL_MS) { count(tag) == 1 }
+        return tag
     }
 
     private fun widgetOptions() {
@@ -301,10 +340,9 @@ class WidgetDeviceTest {
     fun tWidget02_pickerGroupedByApp_withNames() {
         openPickerFromHomeMenu()
         val group = WidgetTestTags.group(TEST_PACKAGE)
-        compose.onNodeWithTag(WidgetTestTags.PICKER_LIST).performScrollToNode(hasTestTag(group))
+        scrollTo(group)
         listOf(list, backConfig, firstUserConfig, crashConfig).forEach { provider ->
-            val tag = WidgetTestTags.provider(provider.flattenToString())
-            compose.onNodeWithTag(WidgetTestTags.PICKER_LIST).performScrollToNode(hasTestTag(tag))
+            val tag = scrollTo(WidgetTestTags.provider(provider.flattenToString()))
             val description =
                 compose
                     .onNodeWithTag(
@@ -418,14 +456,12 @@ class WidgetDeviceTest {
 
     @Test
     fun tWidget08_hostRestoredRemap() {
-        grantBind()
-        val host = AppWidgetHost(context, AndroidWidgetHost.HOST_ID)
-        val newId = host.allocateAppWidgetId()
-        check(AppWidgetManager.getInstance(context).bindAppWidgetIdIfAllowed(newId, list))
+        val newId = bindInFlight(list)
         val oldId = newId + OLD_ID_OFFSET
         runBlocking { graph.widgets.place(WidgetPlacement(oldId, ref(list), replaceClock = true)) }
         WidgetHostRestoredReceiver().onReceive(context, restored(intArrayOf(oldId), intArrayOf(newId)))
         compose.waitUntil(STALL_MS) { placement()?.appWidgetId == newId }
+        graph.widgetHost.settled(newId)
         compose.activityRule.scenario.recreate()
         compose.waitUntil(STALL_MS) { count(WidgetTestTags.HOST) == 1 }
         assertThat(placement()!!.state).isEqualTo(WidgetPlacementState.BOUND)
@@ -486,10 +522,63 @@ class WidgetDeviceTest {
         assertThat(home().state.value.modal).isEqualTo(HomeModal.None)
         assertThat(area().state.value.menuOpen).isFalse()
         assertThat(home().state.value.layer).isNotEqualTo(HomeLayer.SEARCH)
+        // A press held still inside the widget opens the widget menu, never the home menu.
+        device.findObject(By.textStartsWith("Fixture row")).longClick()
+        compose.waitUntil(STALL_MS) { area().state.value.menuOpen }
+        assertThat(home().state.value.modal).isEqualTo(HomeModal.None)
+        compose.waitUntil(STALL_MS) { count(WidgetTestTags.MENU) == 1 }
+    }
+
+    /**
+     * Review of PR #25 item 1: after home was stopped and started again (`stopListening` / `startListening`), the kept
+     * host view still receives the provider's updates.
+     */
+    @Test
+    fun widgetUpdatesArriveAfterStopAndStart() {
+        placeDirect()
+        assertWithMessage("fixture title")
+            .that(
+                device.wait(
+                    androidx.test.uiautomator.Until
+                        .hasObject(By.text("Fixture title")),
+                    STALL_MS,
+                ),
+            ).isTrue()
+        lateinit var owned: HomeActivity
+        compose.activityRule.scenario.onActivity { owned = it }
+        val target = instrumentation.context
+        target.startActivity(
+            Intent()
+                .setClassName(
+                    target,
+                    app.strata.launcher.CoverActivity::class.java.name,
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        compose.waitUntil(STALL_MS) {
+            var stopped = false
+            instrumentation.runOnMainSync {
+                stopped = ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(owned) == Stage.STOPPED
+            }
+            stopped
+        }
+        compose.bringHomeToFront(owned, device)
+        fixture(WidgetFixtureReceiver.ACTION_SET_TITLE) { putExtra(WidgetFixtureReceiver.EXTRA_TEXT, UPDATED_TITLE) }
+        assertWithMessage("update after stop/start")
+            .that(
+                device.wait(
+                    androidx.test.uiautomator.Until
+                        .hasObject(By.text(UPDATED_TITLE)),
+                    STALL_MS,
+                ),
+            ).isTrue()
     }
 
     private companion object {
         const val TEST_PACKAGE = "app.strata.launcher.test"
+        const val UPDATED_TITLE = "Fixture title updated"
+
+        /** `UserHandle.PER_USER_RANGE`: uid = user × 100 000 + app id. */
+        const val PER_USER_RANGE = 100_000
         const val STALL_MS = 30_000L
         const val FIXTURE_TIMEOUT_S = 15L
         const val OLD_ID_OFFSET = 1_000

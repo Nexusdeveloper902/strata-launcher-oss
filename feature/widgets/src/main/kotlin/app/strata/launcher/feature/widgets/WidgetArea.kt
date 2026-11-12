@@ -136,7 +136,14 @@ fun WidgetArea(
                             )
                     }.testTag(WidgetTestTags.HOST),
         ) {
-            hostContent(placement.appWidgetId, { currentOnAction(WidgetAreaAction.OpenMenu) }, Modifier.fillMaxSize())
+            // The view is created only once the check confirmed the ID (no binder call on main); until then the space is kept.
+            if (state.hostReady) {
+                hostContent(
+                    placement.appWidgetId,
+                    { currentOnAction(WidgetAreaAction.OpenMenu) },
+                    Modifier.fillMaxSize(),
+                )
+            }
         }
         if (state.resizing) ResizeBar(state, windowHeight, onAction)
     }

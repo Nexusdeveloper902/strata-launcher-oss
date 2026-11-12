@@ -14,6 +14,7 @@ import app.strata.launcher.core.platformapi.widgets.WidgetProviderModel
 import app.strata.launcher.core.platformapi.widgets.WidgetRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.Collator
 
 /** The providers of one app (FR-WIDGET-02: grouped by app). */
@@ -252,12 +254,19 @@ class WidgetPickerViewModel(
         step: Int,
         replaceClock: Boolean,
     ) {
+        // The ID leaves the step in flight before the write: abandon() must never delete an ID that is being placed.
+        pending = null
         try {
             val replaced = repository.place(WidgetPlacement(id, ref, step, replaceClock, WidgetPlacementState.BOUND))
+            host.settled(id)
             replaced.forEach { host.delete(it) }
-            pending = null
             mutable.update { it.copy(busy = false, done = true) }
         } catch (e: CancellationException) {
+            // Cancelled mid-write (the activity is gone): keep the ID only if the placement made it to storage.
+            withContext(NonCancellable) {
+                val stored = runCatching { repository.current()?.appWidgetId == id }.getOrDefault(false)
+                if (stored) host.settled(id) else host.delete(id)
+            }
             throw e
         } catch (e: Exception) {
             logger.w(TAG, "placement not saved", e)

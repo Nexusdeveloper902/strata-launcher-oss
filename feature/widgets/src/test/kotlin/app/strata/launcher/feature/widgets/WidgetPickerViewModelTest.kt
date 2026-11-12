@@ -155,6 +155,18 @@ class WidgetPickerViewModelTest {
         assertThat(host.deleted).contains(id)
     }
 
+    /** Review of PR #25 item 5: once placing started, a late abandon() must not delete the placed ID. */
+    @Test
+    fun abandonAfterPlacingKeepsThePlacedId() {
+        val vm = vm()
+        vm.onAction(WidgetPickerAction.Pick(clock.ref))
+        vm.onAction(WidgetPickerAction.ReplaceClock(true))
+        val id = repo.state.value!!.appWidgetId
+        vm.abandon()
+        assertThat(host.deleted).doesNotContain(id)
+        assertThat(host.inFlight).isEmpty() // settled: the orphan sweep may now judge it by the placement
+    }
+
     @Test
     fun abandonFreesTheIdInFlight() {
         val vm = vm()

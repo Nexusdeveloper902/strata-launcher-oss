@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -31,13 +32,18 @@ data class WidgetAreaState(
     val placement: WidgetPlacement? = null,
     /** The provider's `minHeight` in dp (step 1, FR-WIDGET-03). */
     val minHeightDp: Int = DEFAULT_MIN_HEIGHT_DP,
-    /** Safe mode (ARCHITECTURE §10): widgets are not inflated; the header shows the clock. */
-    val safeMode: Boolean = false,
+    /**
+     * Widgets are not inflated and the header shows the clock: safe mode (ARCHITECTURE §10), or the theme boot has not
+     * finished yet, so whether this start is in safe mode is not known.
+     */
+    val suppressed: Boolean = false,
     val menuOpen: Boolean = false,
     val resizing: Boolean = false,
+    /** The placement's ID was confirmed bound by the last check (provider info published): its view may be created. */
+    val hostReady: Boolean = false,
 ) {
     /** The widget takes the header slot (hosted or as the placeholder). */
-    val shown: Boolean get() = placement != null && !safeMode
+    val shown: Boolean get() = placement != null && !suppressed
 
     /** The clock is hidden: a shown, available widget that replaces it. A placeholder never hides the clock. */
     val replacesClock: Boolean get() = shown && placement?.replaceClock == true && placement.available
@@ -88,12 +94,14 @@ class WidgetAreaViewModel(
     private val host: WidgetHostController,
     private val repository: WidgetRepository,
     private val logger: Logger,
-    safeMode: Flow<Boolean> = flowOf(false),
+    /** True while widgets must not be inflated (safe mode, or before the theme boot result is known). */
+    suppressed: Flow<Boolean> = flowOf(false),
 ) : ViewModel() {
     private data class Local(
         val minHeightDp: Int = WidgetAreaState.DEFAULT_MIN_HEIGHT_DP,
         val menuOpen: Boolean = false,
         val resizing: Boolean = false,
+        val verifiedId: Int? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -104,13 +112,15 @@ class WidgetAreaViewModel(
     val state: StateFlow<WidgetAreaState> =
         combine(
             repository.placement.catch { emit(null) },
-            safeMode.catch { emit(false) }.distinctUntilChanged(),
+            // Fail closed: a suppression flow that fails keeps widgets off.
+            suppressed.catch { emit(true) }.distinctUntilChanged(),
             local,
-        ) { placement, safe, l ->
+        ) { placement, off, l ->
             WidgetAreaState(
                 placement = placement,
                 minHeightDp = l.minHeightDp,
-                safeMode = safe,
+                suppressed = off,
+                hostReady = placement != null && placement.available && placement.appWidgetId == l.verifiedId,
                 menuOpen = l.menuOpen && placement != null,
                 resizing = l.resizing && placement?.available == true,
             )
@@ -118,6 +128,14 @@ class WidgetAreaViewModel(
 
     init {
         viewModelScope.launch { host.events.collect { refresh() } }
+        // A new or remapped placement (picker, restore receiver) is checked at once.
+        viewModelScope.launch {
+            repository.placement
+                .catch { emit(null) }
+                .map { it?.appWidgetId }
+                .distinctUntilChanged()
+                .collect { refresh() }
+        }
     }
 
     /** Checks the placement against the host and frees orphan IDs (home `onStart`, host events). */
@@ -146,12 +164,19 @@ class WidgetAreaViewModel(
             }
             if (bound) {
                 valid = p.state == WidgetPlacementState.BOUND
-                host.minHeightDp(p.appWidgetId)?.let { min -> local.update { it.copy(minHeightDp = min) } }
+                val min = host.minHeightDp(p.appWidgetId)
+                // isBound published the provider info, so hostView needs no binder call on main.
+                local.update { it.copy(minHeightDp = min ?: it.minHeightDp, verifiedId = p.appWidgetId) }
             }
         }
-        // A placement that is not bound may still be waiting for its restore remap: then its new ID is kept.
+        // A placement that is not bound may still be waiting for its restore remap: then its new ID is kept. IDs a bind
+        // flow holds (allocated, not placed yet) are never orphans.
         if (p == null || valid) {
-            host.hostIds().filter { it != p?.appWidgetId }.forEach { host.delete(it) }
+            val inFlight = host.inFlightIds()
+            host
+                .hostIds()
+                .filter { it != p?.appWidgetId && it !in inFlight }
+                .forEach { host.delete(it) }
         }
     }
 

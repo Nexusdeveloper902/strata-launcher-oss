@@ -119,6 +119,37 @@ class WidgetAreaViewModelTest {
         assertThat(repo.state.value!!.state).isEqualTo(WidgetPlacementState.UNAVAILABLE)
     }
 
+    /** Review of PR #25 item 7: an ID a bind flow holds (allocated, not placed) is not an orphan. */
+    @Test
+    fun idsInFlightAreNotSwept() {
+        val id = placed()
+        val step = runBlocking { host.allocateAndBind(WidgetFixtures.alarm.ref) }
+        val inFlight = (step as app.strata.launcher.core.platformapi.widgets.BindStep.Bound).id
+        vm().refresh()
+        assertThat(host.deleted).isEmpty()
+        assertThat(host.boundIds).containsExactly(id, inFlight)
+        host.settled(inFlight)
+        vm().refresh()
+        assertThat(host.deleted).containsExactly(inFlight)
+    }
+
+    /** Review item 8: the view is created only after the check confirmed the ID (provider info published off main). */
+    @Test
+    fun hostReadyOnlyAfterTheCheck_andAgainAfterARemap() {
+        val id = placed()
+        val vm = vm()
+        assertThat(vm.state.value.hostReady).isTrue() // the placement flow triggered the check
+        val other = host.bindDirect(clock.ref)
+        runBlocking { repo.remap(mapOf(id to other)) }
+        assertThat(
+            vm.state.value.placement!!
+                .appWidgetId,
+        ).isEqualTo(other)
+        assertThat(vm.state.value.hostReady).isTrue()
+        runBlocking { repo.remap(mapOf(other to 0)) }
+        assertThat(vm.state.value.hostReady).isFalse()
+    }
+
     @Test
     fun safeMode_widgetNotShown_clockStays() {
         placed()

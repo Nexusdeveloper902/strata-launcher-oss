@@ -14,9 +14,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.os.Bundle
 import android.os.Process
 import android.os.UserHandle
 import android.os.UserManager
+import android.util.SizeF
 import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.model.IconImage
 import app.strata.launcher.core.model.ProfileKind
@@ -30,6 +32,7 @@ import app.strata.launcher.core.platformapi.widgets.WidgetProviderModel
 import app.strata.launcher.core.platformapi.widgets.WidgetViewHandle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -42,7 +45,9 @@ import kotlin.math.roundToInt
  * [WidgetHostController] on the platform `AppWidgetHost` (ANDROID_PLATFORM §7, P-3). `BIND_APPWIDGET` is never
  * declared: binding is `bindAppWidgetIdIfAllowed`, then the user's consent (`ACTION_APPWIDGET_BIND`). Binder calls
  * run on [io]. Host views are created once per ID and kept, so a configuration change re-attaches them
- * (ARCHITECTURE §10). Every platform or provider exception is caught: a broken widget never takes home down.
+ * (ARCHITECTURE §10); `stopListening` leaves them registered with the host (AOSP 8.0+ does not clear its views
+ * there), so `startListening` brings each one up to date. Every platform or provider exception is caught, and so is
+ * an `OutOfMemoryError` while decoding a preview: a broken widget never takes home down.
  */
 class AndroidWidgetHost(
     context: Context,
@@ -61,8 +66,11 @@ class AndroidWidgetHost(
     /** Host views by ID; created and attached on main, removed on delete or when the platform removes the widget. */
     private val views = ConcurrentHashMap<Int, AppWidgetHostView>()
 
-    /** Provider info by bound ID, filled off main so [hostView] rarely needs a binder call. */
+    /** Provider info by bound ID, filled off main ([isBound], binds) so [hostView] needs no binder call. */
     private val infos = ConcurrentHashMap<Int, AppWidgetProviderInfo>()
+
+    /** IDs allocated by a bind flow and not placed yet: the orphan sweep leaves them alone. */
+    private val inFlight: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
     private val host: AppWidgetHost by lazy {
         object : AppWidgetHost(appContext, HOST_ID) {
@@ -90,8 +98,8 @@ class AndroidWidgetHost(
             val pm = appContext.packageManager
             val out = mutableListOf<WidgetProviderModel>()
             for (user in profiles()) {
-                val kind = kindOf(user)
-                if (kind == ProfileKind.PRIVATE) continue // P-5: nothing of the private space is ever persisted
+                // P-5: nothing of the private space is ever persisted; a profile of unknown type is skipped (fail closed).
+                val kind = kindOf(user)?.takeIf { it != ProfileKind.PRIVATE } ?: continue
                 val serial = guard("serial") { users.getSerialNumberForUser(user) } ?: continue
                 val infos = guard("providers") { manager.getInstalledProvidersForProfile(user) } ?: continue
                 for (info in infos) {
@@ -125,7 +133,7 @@ class AndroidWidgetHost(
             val component = ComponentName.unflattenFromString(ref.component) ?: return@withContext WidgetPreview.None
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                 val generated =
-                    guard("generated preview") {
+                    decode("generated preview") {
                         manager?.getWidgetPreview(component, user, AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN)
                     }
                 if (generated != null) return@withContext WidgetPreview.Generated(generated)
@@ -133,8 +141,8 @@ class AndroidWidgetHost(
             val info = findInfo(ref, user) ?: return@withContext WidgetPreview.None
             val dpi = appContext.resources.displayMetrics.densityDpi
             val drawable =
-                guard("preview image") { info.loadPreviewImage(appContext, dpi) }
-                    ?: guard("icon") { info.loadIcon(appContext, dpi) }
+                decode("preview image") { info.loadPreviewImage(appContext, dpi) }
+                    ?: decode("icon") { info.loadIcon(appContext, dpi) }
                     ?: return@withContext WidgetPreview.None
             render(drawable, maxWidthPx, maxHeightPx)?.let { WidgetPreview.Image(it) } ?: WidgetPreview.None
         }
@@ -147,12 +155,26 @@ class AndroidWidgetHost(
             val user = userFor(ref) ?: return@withContext null
             val info = findInfo(ref, user) ?: return@withContext null
             val drawable =
-                guard("icon") { info.loadIcon(appContext, appContext.resources.displayMetrics.densityDpi) }
+                decode("icon") { info.loadIcon(appContext, appContext.resources.displayMetrics.densityDpi) }
                     ?: return@withContext null
             render(drawable, sizePx, sizePx)
         }
 
-    override suspend fun allocateAndBind(ref: WidgetProviderRef): BindStep =
+    override suspend fun allocateAndBind(ref: WidgetProviderRef): BindStep {
+        var allocated = INVALID_ID
+        try {
+            return bindNew(ref) { allocated = it }
+        } catch (e: CancellationException) {
+            // The caller went away during the call (picker closed): the ID it would have received is freed here.
+            if (allocated != INVALID_ID) withContext(NonCancellable + io) { deleteNow(allocated) }
+            throw e
+        }
+    }
+
+    private suspend fun bindNew(
+        ref: WidgetProviderRef,
+        onAllocated: (Int) -> Unit,
+    ): BindStep =
         withContext(io) {
             val manager = manager ?: return@withContext BindStep.Failed(BindError.HOST_FAILED)
             val user = userFor(ref) ?: return@withContext BindStep.Failed(BindError.PROVIDER_GONE)
@@ -160,6 +182,8 @@ class AndroidWidgetHost(
             val id =
                 guard("allocate") { host.allocateAppWidgetId() }
                     ?: return@withContext BindStep.Failed(BindError.HOST_FAILED)
+            inFlight += id
+            onAllocated(id)
             val bound = guard("bind") { manager.bindAppWidgetIdIfAllowed(id, user, info.provider, null) }
             when (bound) {
                 null -> {
@@ -217,6 +241,7 @@ class AndroidWidgetHost(
     override suspend fun delete(id: Int) = withContext(io) { deleteNow(id) }
 
     private fun deleteNow(id: Int) {
+        inFlight.remove(id)
         views.remove(id)
         infos.remove(id)
         guard("delete") { host.deleteAppWidgetId(id) }
@@ -233,7 +258,34 @@ class AndroidWidgetHost(
             guard("host ids") { host.appWidgetIds.toList() }.orEmpty()
         }
 
+    override fun inFlightIds(): Set<Int> = inFlight.toSet()
+
+    override fun settled(id: Int) {
+        inFlight.remove(id)
+    }
+
     override suspend fun minHeightDp(id: Int): Int? = withContext(io) { boundInfo(id)?.let { toDp(it.minHeight) } }
+
+    override suspend fun updateSize(
+        id: Int,
+        widthDp: Float,
+        heightDp: Float,
+    ) {
+        withContext(io) {
+            val view = views[id] ?: return@withContext
+            // AOSP AppWidgetHostView: reads the view's padding and makes binder calls only, so it may run off main.
+            guard("size update") {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    view.updateAppWidgetSize(Bundle(), listOf(SizeF(widthDp, heightDp)))
+                } else {
+                    val w = widthDp.toInt()
+                    val h = heightDp.toInt()
+                    @Suppress("DEPRECATION")
+                    view.updateAppWidgetSize(null, w, h, w, h)
+                }
+            }
+        }
+    }
 
     override fun consentRequest(
         id: Int,
@@ -265,9 +317,13 @@ class AndroidWidgetHost(
         }
     }
 
+    /**
+     * Main only. Uses the provider info [isBound] published (the widget area shows a widget only after that check),
+     * so no binder call is made here; without it the view is not created and the error tile is shown.
+     */
     override fun hostView(id: Int): WidgetViewHandle? {
         views[id]?.let { return WidgetViewHandle(id, it) }
-        val info = infos[id] ?: guard("info") { manager?.getAppWidgetInfo(id) } ?: return null
+        val info = infos[id] ?: return null
         val view =
             try {
                 host.createView(appContext, id, info)
@@ -275,6 +331,9 @@ class AndroidWidgetHost(
                 throw e
             } catch (e: Exception) {
                 logger.w(TAG, "widget view could not be created", e)
+                return null
+            } catch (e: OutOfMemoryError) {
+                logger.w(TAG, "widget view too large", e)
                 return null
             }
         views[id] = view
@@ -297,10 +356,12 @@ class AndroidWidgetHost(
             users.userProfiles
         }.orEmpty().ifEmpty { listOf(Process.myUserHandle()) }
 
-    private fun userFor(ref: WidgetProviderRef): UserHandle? =
-        guard("user") {
-            users.getUserForSerialNumber(ref.userSerial)
-        }
+    /** The profile of [ref], only when it may be used: never a private space nor a profile of unknown type (P-5). */
+    private fun userFor(ref: WidgetProviderRef): UserHandle? {
+        val user = guard("user") { users.getUserForSerialNumber(ref.userSerial) } ?: return null
+        val kind = kindOf(user) ?: return null
+        return user.takeIf { kind != ProfileKind.PRIVATE }
+    }
 
     private fun findInfo(
         ref: WidgetProviderRef,
@@ -311,18 +372,18 @@ class AndroidWidgetHost(
             ?.firstOrNull { it.provider == component }
     }
 
-    private fun kindOf(user: UserHandle): ProfileKind {
+    /** MAIN for this user, else [classify] of the launcher user type (read on API 35+ only). */
+    private fun kindOf(user: UserHandle): ProfileKind? {
         if (user == Process.myUserHandle()) return ProfileKind.MAIN
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return ProfileKind.WORK
         val type =
-            guard("user type") {
-                appContext.getSystemService(LauncherApps::class.java).getLauncherUserInfo(user)?.userType
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                guard("user type") {
+                    appContext.getSystemService(LauncherApps::class.java).getLauncherUserInfo(user)?.userType
+                }
+            } else {
+                null
             }
-        return when (type) {
-            UserManager.USER_TYPE_PROFILE_MANAGED -> ProfileKind.WORK
-            UserManager.USER_TYPE_PROFILE_PRIVATE -> ProfileKind.PRIVATE
-            else -> ProfileKind.OTHER
-        }
+        return classify(Build.VERSION.SDK_INT, type)
     }
 
     private fun toDp(px: Int): Int = (px / density).roundToInt().coerceAtLeast(1)
@@ -340,13 +401,25 @@ class AndroidWidgetHost(
             null
         }
 
+    /** [guard] that also survives `OutOfMemoryError`: a provider's preview can be a huge bitmap. */
+    private fun <T> decode(
+        what: String,
+        block: () -> T,
+    ): T? =
+        try {
+            guard(what, block)
+        } catch (e: OutOfMemoryError) {
+            logger.w(TAG, "$what too large", e)
+            null
+        }
+
     /** Draws [drawable] scaled to fit [maxW] × [maxH], keeping its aspect ratio. */
     private fun render(
         drawable: Drawable,
         maxW: Int,
         maxH: Int,
     ): IconImage? =
-        guard("render") {
+        decode("render") {
             val w0 = drawable.intrinsicWidth.takeIf { it > 0 } ?: maxW
             val h0 = drawable.intrinsicHeight.takeIf { it > 0 } ?: maxH
             val scale = minOf(maxW.toFloat() / w0, maxH.toFloat() / h0)
@@ -363,6 +436,7 @@ class AndroidWidgetHost(
         const val HOST_ID = 1
 
         private const val TAG = "WidgetHost"
+        private const val INVALID_ID = 0
         private const val FEATURE_RECONFIGURABLE = 1
         private const val FEATURE_HIDE_FROM_PICKER = 2
         private const val FEATURE_CONFIGURATION_OPTIONAL = 4
@@ -374,6 +448,23 @@ class AndroidWidgetHost(
             val features = info.widgetFeatures
             val optional = features and FEATURE_CONFIGURATION_OPTIONAL != 0 && features and FEATURE_RECONFIGURABLE != 0
             return !optional
+        }
+
+        /**
+         * The kind of a non-main profile, as M6's profile source decides it (ANDROID_PLATFORM §3.2/§3.3): WORK below
+         * API 35 (no private space there); on 35+ the launcher user type, and null (skip: fail closed) when unknown.
+         */
+        fun classify(
+            sdk: Int,
+            type: String?,
+        ): ProfileKind? {
+            if (sdk < Build.VERSION_CODES.VANILLA_ICE_CREAM) return ProfileKind.WORK
+            return when (type) {
+                null -> null
+                UserManager.USER_TYPE_PROFILE_MANAGED -> ProfileKind.WORK
+                UserManager.USER_TYPE_PROFILE_PRIVATE -> ProfileKind.PRIVATE
+                else -> ProfileKind.OTHER
+            }
         }
 
         private fun hiddenFromPicker(info: AppWidgetProviderInfo): Boolean =
