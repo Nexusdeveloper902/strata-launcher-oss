@@ -97,6 +97,12 @@ data class SettingsUiState(
     val privateSpaceSupported: Boolean = false,
     /** FR-NOTIF-01/02 and FR-SEARCH-06 rows. */
     val optional: OptionalAccessUi = OptionalAccessUi(),
+    /** FR-SET-06: the app version shown in About. */
+    val versionName: String = "",
+    /** About -> Licences; null until loaded. */
+    val licences: LicencesUi? = null,
+    /** The licence whose full text is shown, with the text (null while loading). */
+    val licenceText: Pair<LicenceEntry, String?>? = null,
 ) {
     /** FR-NOTIF-01: the switch is on only while the setting is on *and* access is granted. */
     val badgesOn: Boolean
@@ -203,6 +209,24 @@ sealed interface SettingsAction {
 
     data object DismissUninstallGuidance : SettingsAction
 
+    /** FR-SET-01 Themes group: the theme library ([SettingsEffect.OpenThemes]). */
+    data object OpenThemes : SettingsAction
+
+    /**
+     * FR-SET-03 rows. Each goes through the same disclosure as its feature switch while the access is not given
+     * (prominent disclosure before any system grant); once given, it opens the system page where it is withdrawn.
+     */
+    data object ManageBadgeAccess : SettingsAction
+
+    data object ManageContactsAccess : SettingsAction
+
+    data object ManageLockAccess : SettingsAction
+
+    /** FR-SET-06: reads `licences.json` (off main). */
+    data object LoadLicences : SettingsAction
+
+    data class OpenLicence(val entry: LicenceEntry) : SettingsAction
+
     /** The host is about to open the home settings for [SettingsEffect.OpenHomeSettings]. */
     data class HomeSettingsLaunched(val forUninstall: Boolean) : SettingsAction
 
@@ -232,11 +256,14 @@ sealed interface SettingsEffect {
 
     /** Request `READ_CONTACTS` (runtime dialog) in the host; the result comes back as [SettingsAction.ContactsPermissionResult]. */
     data object RequestContacts : SettingsEffect
+
+    /** Open the theme library (FR-THEME-27) in the host. */
+    data object OpenThemes : SettingsEffect
 }
 
 /**
- * The M3 settings page (FR-SET-05 and the home/gesture options of ARCHITECTURE §4.2) and the hidden-apps page
- * (FR-APPS-04). The full settings graph arrives in M8.
+ * The settings graph (FR-SET-01): the root groups, Hidden apps (FR-APPS-04), Privacy & permissions (FR-SET-03) and
+ * About/Licences (FR-SET-06). Icon coverage (FR-SET-07) has its own [IconCoverageViewModel].
  */
 class SettingsViewModel(
     private val settings: SettingsRepository,
@@ -256,7 +283,11 @@ class SettingsViewModel(
     restrictedSettingsHint: Boolean = false,
     /** Holds the system screens in flight across process death (the grant page and the permission dialog). */
     private val handle: SavedStateHandle = SavedStateHandle(),
+    private val versionName: String = "",
+    /** Reads an asset as UTF-8 text (About -> Licences); called on [ioDispatcher]. */
+    private val readAsset: ((String) -> String)? = null,
 ) : ViewModel() {
+    private val about = MutableStateFlow(AboutUi())
     private val disclosure = MutableStateFlow(false)
     private val role = MutableStateFlow(RoleUi())
     private val optional =
@@ -299,8 +330,8 @@ class SettingsViewModel(
             appList.appList.map { it.hiddenApps }.onStart { emit(emptyList()) },
             lockService.enabled,
             disclosure,
-            combine(role, optional) { r, o -> r to o },
-        ) { s, hidden, lockEnabled, showDisclosure, (r, o) ->
+            combine(role, optional, about) { r, o, a -> Triple(r, o, a) },
+        ) { s, hidden, lockEnabled, showDisclosure, (r, o, a) ->
             SettingsUiState(
                 settings = s,
                 hiddenApps = hidden,
@@ -311,8 +342,15 @@ class SettingsViewModel(
                 showUninstallGuidance = r.guidance,
                 privateSpaceSupported = privateSpaceSupported,
                 optional = o,
+                versionName = versionName,
+                licences = a.licences,
+                licenceText = a.text,
             )
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState(lockSupported = lockService.supported))
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            SettingsUiState(lockSupported = lockService.supported, versionName = versionName),
+        )
 
     init {
         val source = badges
@@ -449,6 +487,53 @@ class SettingsViewModel(
                 role.update { it.copy(guidance = false) }
             }
 
+            SettingsAction.OpenThemes -> {
+                effectChannel.trySend(SettingsEffect.OpenThemes)
+            }
+
+            SettingsAction.ManageBadgeAccess -> {
+                val source = badges ?: return
+                val access = optional.value.badgeAccess
+                when {
+                    access == null || access == ListenerAccess.UNSUPPORTED -> {
+                        Unit
+                    }
+
+                    // Withdrawing needs no disclosure; the system page is where access is turned off.
+                    access.granted -> {
+                        if (source.openGrantScreen() !is Outcome.Ok) {
+                            effectChannel.trySend(
+                                SettingsEffect.NoHandler,
+                            )
+                        }
+                    }
+
+                    else -> {
+                        onBadges(true)
+                    }
+                }
+            }
+
+            SettingsAction.ManageContactsAccess -> {
+                if (contacts?.permission() == PermissionState.GRANTED) {
+                    onAction(SettingsAction.OpenAppDetails)
+                } else {
+                    onContacts(true)
+                }
+            }
+
+            SettingsAction.ManageLockAccess -> {
+                if (lockService.enabled.value) openAccessibility() else onAction(SettingsAction.LockGesture(true))
+            }
+
+            SettingsAction.LoadLicences -> {
+                loadLicences()
+            }
+
+            is SettingsAction.OpenLicence -> {
+                openLicence(action.entry)
+            }
+
             is SettingsAction.HomeSettingsLaunched -> {
                 homeSettingsInFlight = action.forUninstall
             }
@@ -465,6 +550,46 @@ class SettingsViewModel(
             }
         }
     }
+
+    private fun loadLicences() {
+        if (about.value.licences?.failed == false) return
+        val read = readAsset ?: return about.update { it.copy(licences = LicencesUi(failed = true)) }
+        viewModelScope.launch {
+            val ui =
+                try {
+                    LicencesUi(withContext(ioDispatcher) { Licences.parse(read(Licences.ASSET)) })
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.w(TAG, "licences unreadable", e)
+                    LicencesUi(failed = true)
+                }
+            about.update { it.copy(licences = ui) }
+        }
+    }
+
+    private fun openLicence(entry: LicenceEntry) {
+        about.update { it.copy(text = entry to null) }
+        val read = readAsset ?: return
+        if (!Licences.isLicencePath(entry.licenceFile)) return
+        viewModelScope.launch {
+            val text =
+                try {
+                    withContext(ioDispatcher) { read(entry.licenceFile) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.w(TAG, "licence text unreadable", e)
+                    ""
+                }
+            about.update { if (it.text?.first == entry) it.copy(text = entry to text) else it }
+        }
+    }
+
+    private data class AboutUi(
+        val licences: LicencesUi? = null,
+        val text: Pair<LicenceEntry, String?>? = null,
+    )
 
     private fun onBadges(on: Boolean) {
         if (badges == null) return

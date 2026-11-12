@@ -24,7 +24,7 @@ The PR title becomes the squash commit subject, so write it the same way.
 
 ## Local check (run before pushing)
 ```
-./gradlew assembleDebug testDebugUnitTest lintDebug ktlintCheck checkPermissions checkDependencies checkModuleGraph checkEntitlements assembleDebugAndroidTest :build-logic:convention:test
+./gradlew assembleDebug testDebugUnitTest lintDebug ktlintCheck checkPermissions checkDependencies checkModuleGraph checkEntitlements checkLicences assembleDebugAndroidTest :build-logic:convention:test
 ```
 If you changed requirement or test IDs, also run `python3 tools/trace/build.py`.
 New libraries must pass `checkDependencies` (the allow-list), Dependabot PRs included.

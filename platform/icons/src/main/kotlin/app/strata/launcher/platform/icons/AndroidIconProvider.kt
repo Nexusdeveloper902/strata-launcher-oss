@@ -81,7 +81,10 @@ class AndroidIconProvider(
     private val source: IconPackSource by lazy { packSource ?: PackageManagerIconPackSource(appContext) }
     private val glyphs: GlyphLookup =
         glyphs ?: BundledGlyphs({
-            appContext.resources.openRawResource(BundledGlyphs.INDEX_RES).use { it.readBytes().toString(Charsets.UTF_8) }
+            appContext.resources
+                .openRawResource(
+                    BundledGlyphs.INDEX_RES,
+                ).use { it.readBytes().toString(Charsets.UTF_8) }
         })
 
     /** Pack discovery and parsing: serial, off main (T-SEC-06: no ANR). */
@@ -287,7 +290,13 @@ class AndroidIconProvider(
         val icon: Drawable? =
             if (supplied != null || glyph != null) null else systemIcon(component, user, densityDpi)
         val monochrome =
-            if (apiLevel >= IconSourceResolver.MONOCHROME_API && icon is AdaptiveIconDrawable) monochromeOf(icon) else null
+            if (apiLevel >= IconSourceResolver.MONOCHROME_API &&
+                icon is AdaptiveIconDrawable
+            ) {
+                monochromeOf(icon)
+            } else {
+                null
+            }
         val kind =
             IconSourceResolver.resolve(
                 style = style,

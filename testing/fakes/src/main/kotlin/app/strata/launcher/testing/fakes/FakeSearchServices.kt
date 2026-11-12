@@ -82,6 +82,18 @@ class FakeSystemIntents(
         return Outcome.Ok(Unit)
     }
 
+    /** (text, title) of every plain-text share sheet (FR-SET-07 "Export list"). */
+    val textShares = mutableListOf<Pair<String, String>>()
+
+    override fun shareText(
+        text: String,
+        title: String,
+    ): LaunchResult {
+        if (SHARE in missing) return Outcome.Err(LaunchError.NOT_FOUND)
+        textShares += text to title
+        return Outcome.Ok(Unit)
+    }
+
     /** Whether a crop activity / an ATTACH_DATA handler resolves (T-THEME-42). */
     var cropHandler = true
     var attachHandler = true

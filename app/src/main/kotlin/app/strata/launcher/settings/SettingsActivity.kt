@@ -17,6 +17,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.strata.launcher.BuildConfig
 import app.strata.launcher.appGraph
 import app.strata.launcher.core.platformapi.system.SystemIntent
 import app.strata.launcher.feature.onboarding.OnboardingAction
@@ -24,6 +25,7 @@ import app.strata.launcher.feature.onboarding.OnboardingRoute
 import app.strata.launcher.feature.onboarding.OnboardingViewModel
 import app.strata.launcher.feature.onboarding.SetDefaultDialogs
 import app.strata.launcher.feature.onboarding.SetDefaultViewModel
+import app.strata.launcher.feature.settings.IconCoverageViewModel
 import app.strata.launcher.feature.settings.SettingsAction
 import app.strata.launcher.feature.settings.SettingsEffect
 import app.strata.launcher.feature.settings.SettingsPage
@@ -32,7 +34,9 @@ import app.strata.launcher.feature.settings.SettingsViewModel
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.onboarding.SystemScreenLauncher
 import app.strata.launcher.theme.ThemeHost
+import app.strata.launcher.theme.ThemesActivity
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 /**
@@ -66,7 +70,19 @@ class SettingsActivity : ComponentActivity() {
                     // J-09: Android 13+ blocks listener access for sideloaded apps until "Allow restricted settings".
                     restrictedSettingsHint = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
                     handle = createSavedStateHandle(),
+                    versionName = BuildConfig.VERSION_NAME,
+                    readAsset = { path -> assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) } },
                 )
+            }
+        }
+    }
+
+    /** Settings -> Icons (FR-SET-07); computes nothing until the page is shown. */
+    private val iconCoverage: IconCoverageViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                val graph = appGraph
+                IconCoverageViewModel(graph.appList, graph.iconProvider, graph.systemIntents, graph.logger)
             }
         }
     }
@@ -109,6 +125,9 @@ class SettingsActivity : ComponentActivity() {
 
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
 
+    /** One stream for both view models' messages (toasts) and navigation effects. */
+    private val settingsEffects by lazy { merge(viewModel.effects, iconCoverage.effects) }
+
     override fun onStop() {
         themeHost.onStop()
         super.onStop()
@@ -118,7 +137,12 @@ class SettingsActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val kind = EntryRouter.classify(intent?.action, intent?.categories)
-        if (intent?.action == ACTION_HIDDEN_APPS) startPage = SettingsPage.HIDDEN_APPS
+        startPage =
+            when (intent?.action) {
+                ACTION_HIDDEN_APPS -> SettingsPage.HIDDEN_APPS
+                ACTION_PRIVACY -> SettingsPage.PRIVACY
+                else -> SettingsPage.ROOT
+            }
         // Rotation or a locale change recreates the activity: keep the open sub-page.
         page =
             savedInstanceState
@@ -148,15 +172,18 @@ class SettingsActivity : ComponentActivity() {
 
                     EntryRoute.SETTINGS_ROOT -> {
                         val state by viewModel.state.collectAsStateWithLifecycle()
+                        val icons by iconCoverage.state.collectAsStateWithLifecycle()
                         SettingsRoute(
                             state = state,
-                            effects = viewModel.effects,
+                            effects = settingsEffects,
                             onAction = viewModel::onAction,
                             page = page,
                             onPage = { page = it },
                             startPage = startPage,
                             onBack = ::finish,
                             onNavigate = ::navigate,
+                            icons = icons,
+                            onIconsAction = iconCoverage::onAction,
                         )
                         val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
                         SetDefaultDialogs(setDefault, setDefaultViewModel.flow)
@@ -218,6 +245,10 @@ class SettingsActivity : ComponentActivity() {
                 if (!systemScreens.start(chain.distinct())) viewModel.onAction(SettingsAction.HomeSettingsResult)
             }
 
+            SettingsEffect.OpenThemes -> {
+                startActivity(Intent(this, ThemesActivity::class.java))
+            }
+
             SettingsEffect.RequestContacts -> {
                 try {
                     contactsPermission.launch(Manifest.permission.READ_CONTACTS)
@@ -248,5 +279,8 @@ class SettingsActivity : ComponentActivity() {
 
         /** Explicit start from the list end (FR-LIST-06) and the empty-list action: the hidden-apps page. */
         const val ACTION_HIDDEN_APPS = "app.strata.launcher.action.HIDDEN_APPS"
+
+        /** Explicit start from [PermissionUsageActivity] (FR-SET-03): the Privacy & permissions page. */
+        const val ACTION_PRIVACY = "app.strata.launcher.action.PRIVACY"
     }
 }

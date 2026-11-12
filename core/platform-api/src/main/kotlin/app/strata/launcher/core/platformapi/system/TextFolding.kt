@@ -64,6 +64,15 @@ interface SystemIntents {
     ): LaunchResult
 
     /**
+     * FR-SET-07 "Export list": the system share sheet with plain [text] (`ACTION_SEND`, `text/plain`, `EXTRA_TEXT`), in
+     * a chooser titled [title]. Nothing is written to disk.
+     */
+    fun shareText(
+        text: String,
+        title: String,
+    ): LaunchResult
+
+    /**
      * FR-THEME-34 / ANDROID_PLATFORM §12: hands an `content:` URI with an image MIME type from our `FileProvider` to the system
      * wallpaper activity (`getCropAndSetWallpaperIntent`, with a read grant), falling back to `ACTION_ATTACH_DATA`.
      * Never calls `WallpaperManager.set*` (no `SET_WALLPAPER`, D-009).

@@ -55,7 +55,7 @@
     <string name="settings_hidden_none">No hidden apps</string>
     <string name="settings_unhide">Show in list</string>
 
-    <string name="settings_group_privacy">Privacy</string>
+    <string name="settings_group_privacy">Privacy &amp; permissions</string>
     <string name="settings_pause_history">Pause app history</string>
     <string name="settings_pause_history_summary">Strata stops recording which apps you open. History stays on this phone and is kept for 30 days.</string>
     <string name="settings_clear_history">Clear app history</string>
@@ -64,7 +64,6 @@
     <string name="settings_no_handler">No app can open this</string>
     <string name="settings_write_failed">Couldn\'t save that change</string>
     <!-- FR-SET-02 -->
-    <string name="settings_group_default_home">Home app</string>
     <string name="settings_default_home">Default home</string>
     <string name="settings_default_home_held">Strata is your home app</string>
     <string name="settings_default_home_not_held">Strata isn\'t your home app. Tap to set it.</string>
@@ -76,4 +75,61 @@
     <!-- FR-APPS-10 -->
     <string name="settings_show_private_space">Show private space</string>
     <string name="settings_show_private_space_summary">Its container at the end of the app list. Nothing about it is stored by Strata.</string>
+    <!-- M8: settings graph (FR-SET-01) -->
+    <string name="settings_group_themes">Themes</string>
+    <string name="settings_themes">Theme library</string>
+    <string name="settings_themes_summary">Choose, edit, import and share themes</string>
+    <string name="settings_group_icons">Icons</string>
+    <string name="settings_group_about">About</string>
+    <!-- FR-SET-07 icon coverage (D-014) -->
+    <string name="icons_coverage">Icon coverage</string>
+    <string name="icons_coverage_summary">Which apps have a themed icon and which don\'t</string>
+    <string name="icons_loading">Checking icons…</string>
+    <string name="icons_source_override">Custom icon</string>
+    <string name="icons_source_pack">Icon pack</string>
+    <string name="icons_source_glyph">Strata glyph</string>
+    <string name="icons_source_monochrome">App\'s themed icon</string>
+    <string name="icons_source_desaturated">Desaturated fallback</string>
+    <string name="icons_source_plain">System icon (untinted)</string>
+    <string name="icons_count">%1$s: %2$d</string>
+    <string name="icons_untinted_note">This theme doesn\'t tint icons, so apps show their normal icons. Glyphs and the desaturated fallback are only used when icons are tinted.</string>
+    <string name="icons_tinted_note">Highlighted apps have no glyph and no themed icon of their own, so they are shown desaturated.</string>
+    <string name="icons_needs_glyph">Needs a glyph</string>
+    <string name="icons_row_description">%1$s, %2$s</string>
+    <string name="icons_work_suffix">%1$s, work</string>
+    <string name="icons_export">Export list</string>
+    <string name="icons_export_all">Export all apps</string>
+    <string name="icons_export_all_summary">Off: only the desaturated apps. The list holds app names and package names only.</string>
+    <string name="icons_export_title">Icon coverage</string>
+    <string name="icons_empty">No apps to show</string>
+    <!-- FR-SET-03 Privacy & permissions -->
+    <string name="privacy_page">Permissions and access</string>
+    <string name="privacy_page_summary">What Strata may use and why</string>
+    <string name="privacy_no_internet">Strata has no internet access. It can\'t send anything anywhere.</string>
+    <string name="privacy_on_device">Everything Strata keeps stays on this phone: your favourites, names, hidden apps, themes and app history.</string>
+    <string name="privacy_notifications">Notification access</string>
+    <string name="privacy_notifications_purpose">Counts notifications per app for badges. What they say is never read, stored or sent.</string>
+    <string name="privacy_contacts">Contacts</string>
+    <string name="privacy_contacts_purpose">Finds contacts while you type in search. Nothing is copied or stored.</string>
+    <string name="privacy_lock">Accessibility service (screen lock)</string>
+    <string name="privacy_lock_purpose">Locks the screen when you double-tap empty space on home. It can\'t read your screen.</string>
+    <string name="privacy_state_allowed">Allowed</string>
+    <string name="privacy_state_not_allowed">Not allowed</string>
+    <string name="privacy_state_unsupported">Not available on this device</string>
+    <string name="privacy_state_on">On</string>
+    <string name="privacy_state_off">Off</string>
+    <string name="privacy_state_line">%1$s. %2$s</string>
+    <string name="privacy_manage_in_system">Change in system settings</string>
+    <string name="privacy_manage_app_info">Change in App info</string>
+    <!-- FR-SET-06 About -->
+    <string name="about_page">About Strata</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_licences">Open-source licences</string>
+    <string name="about_licences_summary">Libraries and fonts used by Strata</string>
+    <string name="about_privacy_title">Privacy</string>
+    <string name="about_privacy_statement">Strata Launcher collects no data. It has no internet access, no analytics, no ads and no accounts. Your settings, themes and app history are stored only on this phone and, if you turn it on, in your own Android backup. Notification contents, contact data and searches are never stored.</string>
+    <string name="licences_page">Open-source licences</string>
+    <string name="licences_none_fonts">No fonts are bundled yet.</string>
+    <string name="licences_entry">%1$s · %2$s</string>
+    <string name="licences_unreadable">The licence list couldn\'t be read.</string>
 </resources>

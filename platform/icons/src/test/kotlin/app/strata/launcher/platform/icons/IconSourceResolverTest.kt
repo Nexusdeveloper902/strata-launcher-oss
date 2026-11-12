@@ -73,6 +73,7 @@ class IconSourceResolverTest {
         val accent = IconStyle(tint = IconTintMode.ACCENT)
         val packSystem = IconStyle(packPackage = "pack")
         val packMono = IconStyle(packPackage = "pack", packFallbackMonochrome = true)
+
         data class Case(
             val style: IconStyle,
             val override: Boolean = false,
@@ -100,7 +101,11 @@ class IconSourceResolverTest {
                 Case(packMono, glyph = true, mono = true, expected = IconSource.GLYPH),
                 Case(packMono, mono = true, api = 32, expected = IconSource.DESATURATED),
                 // 12: an uninstalled pack drops step 2 only (pack = false), the rest of the chain stays.
-                Case(packMono.copy(tint = IconTintMode.MONOCHROME), mono = true, expected = IconSource.PLATFORM_MONOCHROME),
+                Case(
+                    packMono.copy(tint = IconTintMode.MONOCHROME),
+                    mono = true,
+                    expected = IconSource.PLATFORM_MONOCHROME,
+                ),
             )
         assertThat(cases).hasSize(12)
         cases.forEachIndexed { i, c ->

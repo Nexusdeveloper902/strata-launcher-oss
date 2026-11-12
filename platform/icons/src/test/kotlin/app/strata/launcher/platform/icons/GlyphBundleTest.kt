@@ -64,7 +64,11 @@ class GlyphBundleTest {
     /** Production index: parses cleanly, no duplicate packages, every id has a single-colour vector drawable. */
     @Test
     fun tTheme55_productionIndex() {
-        val text = app.resources.openRawResource(BundledGlyphs.INDEX_RES).use { it.readBytes().toString(Charsets.UTF_8) }
+        val text =
+            app.resources
+                .openRawResource(
+                    BundledGlyphs.INDEX_RES,
+                ).use { it.readBytes().toString(Charsets.UTF_8) }
         val index = GlyphIndex.parse(text)
         assertThat(index.problems).isEmpty()
         val lines = text.lines().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }
@@ -86,7 +90,14 @@ class GlyphBundleTest {
     fun tTheme55_glyphAddedByDataReachesTheRenderer() {
         val mail = "com.example.mail/com.example.mail.Main"
         val text = fixtureText() + "\ncom.example.new strata\n"
-        val glyphs = BundledGlyphs({ text }, mapOf("envelope" to R.drawable.glyph_strata, "strata" to R.drawable.glyph_strata))
+        val glyphs =
+            BundledGlyphs(
+                { text },
+                mapOf(
+                    "envelope" to R.drawable.glyph_strata,
+                    "strata" to R.drawable.glyph_strata,
+                ),
+            )
         val provider = provider(glyphs)
         val tinted = IconStyle(tint = IconTintMode.MONOCHROME, tintColor = Color.WHITE, plateColor = Color.BLACK)
         val apps = listOf(visible(mail), visible("com.example.new/com.example.new.Main"), visible("com.example.x/.A"))
@@ -96,7 +107,12 @@ class GlyphBundleTest {
         assertThat(runBlocking { provider.coverage(apps, IconStyle.SYSTEM) }.map { it.source }.toSet())
             .containsExactly(IconSource.PLAIN)
         // The glyph is drawn in the tint colour on the plate (centre pixel white on a black plate).
-        val image = runBlocking { provider.icon(IconRequest(AppKey(mail, serial), 1L, 96, 420, tinted.copy(shape = IconShapeKind.SQUARE))) }
+        val image =
+            runBlocking {
+                provider.icon(
+                    IconRequest(AppKey(mail, serial), 1L, 96, 420, tinted.copy(shape = IconShapeKind.SQUARE)),
+                )
+            }
         val bitmap = (image as IconResult.Image).image.native as Bitmap
         assertThat(bitmap.getPixel(48, 48)).isEqualTo(Color.WHITE)
         assertThat(bitmap.getPixel(2, 2)).isEqualTo(Color.BLACK)
@@ -106,6 +122,7 @@ class GlyphBundleTest {
     @Test
     fun tTheme55_bundleVersionIsPartOfTheCacheKey() {
         val req = IconRequest(AppKey("com.example.mail/.Main", serial), 1L, 96, 420)
+
         fun lookup(version: String) = BundledGlyphs({ "" }, emptyMap(), version)
         assertThat(provider(lookup("aaaa")).cacheKey(req)).isEqualTo(provider(lookup("aaaa")).cacheKey(req))
         assertThat(provider(lookup("bbbb")).cacheKey(req)).isNotEqualTo(provider(lookup("aaaa")).cacheKey(req))
@@ -116,10 +133,20 @@ class GlyphBundleTest {
     fun overrideAndPackBeatTheGlyph() {
         val source = FakePackSource()
         val maps = "fixture.maps/fixture.maps.MainActivity"
-        source.install(FakePackSource.PACK_OK, "<resources><item component=\"ComponentInfo{$maps}\" drawable=\"maps\"/></resources>")
+        source.install(
+            FakePackSource.PACK_OK,
+            "<resources><item component=\"ComponentInfo{$maps}\" drawable=\"maps\"/></resources>",
+        )
         source.drawables[FakePackSource.PACK_OK] =
-            mapOf("maps" to android.graphics.drawable.ColorDrawable(Color.GREEN), "c" to android.graphics.drawable.ColorDrawable(Color.RED))
-        val glyphs = BundledGlyphs({ "fixture.maps strata\nfixture.other strata\n" }, mapOf("strata" to R.drawable.glyph_strata))
+            mapOf(
+                "maps" to android.graphics.drawable.ColorDrawable(Color.GREEN),
+                "c" to android.graphics.drawable.ColorDrawable(Color.RED),
+            )
+        val glyphs =
+            BundledGlyphs(
+                { "fixture.maps strata\nfixture.other strata\n" },
+                mapOf("strata" to R.drawable.glyph_strata),
+            )
         val provider = provider(glyphs, source)
         provider.refreshPacksNow()
         val style = IconStyle(tint = IconTintMode.ACCENT, packPackage = FakePackSource.PACK_OK)
@@ -131,7 +158,9 @@ class GlyphBundleTest {
                 visible("fixture.private/.P", kind = ProfileKind.PRIVATE),
             )
         val entries = runBlocking { provider.coverage(apps, style) }
-        assertThat(entries.map { it.source }).containsExactly(IconSource.PACK, IconSource.OVERRIDE, IconSource.GLYPH).inOrder()
+        assertThat(
+            entries.map { it.source },
+        ).containsExactly(IconSource.PACK, IconSource.OVERRIDE, IconSource.GLYPH).inOrder()
     }
 
     private fun visible(

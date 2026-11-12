@@ -89,10 +89,25 @@ class RootGatesConventionPlugin : Plugin<Project> {
                         },
                     )
                 }
+            val licences =
+                tasks.register("checkLicences", CheckLicencesTask::class.java) {
+                    group = "verification"
+                    description = "T-CI-05: every bundled font and allow-listed runtime artifact is in licences.json."
+                    val assets = layout.projectDirectory.dir("feature/settings/src/main/assets")
+                    licencesJson.set(assets.file("licences.json"))
+                    assetsDir.set(assets)
+                    allowList.set(layout.projectDirectory.file("config/dependency-allowlist.txt"))
+                    fonts.from(
+                        fileTree(rootDir) {
+                            include("**/src/main/res/font/**", "**/src/main/assets/fonts/**")
+                            exclude("**/build/**", "research/**", ".claude/**")
+                        },
+                    )
+                }
             tasks.register("checkGates") {
                 group = "verification"
                 description = "Every repository-wide static gate."
-                dependsOn(entitlements, "ktlintCheck")
+                dependsOn(entitlements, licences, "ktlintCheck")
             }
         }
 }

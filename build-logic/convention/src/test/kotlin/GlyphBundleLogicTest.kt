@@ -51,8 +51,16 @@ class GlyphBundleLogicTest {
             bundle(
                 "com.example.a box\ncom.example.b two\ncom.example.c stroke\ncom.example.d gone\n",
                 "box" to vector,
-                "two" to vector.replace("</vector>", """<path android:fillColor="#FFFF0000" android:pathData="M0,0h1v1z"/></vector>"""),
-                "stroke" to vector.replace("android:fillColor", """android:strokeColor="#FF000000" android:fillColor"""),
+                "two" to
+                    vector.replace(
+                        "</vector>",
+                        """<path android:fillColor="#FFFF0000" android:pathData="M0,0h1v1z"/></vector>""",
+                    ),
+                "stroke" to
+                    vector.replace(
+                        "android:fillColor",
+                        """android:strokeColor="#FF000000" android:fillColor""",
+                    ),
             )
         val e = assertThrows(GradleException::class.java) { GlyphBundleLogic.check(index, dir) }
         assertThat(e.message).contains("glyph_two.xml: expected exactly one fill colour")
