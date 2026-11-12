@@ -236,4 +236,24 @@ class SettingsGraphTest {
         compose.onNodeWithTag(SettingsTestTags.ROOT).assertExists()
         assertThat((activity as Activity).isFinishing).isFalse()
     }
+
+    /** Review fix 3: a saved LICENCE_TEXT page without its text (process death) comes back as the licence list. */
+    @Test
+    fun licenceTextAfterProcessDeathShowsTheList() {
+        graph()
+        val state = android.os.Bundle().apply { putString("settings_page", "LICENCE_TEXT") }
+        val intent =
+            Intent(
+                Intent.ACTION_APPLICATION_PREFERENCES,
+            ).setComponent(ComponentName(context, SettingsActivity::class.java))
+        Robolectric
+            .buildActivity(SettingsActivity::class.java, intent)
+            .create(state)
+            .start()
+            .resume()
+            .visible()
+        idle()
+        compose.onNodeWithTag(SettingsPageTags.LICENCES_PAGE).assertExists()
+        compose.onNodeWithTag(SettingsPageTags.LICENCE_TEXT).assertDoesNotExist()
+    }
 }

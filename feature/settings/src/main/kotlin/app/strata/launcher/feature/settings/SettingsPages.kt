@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -93,6 +94,8 @@ internal fun IconCoveragePage(
     val style = remember(theme.icons, theme.colors) { iconStyleOf(theme) }
     // The page reads the resolved theme's icon style; a theme switch while it is open recomputes the list.
     LaunchedEffect(style) { onAction(IconCoverageAction.Show(style)) }
+    // Leaving the page stops the computation (no icon loads for a page nobody sees).
+    DisposableEffect(Unit) { onDispose { onAction(IconCoverageAction.Hide) } }
     val exportTitle = stringResource(R.string.icons_export_title)
     LazyColumn(modifier = Modifier.fillMaxSize().safeDrawingPadding().testTag(SettingsPageTags.ICONS_PAGE)) {
         item { Title(stringResource(R.string.icons_coverage)) }
@@ -372,7 +375,12 @@ internal fun LicenceTextPage(state: SettingsUiState) {
     ) {
         Title(text?.first?.name ?: "")
         Text(
-            text = text?.second ?: "",
+            text =
+                when (val body = text?.second) {
+                    null -> ""
+                    "" -> stringResource(R.string.licences_text_unreadable)
+                    else -> body
+                },
             style = MaterialTheme.typography.bodySmall,
             color = if (text == null) Color.Unspecified else Strata.colors.textPrimary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),

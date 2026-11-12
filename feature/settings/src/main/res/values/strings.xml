@@ -132,4 +132,5 @@
     <string name="licences_none_fonts">No fonts are bundled yet.</string>
     <string name="licences_entry">%1$s · %2$s</string>
     <string name="licences_unreadable">The licence list couldn\'t be read.</string>
+    <string name="licences_text_unreadable">This licence text couldn\'t be read.</string>
 </resources>

@@ -333,7 +333,14 @@ class AndroidIconProvider(
                     val component = ComponentName.unflattenFromString(app.key.component) ?: return@mapNotNull null
                     val user = userManager?.getUserForSerialNumber(app.key.userSerial) ?: return@mapNotNull null
                     val kind = sources(component, app.key.component, user, style, app.iconOverride, density).kind
-                    IconCoverageEntry(app.key, app.packageName, app.displayLabel, app.profileKind, kind)
+                    IconCoverageEntry(
+                        app.key,
+                        app.packageName,
+                        app.displayLabel,
+                        app.profileKind,
+                        kind,
+                        app.systemLabel,
+                    )
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

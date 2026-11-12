@@ -66,6 +66,8 @@ data class IconCoverageEntry(
     val label: String,
     val profileKind: ProfileKind,
     val source: IconSource,
+    /** The app's own label (the export uses it; [label] may be a custom name). */
+    val systemLabel: String = label,
 )
 
 /** An installed icon pack (ADW convention, ANDROID_PLATFORM §11.1). */

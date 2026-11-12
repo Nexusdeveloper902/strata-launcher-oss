@@ -231,7 +231,7 @@ class FakeIconProvider(
                     tinted -> tintedSource
                     else -> IconSource.PLAIN
                 }
-            IconCoverageEntry(app.key, app.packageName, app.displayLabel, app.profileKind, source)
+            IconCoverageEntry(app.key, app.packageName, app.displayLabel, app.profileKind, source, app.systemLabel)
         }
     }
 

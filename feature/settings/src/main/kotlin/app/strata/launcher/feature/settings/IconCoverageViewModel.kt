@@ -8,6 +8,7 @@ import app.strata.launcher.core.model.IconCoverageEntry
 import app.strata.launcher.core.model.IconSource
 import app.strata.launcher.core.model.IconStyle
 import app.strata.launcher.core.model.IconTintMode
+import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.AppListSource
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.platformapi.system.SystemIntents
@@ -19,7 +20,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -43,14 +45,20 @@ data class IconCoverageState(
     /** Highlighted rows: apps on the desaturated fallback while the theme tints (no highlights with tint `none`). */
     fun highlighted(entry: IconCoverageEntry): Boolean = tinted && entry.source == IconSource.DESATURATED
 
-    /** The plain-text export: one "Label (package)" line per app; by default only the desaturated ones. */
+    /**
+     * The plain-text export: one "Label (package)" line per app, by default only the desaturated ones. The label is
+     * the system label, not a custom name: the glyph author needs the real app name with the package.
+     */
     val exportLines: List<String>
-        get() = entries.filter { exportAll || highlighted(it) }.map { "${it.label} (${it.packageName})" }
+        get() = entries.filter { exportAll || highlighted(it) }.map { "${it.systemLabel} (${it.packageName})" }
 }
 
 sealed interface IconCoverageAction {
     /** The page is shown with the resolved theme's [style]; a new style (theme switch) recomputes the list. */
     data class Show(val style: IconStyle) : IconCoverageAction
+
+    /** The page left: stop recomputing (any load in progress is cancelled). */
+    data object Hide : IconCoverageAction
 
     data class SetExportAll(val all: Boolean) : IconCoverageAction
 
@@ -79,12 +87,20 @@ class IconCoverageViewModel(
 
     init {
         viewModelScope.launch {
-            combine(style.filterNotNull(), appList.appList) { s, list -> s to list.allApps }
-                .collectLatest { (s, apps) ->
-                    local.update { it.copy(loading = true, tinted = isTinted(s)) }
+            // Inputs that can change a source: the theme's style, the apps' identity/labels/overrides/updates (not
+            // badges), and the icon revision (a pack parsed, installed, updated or removed). Null style = page gone.
+            combine(
+                style,
+                appList.appList.map { list -> list.allApps.map(::CoverageInput) }.distinctUntilChanged(),
+                icons.revision,
+            ) { s, inputs, _ -> s to inputs }
+                .collectLatest { (s, inputs) ->
+                    if (s == null) return@collectLatest
+                    // Keep the rows (and Export) while recomputing; "loading" only before the first result.
+                    local.update { it.copy(loading = it.entries.isEmpty(), tinted = isTinted(s)) }
                     val entries =
                         try {
-                            icons.coverage(apps, s)
+                            icons.coverage(inputs.map { it.app }, s)
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
@@ -96,10 +112,34 @@ class IconCoverageViewModel(
         }
     }
 
+    /** The part of an app the coverage depends on; equality ignores badges and other display-only fields. */
+    private class CoverageInput(
+        val app: VisibleApp,
+    ) {
+        private val id =
+            listOf(
+                app.key,
+                app.packageName,
+                app.displayLabel,
+                app.systemLabel,
+                app.profileKind,
+                app.iconOverride,
+                app.lastUpdateTime,
+            )
+
+        override fun equals(other: Any?): Boolean = other is CoverageInput && other.id == id
+
+        override fun hashCode(): Int = id.hashCode()
+    }
+
     fun onAction(action: IconCoverageAction) {
         when (action) {
             is IconCoverageAction.Show -> {
                 style.value = action.style
+            }
+
+            IconCoverageAction.Hide -> {
+                style.value = null
             }
 
             is IconCoverageAction.SetExportAll -> {

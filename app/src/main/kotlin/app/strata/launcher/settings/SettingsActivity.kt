@@ -148,6 +148,16 @@ class SettingsActivity : ComponentActivity() {
             savedInstanceState
                 ?.getString(STATE_PAGE)
                 ?.let { name -> SettingsPage.entries.firstOrNull { it.name == name } }
+                // The licence text lives only in the view model: after process death show the list, not a blank page.
+                ?.let {
+                    if (it == SettingsPage.LICENCE_TEXT &&
+                        viewModel.state.value.licenceText == null
+                    ) {
+                        SettingsPage.LICENCES
+                    } else {
+                        it
+                    }
+                }
                 ?: startPage
         appGraph.startTheme()
         systemScreens.bind(onboardingViewModel.setDefault)

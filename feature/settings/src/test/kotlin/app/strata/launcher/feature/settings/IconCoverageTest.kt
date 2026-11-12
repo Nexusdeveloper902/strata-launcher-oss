@@ -27,6 +27,7 @@ import app.strata.launcher.testing.fakes.FakeSystemIntents
 import app.strata.launcher.testing.fakes.RecordingLogger
 import app.strata.launcher.testing.fixtures.SearchFixtures.visible
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.launch
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -186,6 +187,110 @@ class IconCoverageTest {
         vm.onAction(IconCoverageAction.Export("t"))
         compose.waitForIdle()
         assertThat(effects).containsExactly(SettingsEffect.NoHandler)
+    }
+
+    private fun idle() =
+        org.robolectric.Shadows
+            .shadowOf(android.os.Looper.getMainLooper())
+            .idle()
+
+    private val mono =
+        app.strata.launcher.core.model.IconStyle(
+            tint = app.strata.launcher.core.model.IconTintMode.MONOCHROME,
+        )
+
+    /** Review fix 1: a pack parsed after the page opened (icon revision bump) updates the sources. */
+    @Test
+    fun packParsedAfterOpen_recomputesSources() {
+        val packApp = apps[7] // desaturated until its pack is parsed
+        val vm = IconCoverageViewModel(appList, icons, intents, RecordingLogger())
+        vm.onAction(IconCoverageAction.Show(mono))
+        idle()
+        assertThat(vm.state.value.exportLines).contains("App7 (fixture.cov.app7)")
+        icons.coverageSources[packApp.key.component] = IconSource.PACK
+        icons.revision.value++
+        idle()
+        val entry =
+            vm.state.value.entries
+                .first { it.key == packApp.key }
+        assertThat(entry.source).isEqualTo(IconSource.PACK)
+        assertThat(vm.state.value.highlighted(entry)).isFalse()
+        assertThat(vm.state.value.exportLines).doesNotContain("App7 (fixture.cov.app7)")
+    }
+
+    /** Review fix 2: badge-only list changes do not recompute; recomputes keep the rows; leaving the page stops it. */
+    @Test
+    fun badgeChangesDoNotRecompute_andHideStops() {
+        val vm = IconCoverageViewModel(appList, icons, intents, RecordingLogger())
+        vm.onAction(IconCoverageAction.Show(mono))
+        idle()
+        assertThat(icons.coverageCalls).hasSize(1)
+        val withBadges = apps.map { it.copy(badge = 3) }
+        appList.state.value = appList.state.value.copy(sections = listOf(AppSection("A", withBadges)))
+        idle()
+        assertThat(icons.coverageCalls).hasSize(1)
+        assertThat(vm.state.value.loading).isFalse()
+        // A real change (a rename) recomputes, without flipping to loading in between.
+        val states = mutableListOf<IconCoverageState>()
+        val job =
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                vm.state.collect { states += it }
+            }
+        appList.state.value =
+            appList.state.value.copy(
+                sections =
+                    listOf(
+                        AppSection(
+                            "A",
+                            withBadges.mapIndexed { i, a ->
+                                if (i ==
+                                    0
+                                ) {
+                                    a.copy(displayLabel = "Renamed")
+                                } else {
+                                    a
+                                }
+                            },
+                        ),
+                    ),
+            )
+        idle()
+        assertThat(icons.coverageCalls).hasSize(2)
+        assertThat(states.none { it.loading }).isTrue()
+        assertThat(
+            states
+                .last()
+                .entries
+                .first()
+                .label,
+        ).isEqualTo("Renamed")
+        job.cancel()
+        // The page left: further list or revision changes start nothing.
+        vm.onAction(IconCoverageAction.Hide)
+        idle()
+        appList.state.value = appList.state.value.copy(sections = listOf(AppSection("A", apps)))
+        icons.revision.value++
+        idle()
+        assertThat(icons.coverageCalls).hasSize(2)
+    }
+
+    /** Review fix 4: the export names the app's own label, not the user's custom name; hidden apps are listed. */
+    @Test
+    fun exportUsesTheSystemLabel_andListsHiddenApps() {
+        val renamed = visible("Mail", custom = "My inbox", pkg = "fixture.cov.mail")
+        val hidden = visible("Radio", hidden = true, pkg = "fixture.cov.radio")
+        appList.state.value =
+            AppList(listOf(AppSection("M", listOf(renamed))), emptyList(), 1, false, hiddenApps = listOf(hidden))
+        val vm = IconCoverageViewModel(appList, icons, intents, RecordingLogger())
+        vm.onAction(IconCoverageAction.Show(mono))
+        idle()
+        assertThat(
+            vm.state.value.entries
+                .map { it.label },
+        ).containsExactly("My inbox", "Radio").inOrder()
+        assertThat(
+            vm.state.value.exportLines,
+        ).containsExactly("Mail (fixture.cov.mail)", "Radio (fixture.cov.radio)").inOrder()
     }
 
     private fun textOf(t: String): String =

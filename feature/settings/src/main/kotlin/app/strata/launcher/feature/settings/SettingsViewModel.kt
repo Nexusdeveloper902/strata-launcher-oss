@@ -101,7 +101,7 @@ data class SettingsUiState(
     val versionName: String = "",
     /** About -> Licences; null until loaded. */
     val licences: LicencesUi? = null,
-    /** The licence whose full text is shown, with the text (null while loading). */
+    /** The licence whose full text is shown, with the text (null while loading, "" when unreadable). */
     val licenceText: Pair<LicenceEntry, String?>? = null,
 ) {
     /** FR-NOTIF-01: the switch is on only while the setting is on *and* access is granted. */
@@ -570,8 +570,12 @@ class SettingsViewModel(
 
     private fun openLicence(entry: LicenceEntry) {
         about.update { it.copy(text = entry to null) }
-        val read = readAsset ?: return
-        if (!Licences.isLicencePath(entry.licenceFile)) return
+        val read = readAsset
+        // Never leave the page blank: no reader or a path outside licences/ shows the "couldn't be read" text ("").
+        if (read == null || !Licences.isLicencePath(entry.licenceFile)) {
+            about.update { it.copy(text = entry to "") }
+            return
+        }
         viewModelScope.launch {
             val text =
                 try {

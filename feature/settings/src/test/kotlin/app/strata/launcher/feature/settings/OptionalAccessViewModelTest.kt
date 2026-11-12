@@ -126,4 +126,31 @@ class OptionalAccessViewModelTest {
             .onAction(SettingsAction.ContactsPermissionResult(granted = true))
         assertThat(settings.value.contactsSearchEnabled).isFalse()
     }
+
+    /** Review fix 3: a licence text that cannot be read shows the error text (""), never a page stuck loading. */
+    @Test
+    fun licenceTextNeverStaysBlank() {
+        val noReader = vm()
+        val outside = LicenceEntry("X", "MIT", "../secret.txt", font = false)
+        noReader.onAction(SettingsAction.OpenLicence(outside))
+        assertThat(noReader.state.value.licenceText).isEqualTo(outside to "")
+        val failing =
+            SettingsViewModel(
+                settings = settings,
+                launchLog = FakeLaunchLogRepository(),
+                appList = FakeAppListSource(),
+                overrides = FakeOverridesRepository(),
+                lockService = FakeLockService(),
+                systemIntents = FakeSystemIntents(),
+                logger = RecordingLogger(),
+                roleController = FakeRoleController(),
+                ioDispatcher = dispatcher,
+                readAsset = { throw java.io.IOException("gone") },
+            )
+        val apache = LicenceEntry("A", "Apache-2.0", "licences/apache-2.0.txt", font = false)
+        failing.onAction(SettingsAction.OpenLicence(outside))
+        assertThat(failing.state.value.licenceText).isEqualTo(outside to "")
+        failing.onAction(SettingsAction.OpenLicence(apache))
+        assertThat(failing.state.value.licenceText).isEqualTo(apache to "")
+    }
 }
