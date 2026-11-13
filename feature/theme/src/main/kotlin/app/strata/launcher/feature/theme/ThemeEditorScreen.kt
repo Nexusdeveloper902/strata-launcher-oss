@@ -75,6 +75,7 @@ import app.strata.launcher.core.theme.parse.ThemeError
 import app.strata.launcher.core.ui.Checkbox
 import app.strata.launcher.core.ui.FilterChip
 import app.strata.launcher.core.ui.Slider
+import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.Switch
 import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.focusRing
@@ -159,11 +160,15 @@ fun ThemeEditorRoute(
     val context = LocalContext.current
     val pick by rememberUpdatedState(onPickImage)
     val scroll = rememberScrollState()
+    val animateScroll = Strata.theme.animation.enabled
     LaunchedEffect(effects) {
         effects.collect { e ->
             when (e) {
                 EditorEffect.PickImage -> pick()
-                EditorEffect.ScrollToPreview -> scroll.animateScrollTo(0)
+
+                // NFR-A11Y-05: a jump with reduced motion.
+                EditorEffect.ScrollToPreview -> if (animateScroll) scroll.animateScrollTo(0) else scroll.scrollTo(0)
+
                 is EditorEffect.Message -> Toast.makeText(context, messageText(e.message), Toast.LENGTH_SHORT).show()
             }
         }
@@ -716,13 +721,15 @@ private fun ColourControl(
         Box(
             modifier =
                 Modifier
-                    .size(40.dp)
-                    .background(Color(argb), RoundedCornerShape(8.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                    // A 40 dp swatch inside a 48 dp target (NFR-A11Y-03).
+                    .size(48.dp)
                     .focusRing()
                     .clickable { open = !open }
                     .testTag(EditorTestTags.swatch(field.id))
-                    .semantics { contentDescription = swatchDescription },
+                    .semantics { contentDescription = swatchDescription }
+                    .padding(4.dp)
+                    .background(Color(argb), RoundedCornerShape(8.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
         )
         Text(
             Rgb.toHex(argb),

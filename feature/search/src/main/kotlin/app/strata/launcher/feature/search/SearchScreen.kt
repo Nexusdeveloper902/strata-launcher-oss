@@ -288,12 +288,15 @@ fun SearchScreen(
         }
     }
 
-    // Selection follows the keyboard (keep the ring on screen).
+    // Selection follows the keyboard (keep the ring on screen); a jump with reduced motion (NFR-A11Y-05).
+    val animateScroll = Strata.theme.animation.enabled
     LaunchedEffect(state.selected, state.items.size, state.query) {
         if (state.items.isNotEmpty()) {
             val target = state.selected + if (state.isBlank && state.recents.isNotEmpty()) 1 else 0
             val visible = listState.layoutInfo.visibleItemsInfo
-            if (visible.none { it.index == target }) listState.animateScrollToItem(target)
+            if (visible.none { it.index == target }) {
+                if (animateScroll) listState.animateScrollToItem(target) else listState.scrollToItem(target)
+            }
         }
     }
 
