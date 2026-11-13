@@ -48,6 +48,12 @@ class StoreWriterService : Service() {
 
         fun root(context: Context) = File(context.filesDir, "rel03")
 
+        /** Touched by the writer once its first write of [kind] is committed; the test kills only after that. */
+        fun ready(
+            context: Context,
+            kind: Kind,
+        ) = File(root(context), "ready-${kind.name}")
+
         fun database(context: Context): StrataDatabase =
             Room
                 .databaseBuilder(
@@ -81,7 +87,10 @@ class StoreWriterService : Service() {
                     val db = LazyResource(Dispatchers.IO) { database(context) }
                     val favorites = RoomFavoritesRepository(db)
                     for (k in KEYS) if (k !in favorites.favorites.first()) favorites.add(k) { true }
-                    var g = 0L
+                    // Generation 0 is the add order; the first reorder is generation 1.
+                    var g = 1L
+                    favorites.reorder(order(g++))
+                    ready(context, kind).createNewFile()
                     while (true) favorites.reorder(order(g++))
                 }
 
@@ -93,17 +102,23 @@ class StoreWriterService : Service() {
                             ?.customLabel
                             ?.removePrefix("G")
                             ?.toLongOrNull()
-                            ?.plus(1) ?: 0L
+                            ?.plus(1) ?: 1L
+                    overrides.setCustomLabel(RENAMED, ProfileKind.MAIN, "G${g++}")
+                    ready(context, kind).createNewFile()
                     while (true) overrides.setCustomLabel(RENAMED, ProfileKind.MAIN, "G${g++}")
                 }
 
                 Kind.SETTINGS -> {
                     val repo = settings(context, scope, NoNotices)
                     var g = 0L
+                    var first = true
                     while (true) {
                         val on = g++ % 2 == 0L
-                        // Three fields change together in one update: a mixed read is a torn write.
+                        // Three fields change together in one update: a mixed read is a torn write. The defaults are
+                        // mixed (true, true, false), so a consistent read also proves a committed write.
                         repo.update { it.copy(hapticsEnabled = on, listTwoColumn = on, hideStatusBar = on) }
+                        if (first) ready(context, kind).createNewFile()
+                        first = false
                     }
                 }
 
@@ -117,7 +132,9 @@ class StoreWriterService : Service() {
                                 files.read("${app.strata.launcher.core.theme.store.ThemeLibrary.USER_DIR}/$n")
                             }.mapNotNull(ThemeWriterService::generation)
                             .maxOrNull()
-                            ?.plus(1) ?: 0L
+                            ?.plus(1) ?: 1L
+                    library.save(ThemeWriterService.tree(ThemeWriterService.IDS[0], g++))
+                    ready(context, kind).createNewFile()
                     while (true) {
                         library.save(ThemeWriterService.tree(ThemeWriterService.IDS[0], g++))
                     }

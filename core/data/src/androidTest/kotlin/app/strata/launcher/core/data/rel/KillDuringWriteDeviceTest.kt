@@ -43,7 +43,9 @@ import kotlin.random.Random
  * process. After every kill each store is a complete old or new state, never mixed, and SQLite's
  * `PRAGMA integrity_check` reports `ok`. Runs on a device: `./gradlew :core:data:connectedDebugAndroidTest
  * -Pandroid.testInstrumentationRunnerArguments.class=app.strata.launcher.core.data.rel.KillDuringWriteDeviceTest`
- * (`-Pandroid.testInstrumentationRunnerArguments.cycles=N` for a shorter run).
+ * (`-Pandroid.testInstrumentationRunnerArguments.cycles=N` for a shorter run). Each kill comes a random 5–150 ms after
+ * the writer's first committed write, and every store must show committed progress (generation ≥ 1) in at least half
+ * of its cycles, so the campaign cannot pass without writes being interrupted.
  */
 @RunWith(AndroidJUnit4::class)
 class KillDuringWriteDeviceTest {
@@ -54,6 +56,9 @@ class KillDuringWriteDeviceTest {
         InstrumentationRegistry.getArguments().getString("cycles")?.toIntOrNull() ?: DEFAULT_CYCLES
     private var lastRename = -1L
     private var lastTheme = -1L
+
+    /** Per store, the cycles whose check saw a committed write of generation ≥ 1 (the campaign is not vacuous). */
+    private val progressed = HashMap<Kind, Int>()
 
     @Before
     fun clean() {
@@ -72,6 +77,18 @@ class KillDuringWriteDeviceTest {
             runWriterAndKill(kind, delayMs = random.nextLong(MIN_RUN_MS, MAX_RUN_MS))
             verify(kind, i)
         }
+        // Kills come after the first commit, so nearly every cycle has progressed; a rotation back to the add order
+        // (reorder, 1 in 10) is the only state that does not prove it. Half per store is a safe floor.
+        val perKind = cycles / kinds.size
+        for (kind in kinds) {
+            assertWithMessage("$kind: cycles with a committed write of generation ≥ 1")
+                .that(progressed[kind] ?: 0)
+                .isAtLeast(maxOf(1, perKind / 2))
+        }
+    }
+
+    private fun progressedOnce(kind: Kind) {
+        progressed[kind] = (progressed[kind] ?: 0) + 1
     }
 
     private fun runWriterAndKill(
@@ -88,14 +105,31 @@ class KillDuringWriteDeviceTest {
 
                 override fun onServiceDisconnected(name: ComponentName) = Unit
             }
+        val ready = StoreWriterService.ready(context, kind)
+        ready.delete()
         val intent = Intent(context, StoreWriterService::class.java).putExtra(StoreWriterService.EXTRA_KIND, kind.name)
         check(context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) { "cannot bind the writer" }
-        check(connected.await(BIND_TIMEOUT_S, TimeUnit.SECONDS)) { "writer did not start" }
-        SystemClock.sleep(delayMs)
-        val pid = writerPid() ?: error("writer process not found")
-        // Unbind first so the system does not restart the bound service, then kill mid-write.
-        context.unbindService(connection)
-        Process.killProcess(pid)
+        var bound = true
+        try {
+            check(connected.await(BIND_TIMEOUT_S, TimeUnit.SECONDS)) { "writer did not start" }
+            // The random delay counts from the writer's first committed write, so every kill lands among writes.
+            val start = SystemClock.uptimeMillis()
+            while (!ready.exists()) {
+                check(SystemClock.uptimeMillis() - start < READY_TIMEOUT_MS) { "writer committed nothing ($kind)" }
+                SystemClock.sleep(READY_POLL_MS)
+            }
+            SystemClock.sleep(delayMs)
+            val pid = writerPid() ?: error("writer process not found")
+            // Unbind first so the system does not restart the bound service, then kill mid-write.
+            context.unbindService(connection)
+            bound = false
+            Process.killProcess(pid)
+        } finally {
+            if (bound) {
+                runCatching { context.unbindService(connection) }
+                writerPid()?.let(Process::killProcess)
+            }
+        }
         val deadline = SystemClock.uptimeMillis() + KILL_TIMEOUT_MS
         while (writerPid() != null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(POLL_MS)
         check(writerPid() == null) { "writer survived the kill" }
@@ -142,6 +176,7 @@ class KillDuringWriteDeviceTest {
                         }
                     val adding = order == StoreWriterService.KEYS.take(order.size)
                     assertWithMessage("cycle $cycle: favourites $order").that(complete || adding).isTrue()
+                    if (complete && order != StoreWriterService.KEYS) progressedOnce(kind)
                 }
             } else {
                 val label = RoomOverridesRepository(lazy).overrides.first()[StoreWriterService.RENAMED]?.customLabel
@@ -150,6 +185,7 @@ class KillDuringWriteDeviceTest {
                     assertWithMessage("cycle $cycle: label $label").that(g).isNotNull()
                     assertWithMessage("cycle $cycle: label went back").that(g!!).isAtLeast(lastRename)
                     lastRename = g
+                    if (g >= 1) progressedOnce(kind)
                 }
             }
         } finally {
@@ -166,6 +202,7 @@ class KillDuringWriteDeviceTest {
             assertWithMessage("cycle $cycle: mixed settings $s")
                 .that(setOf(s.hapticsEnabled, s.listTwoColumn, s.hideStatusBar))
                 .hasSize(1)
+            progressedOnce(Kind.SETTINGS)
         } finally {
             scope.coroutineContext.job.cancelAndJoin()
         }
@@ -180,6 +217,7 @@ class KillDuringWriteDeviceTest {
                 assertWithMessage("cycle $cycle: $name is a complete theme").that(g).isNotNull()
                 assertWithMessage("cycle $cycle: $name went back").that(g!!).isAtLeast(lastTheme)
                 lastTheme = g
+                if (g >= 1) progressedOnce(Kind.THEME)
             }
             // The index may lag the files; a fresh library reconciles it without losing the theme (THEME_SYSTEM §11.2).
             library.boot()
@@ -206,6 +244,8 @@ class KillDuringWriteDeviceTest {
         const val BIND_TIMEOUT_S = 10L
         const val KILL_TIMEOUT_MS = 5_000L
         const val POLL_MS = 20L
+        const val READY_TIMEOUT_MS = 10_000L
+        const val READY_POLL_MS = 2L
         const val WRITER_SUFFIX = ":rel03writer"
     }
 }
