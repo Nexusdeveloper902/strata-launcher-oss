@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -154,3 +155,17 @@ fun DropdownMenuItem(
     modifier = modifier.heightIn(min = MIN_TARGET).focusRing(CHIP),
     enabled = enabled,
 )
+
+/**
+ * A dialog's body text that scrolls when it does not fit (font 2.0 on a small screen, NFR-A11Y-02): Material's dialog
+ * text slot clips otherwise.
+ */
+@Composable
+fun DialogText(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.foundation.layout.Column(
+        modifier = modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+    ) { androidx.compose.material3.Text(text) }
+}

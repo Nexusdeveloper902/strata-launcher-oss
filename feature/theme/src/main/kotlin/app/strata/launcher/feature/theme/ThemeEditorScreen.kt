@@ -56,6 +56,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.json.JsonBool
 import app.strata.launcher.core.json.JsonNumber
@@ -73,6 +74,7 @@ import app.strata.launcher.core.theme.editor.PairCheck
 import app.strata.launcher.core.theme.model.Variant
 import app.strata.launcher.core.theme.parse.ThemeError
 import app.strata.launcher.core.ui.Checkbox
+import app.strata.launcher.core.ui.DialogText
 import app.strata.launcher.core.ui.FilterChip
 import app.strata.launcher.core.ui.Slider
 import app.strata.launcher.core.ui.Strata
@@ -272,7 +274,8 @@ private fun TopBar(
                 state.document?.name ?: stringResource(R.string.editor_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             if (state.dirty) {
                 Text(
@@ -282,6 +285,12 @@ private fun TopBar(
                 )
             }
         }
+    }
+    // The actions scroll sideways, so the title keeps its width at large text sizes (NFR-A11Y-02).
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         TextButton(
             onClick = { onAction(EditorAction.Undo) },
             enabled = state.canUndo,
@@ -292,11 +301,6 @@ private fun TopBar(
             enabled = state.canRedo,
             modifier = Modifier.testTag(EditorTestTags.REDO),
         ) { Text(stringResource(R.string.editor_redo)) }
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
         TextButton(onClick = { onAction(EditorAction.OpenJson) }, modifier = Modifier.testTag(EditorTestTags.JSON)) {
             Text(stringResource(R.string.editor_json))
         }
@@ -377,7 +381,7 @@ private fun DraftOfferCard(onAction: (EditorAction) -> Unit) {
     AlertDialog(
         onDismissRequest = {},
         modifier = Modifier.testTag(EditorTestTags.DRAFT_OFFER),
-        text = { Text(stringResource(R.string.editor_draft_offer)) },
+        text = { DialogText(stringResource(R.string.editor_draft_offer)) },
         confirmButton = {
             TextButton(
                 onClick = { onAction(EditorAction.RestoreDraft) },

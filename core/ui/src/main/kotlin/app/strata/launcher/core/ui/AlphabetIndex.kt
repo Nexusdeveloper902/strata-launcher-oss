@@ -237,6 +237,14 @@ fun AlphabetIndex(
                     },
         )
 
+        // The glyph never outgrows its 14–28 dp row (VISUAL_SPEC §9.3), whatever the font scale: at large text sizes
+        // the letter grid ("Jump to letter…") is the readable alternative (NFR-A11Y-02).
+        val indexStyle =
+            remember(type.index, pitch, density) {
+                val fit = with(density) { (pitch * INDEX_FILL).toSp() }
+                val size = if (type.index.fontSize.value > fit.value) fit else type.index.fontSize
+                type.index.copy(fontSize = size, lineHeight = size)
+            }
         val trackWidth = if (active) ACTIVE_WIDTH else VISUAL_WIDTH
         Column(
             modifier =
@@ -276,7 +284,7 @@ fun AlphabetIndex(
                 ) {
                     Text(
                         text = glyph,
-                        style = type.index,
+                        style = indexStyle,
                         color = color,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
@@ -381,6 +389,7 @@ private fun Modifier.indexExclusion(
 }
 
 private val TOUCH_WIDTH = 48.dp
+private const val INDEX_FILL = 0.8f
 private val VISUAL_WIDTH = 24.dp
 private val ACTIVE_WIDTH = 32.dp
 private val BUBBLE_SIZE = 64.dp

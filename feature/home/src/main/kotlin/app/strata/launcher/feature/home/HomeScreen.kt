@@ -733,7 +733,8 @@ private fun HomePill(
                     text = stringResource(UiR.string.search_hint),
                     style = Strata.typography.label,
                     color = colors.textSecondary,
-                    maxLines = 1,
+                    // Two lines at large text sizes; the pill grows with it (NFR-A11Y-02).
+                    maxLines = 2,
                 )
             }
         }

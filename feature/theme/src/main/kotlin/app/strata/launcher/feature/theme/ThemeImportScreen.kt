@@ -42,6 +42,7 @@ import app.strata.launcher.core.theme.importing.ImportConflict
 import app.strata.launcher.core.theme.importing.ImportMessage
 import app.strata.launcher.core.theme.store.ImportPreview
 import app.strata.launcher.core.ui.Button
+import app.strata.launcher.core.ui.DialogText
 import app.strata.launcher.core.ui.OutlinedButton
 import app.strata.launcher.core.ui.TextButton
 
@@ -272,7 +273,7 @@ private fun ConflictDialog(
         onDismissRequest = { onAction(ImportAction.CancelConflict) },
         modifier = Modifier.testTag(ThemeTestTags.IMPORT_CONFLICT),
         title = { Text(stringResource(R.string.theme_import_conflict_title, p.replaceName)) },
-        text = { Text(stringResource(R.string.theme_import_conflict_body)) },
+        text = { DialogText(stringResource(R.string.theme_import_conflict_body)) },
         confirmButton = {
             Column(horizontalAlignment = Alignment.End) {
                 TextButton(

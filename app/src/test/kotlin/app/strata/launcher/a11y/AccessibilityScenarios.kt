@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.TestAppGraph
+import app.strata.launcher.core.theme.store.ThemeState
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
@@ -33,10 +34,12 @@ import app.strata.launcher.theme.ThemesActivity
 import app.strata.launcher.widget.WidgetPickerActivity
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -68,7 +71,7 @@ abstract class AccessibilityScenarios {
         intent: Intent,
         onboarded: Boolean = true,
     ): A {
-        graph = KeyboardFixture.graph(onboarded).install()
+        graph = KeyboardFixture.graph(onboarded, theme = themeState()).install()
         val a = Robolectric.buildActivity(cls, intent.setComponent(ComponentName(context, cls))).setup().get()
         idle()
         return a
@@ -91,6 +94,9 @@ abstract class AccessibilityScenarios {
         screen: String,
         mustReach: List<String> = emptyList(),
     )
+
+    /** The theme the screens are shown in (T-THEME-47 runs the checks per built-in preset). */
+    protected open fun themeState(): ThemeState = ThemeState(loaded = true)
 
     /** Enter on a focused control; only where keyboard focus works (legacy graphics). */
     protected open val keyboard: Boolean = true
@@ -333,3 +339,85 @@ class TouchTargetTest : AccessibilityScenarios() {
         ).that(compose.touchTargetErrors(Density(context))).isEmpty()
     }
 }
+
+/**
+ * T-A11Y-09 (S as layout checks, NFR-A11Y-02, NFR-THEME-10): font 2.0 (API 34 nonlinear scaling) and the largest
+ * display size (a 1080 px phone at its maximum density is about 320 dp wide): no text is clipped, ellipsized or drawn
+ * over another text on any screen. Pixel goldens are not kept (no Roborazzi; same approach as M4/M5).
+ */
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [34], qualifiers = "w320dp-h693dp-xxxhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LargeTextLayoutTest : AccessibilityScenarios() {
+    override val keyboard = false
+
+    @Before
+    fun fontScale() = RuntimeEnvironment.setFontScale(2f)
+
+    override fun check(
+        screen: String,
+        mustReach: List<String>,
+    ) {
+        assertWithMessage("$screen: clipped text at font 2.0").that(compose.clippedTexts()).isEmpty()
+        if (screen !in
+            LAYERS
+        ) {
+            assertWithMessage("$screen: overlapping text at font 2.0").that(compose.overlappingTexts()).isEmpty()
+        }
+    }
+}
+
+/** T-I18N-01 (en-XA): pseudo-localized strings are about 30 % longer and accented; none is clipped or overlaps. */
+@RunWith(AndroidJUnit4::class)
+@Config(qualifiers = "en-rXA-w411dp-h891dp-xxhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class PseudoLocaleLayoutTest : AccessibilityScenarios() {
+    override val keyboard = false
+
+    override fun check(
+        screen: String,
+        mustReach: List<String>,
+    ) {
+        assertWithMessage(
+            "$screen: en-XA is not applied",
+        ).that(
+            context.resources.configuration.locales[0]
+                .toLanguageTag(),
+        ).isEqualTo("en-XA")
+        assertWithMessage("$screen: clipped text in en-XA").that(compose.clippedTexts()).isEmpty()
+        if (screen !in
+            LAYERS
+        ) {
+            assertWithMessage("$screen: overlapping text in en-XA").that(compose.overlappingTexts()).isEmpty()
+        }
+    }
+}
+
+/** T-I18N-01 (ar-XB): the bidi pseudo-locale lays every screen out right to left, with nothing clipped. */
+@RunWith(AndroidJUnit4::class)
+@Config(qualifiers = "ar-rXB-w411dp-h891dp-xxhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class PseudoBidiLayoutTest : AccessibilityScenarios() {
+    override val keyboard = false
+
+    override fun check(
+        screen: String,
+        mustReach: List<String>,
+    ) {
+        assertWithMessage("$screen: ar-XB is not right to left")
+            .that(context.resources.configuration.layoutDirection)
+            .isEqualTo(android.view.View.LAYOUT_DIRECTION_RTL)
+        assertWithMessage("$screen: clipped text in ar-XB").that(compose.clippedTexts()).isEmpty()
+        if (screen !in
+            LAYERS
+        ) {
+            assertWithMessage("$screen: overlapping text in ar-XB").that(compose.overlappingTexts()).isEmpty()
+        }
+    }
+}
+
+/**
+ * Screens drawn as a layer over home (INTERACTION_SPEC §1): home stays composed underneath, so its texts sit under the
+ * layer by design and the overlap check does not apply; clipping is still checked.
+ */
+private val LAYERS = setOf("list", "search", "app sheet", "home menu", "edit favourites")

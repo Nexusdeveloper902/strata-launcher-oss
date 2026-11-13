@@ -28,6 +28,10 @@ internal fun TestOptions.configureStrataUnitTests(project: Project) {
             "--add-opens=java.base/java.io=ALL-UNNAMED",
         )
         if (robolectricRepo != null) test.systemProperty("robolectric.dependency.repo.url", robolectricRepo)
+        // The M8 accessibility and layout suites start many activities on native graphics: more heap than the 512 MiB
+        // default, and a fresh test JVM every 100 classes so the per-SDK Robolectric environments do not pile up.
+        test.maxHeapSize = "2g"
+        test.forkEvery = 100
     }
 }
 

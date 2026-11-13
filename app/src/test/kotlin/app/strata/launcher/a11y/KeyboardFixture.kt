@@ -9,11 +9,13 @@ import app.strata.launcher.core.model.AppSection
 import app.strata.launcher.core.model.IndexLetter
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.VisibleApp
+import app.strata.launcher.core.theme.store.ThemeState
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.testing.fakes.FakeAppListSource
 import app.strata.launcher.testing.fakes.FakeFavoritesRepository
 import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeSettingsRepository
+import app.strata.launcher.testing.fakes.FakeThemeRepository
 import app.strata.launcher.testing.fixtures.AppFixtures
 
 /** A small onboarded setup for the accessibility walks: two sections, one favourite. */
@@ -45,11 +47,13 @@ object KeyboardFixture {
     fun graph(
         onboarded: Boolean = true,
         settings: Settings = Settings(onboardingDone = onboarded),
+        theme: ThemeState = ThemeState(loaded = true),
     ) = TestAppGraph(
         roleController = FakeRoleController(defaultHome = true),
         settingsRepository = FakeSettingsRepository(settings),
         appList = FakeAppListSource(list),
         favorites = FakeFavoritesRepository(listOf(maps.key)),
+        themeRepository = FakeThemeRepository(theme),
     )
 
     fun homeIntent(context: Context): Intent =

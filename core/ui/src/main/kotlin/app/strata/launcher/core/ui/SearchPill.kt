@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,7 +64,8 @@ fun SearchPillFrame(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(SEARCH_PILL_HEIGHT)
+                // Grows with large text (NFR-A11Y-02); 52 dp at the default size.
+                .heightIn(min = SEARCH_PILL_HEIGHT)
                 .background(if (underline) Color.Transparent else colors.surface, searchShape())
                 .then(
                     if (onClick !=

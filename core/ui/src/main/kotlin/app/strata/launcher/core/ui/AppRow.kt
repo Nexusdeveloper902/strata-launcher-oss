@@ -259,6 +259,15 @@ fun MonogramTile(
     val colors = Strata.colors
     val type = Strata.typography
     val glyph = remember(label) { firstGrapheme(label) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // The letter scales with the font but never outgrows its tile (the label beside it carries the text).
+    val glyphStyle =
+        remember(type.label, size, density) {
+            val wanted = type.label.fontSize * MONOGRAM_SCALE
+            val fit = with(density) { (size * MONOGRAM_FILL).toSp() }
+            val fontSize = if (wanted.value > fit.value) fit else wanted
+            type.label.copy(fontSize = fontSize, lineHeight = fontSize, fontWeight = FontWeight.Medium)
+        }
     Box(
         // Decorative: the row already carries the label.
         modifier = modifier.size(size).background(colors.surface, shape).clearAndSetSemantics {},
@@ -266,7 +275,7 @@ fun MonogramTile(
     ) {
         Text(
             text = glyph,
-            style = type.label.copy(fontSize = type.label.fontSize * MONOGRAM_SCALE, fontWeight = FontWeight.Medium),
+            style = glyphStyle,
             color = colors.textSecondary,
             maxLines = 1,
         )
@@ -368,4 +377,5 @@ fun NotificationBadge(
 private const val MIN_TOUCH_DP = 48
 private const val DIM_ALPHA = 0.6f
 private const val MAX_COUNT = 99
+private const val MONOGRAM_FILL = 0.6f
 private const val MONOGRAM_SCALE = 1.1f

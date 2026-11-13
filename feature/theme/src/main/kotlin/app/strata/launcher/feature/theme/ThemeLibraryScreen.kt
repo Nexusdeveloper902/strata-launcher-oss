@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.store.ThemeSummary
+import app.strata.launcher.core.ui.DialogText
 import app.strata.launcher.core.ui.DropdownMenuItem
 import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.focusRing
@@ -385,7 +386,7 @@ private fun ExportChoice(
         onDismissRequest = { onAction(LibraryAction.DismissExportChoice) },
         modifier = Modifier.testTag(ThemeTestTags.EXPORT_DIALOG),
         title = { Text(stringResource(R.string.theme_export_title, t.name)) },
-        text = { Text(stringResource(R.string.theme_export_font_licence)) },
+        text = { DialogText(stringResource(R.string.theme_export_font_licence)) },
         confirmButton = {
             TextButton(
                 onClick = { onAction(LibraryAction.ExportAs(t.id, bundle = true)) },
@@ -408,7 +409,7 @@ fun WallpaperPrompt(onAnswer: (Boolean) -> Unit) {
         onDismissRequest = { onAnswer(false) },
         modifier = Modifier.testTag(ThemeTestTags.WALLPAPER_DIALOG),
         title = { Text(stringResource(R.string.theme_wallpaper_question)) },
-        text = { Text(stringResource(R.string.theme_wallpaper_explain)) },
+        text = { DialogText(stringResource(R.string.theme_wallpaper_explain)) },
         confirmButton = {
             TextButton(onClick = { onAnswer(true) }, modifier = Modifier.testTag(ThemeTestTags.WALLPAPER_YES)) {
                 Text(stringResource(R.string.theme_wallpaper_yes))
