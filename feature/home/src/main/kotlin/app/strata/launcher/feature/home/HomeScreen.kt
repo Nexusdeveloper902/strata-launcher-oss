@@ -91,6 +91,7 @@ import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.backdropFade
+import app.strata.launcher.core.ui.blockFocus
 import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.strataBackdrop
 import app.strata.launcher.feature.home.list.AppListScreen
@@ -284,11 +285,22 @@ fun HomeRoute(
                     .fillMaxSize()
                     // INTERACTION_SPEC §7: home (or list) content fades to 0.3 α under search.
                     .alpha(if (underSearch) UNDER_SEARCH_ALPHA else 1f)
-                    .then(if (underSearch || !noModal) Modifier.clearAndSetSemantics {} else Modifier),
+                    .then(if (underSearch || !noModal) Modifier.clearAndSetSemantics {} else Modifier)
+                    // Under search or a modal nothing here is a Tab stop (FR-A11Y-04): only the top layer is.
+                    .blockFocus(underSearch || !noModal),
         ) {
             HomeScreen(
                 // The list layer replaces the rest page (INTERACTION_SPEC §3); it stays composed but unseen.
-                modifier = if (listShown) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier,
+                modifier =
+                    if (listShown || state.layer == HomeLayer.FAV_EDIT) {
+                        // Hidden (list) or covered (edit favourites): no semantics and no focus stops.
+                        Modifier
+                            .then(if (listShown) Modifier.alpha(0f) else Modifier)
+                            .clearAndSetSemantics {}
+                            .blockFocus(true)
+                    } else {
+                        Modifier
+                    },
                 state = state,
                 showSetDefaultButton = showSetDefaultButton,
                 onSetDefault = onSetDefault,

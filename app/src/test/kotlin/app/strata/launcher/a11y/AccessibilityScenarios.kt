@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Looper
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -61,7 +62,7 @@ abstract class AccessibilityScenarios {
     protected val context: Context = ApplicationProvider.getApplicationContext()
     private lateinit var graph: TestAppGraph
 
-    private fun idle() {
+    protected fun idle() {
         shadowOf(Looper.getMainLooper()).idle()
         compose.waitForIdle()
     }
@@ -275,6 +276,65 @@ abstract class AccessibilityScenarios {
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
 class KeyboardAndNamesTest : AccessibilityScenarios() {
+    /**
+     * Layers hide home with `alpha(0)` + `clearAndSetSemantics`, which also hides its nodes from the semantics tree, so a
+     * Tab that lands on a hidden home control shows up as "the window has focus but no visible node does". Every stop
+     * must be a node inside the top layer ([top]); the Compose view must keep focus (focus did not leave the window).
+     */
+    private fun assertFocusStaysIn(
+        top: String,
+        presses: Int = 40,
+    ) {
+        repeat(presses) { i ->
+            compose.press(Key.Tab)
+            val view = activity?.window?.decorView?.findFocus()
+            assertWithMessage("$top: Tab $i left the Compose view").that(view).isNotNull()
+            val n = compose.focused()
+            assertWithMessage("$top: Tab $i focused a node outside the visible layer (a hidden home control)")
+                .that(n)
+                .isNotNull()
+            var p = n
+            var inside = false
+            while (p != null) {
+                if (p.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) == top) inside = true
+                p = p.parent
+            }
+            assertWithMessage("$top: Tab $i focused ${describe(n!!)}").that(inside).isTrue()
+        }
+    }
+
+    private var activity: Activity? = null
+
+    private fun homeActivity() {
+        activity = start(HomeActivity::class.java, KeyboardFixture.homeIntent(context))
+    }
+
+    @Test
+    fun hiddenHomeTakesNoFocus_list() {
+        homeActivity()
+        compose.onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
+        idle()
+        assertFocusStaysIn(AppListTestTags.LIST)
+    }
+
+    @Test
+    fun hiddenHomeTakesNoFocus_search() {
+        homeActivity()
+        compose.onNodeWithTag(HomeTestTags.PILL).performClick()
+        idle()
+        assertFocusStaysIn(app.strata.launcher.feature.search.SearchTestTags.LAYER)
+    }
+
+    @Test
+    fun hiddenHomeTakesNoFocus_editFavourites() {
+        homeActivity()
+        compose.onNodeWithTag(HomeTestTags.PILL_MENU).performClick()
+        idle()
+        compose.onNodeWithTag(SheetTestTags.MENU_EDIT).performClick()
+        idle()
+        assertFocusStaysIn(app.strata.launcher.feature.home.FavEditTestTags.SCREEN)
+    }
+
     /** INTERACTION_SPEC §9 home reading order: clock → date → favourites → search pill (TalkBack reads top to bottom). */
     @Test
     fun tA11y08_homeReadingOrder() {
