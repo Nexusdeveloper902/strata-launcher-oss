@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.LocaleList
 import androidx.annotation.RequiresApi
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
@@ -55,7 +56,7 @@ class AppLanguageDeviceTest {
     private fun manager() = context.getSystemService(LocaleManager::class.java)
 
     @Test
-    @RequiresApi(33)
+    @SdkSuppress(minSdkVersion = 33)
     fun tSet05_germanAppLanguage_systemUnchanged() {
         val system = Resources.getSystem().configuration.locales
         assumeTrue("the system language is already German", system[0].language != "de")
