@@ -1,7 +1,6 @@
 package app.strata.launcher.platform.apps
 
 import android.app.ActivityOptions
-import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.LauncherApps
@@ -13,6 +12,7 @@ import android.window.SplashScreen
 import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.model.AppKey
+import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.apps.AppShortcut
 import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
@@ -73,8 +73,10 @@ class AndroidShortcutSource(
         origin: LaunchOrigin?,
     ): LaunchResult {
         val user = resolver.userOf(shortcut.userSerial) ?: return Outcome.Err(LaunchError.NOT_FOUND)
-        return try {
-            if (resolver.quiet(user)) return Outcome.Err(LaunchError.PROFILE_PAUSED)
+        // The profile kind decides whether the failure may be logged with its exception (P-5); unknown = private.
+        val private = { resolver.kindOf(user).let { it == null || it == ProfileKind.PRIVATE } }
+        return guardLaunch(logger, TAG, "shortcut", private, illegalState = LaunchError.NOT_FOUND) {
+            if (resolver.quiet(user)) return@guardLaunch Outcome.Err(LaunchError.PROFILE_PAUSED)
             resolver.launcherApps.startShortcut(
                 shortcut.packageName,
                 shortcut.id,
@@ -83,15 +85,6 @@ class AndroidShortcutSource(
                 user,
             )
             Outcome.Ok(Unit)
-        } catch (e: ActivityNotFoundException) {
-            Outcome.Err(LaunchError.NOT_FOUND)
-        } catch (e: IllegalStateException) {
-            // The shortcut was removed or disabled meanwhile.
-            Outcome.Err(LaunchError.NOT_FOUND)
-        } catch (e: IllegalArgumentException) {
-            Outcome.Err(LaunchError.NOT_FOUND)
-        } catch (e: SecurityException) {
-            Outcome.Err(LaunchError.SECURITY)
         }
     }
 

@@ -118,8 +118,8 @@ val isActionable: SemanticsMatcher =
 
 /** Actionable nodes a screen reader can reach (a sheet scrim is hidden from accessibility on purpose). */
 private fun ComposeTestRule.actionableNodes(): List<SemanticsNode> =
-    runCatching { onAllNodes(isActionable).fetchSemanticsNodes() }
-        .getOrDefault(emptyList())
+    onAllNodes(isActionable)
+        .fetchSemanticsNodes()
         .filterNot { it.config.contains(SemanticsProperties.HideFromAccessibility) }
 
 /**

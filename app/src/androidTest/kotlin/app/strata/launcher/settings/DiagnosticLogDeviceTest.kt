@@ -9,6 +9,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.common.log.LogRedaction
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppOverride
@@ -49,6 +50,10 @@ class DiagnosticLogDeviceTest {
     private var selfKey: AppKey? = null
     private var originalOverride: AppOverride? = null
 
+    /** The app's own log files before the test, put back afterwards (the test's entries must not stay in it). */
+    private val logDir get() = File(context.noBackupFilesDir, "logs")
+    private var savedLogs: Map<String, ByteArray> = emptyMap()
+
     @Before
     fun before() =
         runBlocking {
@@ -70,6 +75,8 @@ class DiagnosticLogDeviceTest {
                 )
             selfKey = key
             originalOverride = graph.overrides.overrides.first()[key]
+            graph.logger.flush(FLUSH_MS)
+            savedLogs = logDir.listFiles()?.associate { it.name to it.readBytes() } ?: emptyMap()
         }
 
     @After
@@ -78,12 +85,19 @@ class DiagnosticLogDeviceTest {
             val key = selfKey ?: return@runBlocking
             graph.overrides.setCustomLabel(key, ProfileKind.MAIN, originalOverride?.customLabel)
             dir.deleteRecursively()
+            graph.logger.flush(FLUSH_MS)
+            logDir.listFiles()?.forEach { it.delete() }
+            logDir.mkdirs()
+            for ((name, bytes) in savedLogs) File(logDir, name).writeBytes(bytes)
         }
 
     @Test
     fun tPriv06_exportHasNoLabelsQueriesOrPackages() =
         runBlocking {
             val key = checkNotNull(selfKey)
+            // Labels that the log text already holds before any flow (a tag such as "Settings") cannot be told from a
+            // leak, so they are left out of the label check below.
+            val baseline = checkNotNull(graph.diagnostics.build()) { "diagnostic log not built" }
             graph.settingsRepository.update { it.copy(onboardingDone = true) }
             graph.overrides.setCustomLabel(key, ProfileKind.MAIN, CUSTOM_LABEL)
             shell(
@@ -97,7 +111,10 @@ class DiagnosticLogDeviceTest {
             device.pressBack()
             device.pressBack()
             // A launch of a component that does not exist: the platform's exception names it (and the user).
-            instrumentation.runOnMainSync { graph.appLauncher.launch(AppKey(GONE, key.userSerial), null) }
+            // API 26 answers with a NullPointerException from system_server; every API must give a typed failure.
+            var launched: Any? = null
+            instrumentation.runOnMainSync { launched = graph.appLauncher.launch(AppKey(GONE, key.userSerial), null) }
+            assertWithMessage("launch of a missing component").that(launched).isInstanceOf(Outcome.Err::class.java)
             // A platform-style message as adapters receive them.
             graph.logger.w(
                 "DeviceTest",
@@ -106,7 +123,15 @@ class DiagnosticLogDeviceTest {
             )
 
             val text = checkNotNull(graph.diagnostics.build()) { "diagnostic log not built" }
-            val entries = graph.appCatalog.catalog.value.entries
+            val entries =
+                withTimeout(15_000) {
+                    graph.appCatalog.catalog.first { c ->
+                        c.entries.any {
+                            it.packageName !=
+                                context.packageName
+                        }
+                    }
+                }.entries
             val foreignPackages =
                 entries
                     .map { it.packageName }
@@ -115,10 +140,13 @@ class DiagnosticLogDeviceTest {
             val labels =
                 entries
                     .filter { it.packageName != context.packageName }
-                    .map { it.systemLabel }
-                    .filter { it.length >= 10 || it.trim().contains(' ') }
+                    .map { it.systemLabel.trim() }
+                    .filter { it.length >= 3 && !baseline.contains(it) }
                     .distinct()
             val privateComponents = entries.filter { it.profileKind == ProfileKind.PRIVATE }.map { it.key.component }
+            // The checks below need something to look for (GMD images and phones have other launchable apps).
+            assertWithMessage("other apps' packages to look for").that(foreignPackages).isNotEmpty()
+            assertWithMessage("other apps' labels to look for").that(labels).isNotEmpty()
             assertThat(text).startsWith("Strata Launcher diagnostic log\n")
             assertThat(text).doesNotContain(QUERY)
             assertThat(text).doesNotContain(CUSTOM_LABEL)
@@ -140,6 +168,7 @@ class DiagnosticLogDeviceTest {
         }
 
     private companion object {
+        const val FLUSH_MS = 2_000L
         const val QUERY = "zz-diag-secret"
         const val CUSTOM_LABEL = "Diag Secret Rename"
         const val GONE = "com.example.gone/com.example.gone.Main"

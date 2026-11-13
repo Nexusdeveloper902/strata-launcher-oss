@@ -20,14 +20,19 @@ fun ComposeTestRule.clippedTexts(allowEllipsis: Set<String> = emptySet()): List<
         val layout = n.layoutResult() ?: return@mapNotNull null
         val tag = n.config.getOrNull(SemanticsProperties.TestTag)
         val ellipsized = (0 until layout.lineCount).any { layout.isLineEllipsized(it) }
-        // A line drawn wider than the text's box is cut off (single-line texts that do not wrap).
+        // A line wider than the text's box is cut off at the side. Only a text laid out with
+        // a bounded width can be: one in an unbounded row (a sideways-scrolling bar) is as wide as its text. The line
+        // width is taken from the paragraph, not from line positions, which sit at the paragraph's far edge for RTL.
+        val width = layout.size.width.toFloat()
         val cut =
-            (0 until layout.lineCount).any {
-                layout.getLineRight(it) - layout.getLineLeft(it) >
-                    layout.size.width + 1f
-            }
+            layout.layoutInput.constraints.hasBoundedWidth &&
+                // A text that wraps onto several lines adapts to its box (a wrapped line's width counts its trailing
+                // space); one that does not wrap, or fits on one line, must fit.
+                (!layout.layoutInput.softWrap || layout.lineCount == 1) &&
+                (0 until layout.lineCount).any { layout.multiParagraph.getLineWidth(it) > width + 1f }
         when {
             layout.didOverflowHeight -> "${describe(n)} (in ${n.taggedAncestor()}): cut off at the bottom"
+            cut -> "${describe(n)} (in ${n.taggedAncestor()}): cut off at the side"
             ellipsized && tag !in allowEllipsis -> "${describe(n)} (in ${n.taggedAncestor()}): ellipsized"
             else -> null
         }
@@ -99,10 +104,8 @@ private val SemanticsNode.root: Int
     }
 
 private fun ComposeTestRule.textNodes(): List<SemanticsNode> =
-    runCatching {
-        onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true)
-            .fetchSemanticsNodes()
-    }.getOrDefault(emptyList())
+    onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true)
+        .fetchSemanticsNodes()
         .filterNot { it.config.contains(SemanticsProperties.HideFromAccessibility) }
 
 private fun SemanticsNode.layoutResult(): TextLayoutResult? {

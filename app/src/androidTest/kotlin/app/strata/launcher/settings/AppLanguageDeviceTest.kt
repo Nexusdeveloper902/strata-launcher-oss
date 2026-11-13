@@ -2,7 +2,6 @@ package app.strata.launcher.settings
 
 import android.app.LocaleManager
 import android.content.Context
-import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
 import androidx.annotation.RequiresApi
@@ -55,11 +54,25 @@ class AppLanguageDeviceTest {
     @RequiresApi(33)
     private fun manager() = context.getSystemService(LocaleManager::class.java)
 
+    /**
+     * The system language, read outside this process: the instrumentation runs in Strata's own process, whose
+     * `Resources.getSystem()` configuration takes the per-app locale once it is applied (seen on API 36). API 34+ asks
+     * `LocaleManager.systemLocales`; API 33 reads the system setting through the shell.
+     */
+    @RequiresApi(33)
+    private fun systemLanguages(): String =
+        if (Build.VERSION.SDK_INT >= 34) {
+            manager().systemLocales.toLanguageTags()
+        } else {
+            shell("settings get system system_locales").trim().takeUnless { it.isEmpty() || it == "null" }
+                ?: shell("getprop persist.sys.locale").trim()
+        }
+
     @Test
     @SdkSuppress(minSdkVersion = 33)
     fun tSet05_germanAppLanguage_systemUnchanged() {
-        val system = Resources.getSystem().configuration.locales
-        assumeTrue("the system language is already German", system[0].language != "de")
+        val system = systemLanguages()
+        assumeTrue("the system language is already German", !system.startsWith("de"))
         manager().applicationLocales = LocaleList.forLanguageTags("de")
         assertThat(manager().applicationLocales.toLanguageTags()).isEqualTo("de")
         shell(
@@ -68,15 +81,7 @@ class AppLanguageDeviceTest {
         assertWithMessage("German settings not shown. ${focusReport()}")
             .that(device.wait(Until.hasObject(By.text("Einstellungen")), 15_000))
             .isTrue()
-        // The system language is untouched.
-        assertThat(
-            Resources
-                .getSystem()
-                .configuration.locales
-                .toLanguageTags(),
-        ).isEqualTo(system.toLanguageTags())
-        if (Build.VERSION.SDK_INT >= 34) {
-            assertThat(manager().systemLocales.toLanguageTags()).isEqualTo(system.toLanguageTags())
-        }
+        // The system language is untouched (same source as before the change).
+        assertThat(systemLanguages()).isEqualTo(system)
     }
 }
