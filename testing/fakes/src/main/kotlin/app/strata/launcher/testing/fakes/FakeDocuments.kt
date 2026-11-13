@@ -1,5 +1,6 @@
 package app.strata.launcher.testing.fakes
 
+import app.strata.launcher.core.platformapi.system.DiagnosticLogService
 import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.DocumentRead
 import app.strata.launcher.core.platformapi.system.SharedFiles
@@ -53,4 +54,29 @@ class FakeSharedFiles(private val authority: String = "app.strata.launcher.files
     override suspend fun purgeExpired() {
         purges++
     }
+}
+
+/** [DiagnosticLogService] with a fixed text; saved texts are recorded. */
+class FakeDiagnosticLogService(
+    var text: String? = "Strata diagnostic log\n\n(no entries)\n",
+) : DiagnosticLogService {
+    val saved = linkedMapOf<String, String>()
+    var builds = 0
+    var failSave = false
+
+    override suspend fun build(): String? {
+        builds++
+        return text
+    }
+
+    override suspend fun save(
+        uri: String,
+        text: String,
+    ): Boolean {
+        if (failSave || !uri.startsWith("content:")) return false
+        saved[uri] = text
+        return true
+    }
+
+    override fun suggestedFileName(): String = "strata-diagnostic-log.txt"
 }

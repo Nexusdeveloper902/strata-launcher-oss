@@ -120,6 +120,11 @@ fun SettingsRoute(
     /** FR-BACKUP-01…03 Backup page. */
     backup: BackupUiState = BackupUiState(),
     onBackupAction: (BackupAction) -> Unit = {},
+    /** About -> "Save diagnostic log" (ARCHITECTURE §11). */
+    diagnostics: DiagnosticLogUiState = DiagnosticLogUiState(),
+    onDiagnosticAction: (DiagnosticAction) -> Unit = {},
+    /** FR-SET-04: the system app-language page; null when the platform has none (API < 33). */
+    onLanguage: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val currentOnNavigate by rememberUpdatedState(onNavigate)
@@ -158,14 +163,37 @@ fun SettingsRoute(
                 .semantics { testTagsAsResourceId = true },
     ) {
         when (page) {
-            SettingsPage.ROOT -> SettingsRoot(state, onAction, onPage)
-            SettingsPage.HIDDEN_APPS -> HiddenAppsPage(state, onAction)
-            SettingsPage.ICONS -> IconCoveragePage(icons, onIconsAction)
-            SettingsPage.BACKUP -> BackupPage(backup, onBackupAction)
-            SettingsPage.PRIVACY -> PrivacyPage(state, onAction)
-            SettingsPage.ABOUT -> AboutPage(state) { onPage(SettingsPage.LICENCES) }
-            SettingsPage.LICENCES -> LicencesPage(state, onAction) { onPage(SettingsPage.LICENCE_TEXT) }
-            SettingsPage.LICENCE_TEXT -> LicenceTextPage(state)
+            SettingsPage.ROOT -> {
+                SettingsRoot(state, onAction, onPage)
+            }
+
+            SettingsPage.HIDDEN_APPS -> {
+                HiddenAppsPage(state, onAction)
+            }
+
+            SettingsPage.ICONS -> {
+                IconCoveragePage(icons, onIconsAction)
+            }
+
+            SettingsPage.BACKUP -> {
+                BackupPage(backup, onBackupAction)
+            }
+
+            SettingsPage.PRIVACY -> {
+                PrivacyPage(state, onAction)
+            }
+
+            SettingsPage.ABOUT -> {
+                AboutPage(state, { onPage(SettingsPage.LICENCES) }, diagnostics, onDiagnosticAction, onLanguage)
+            }
+
+            SettingsPage.LICENCES -> {
+                LicencesPage(state, onAction) { onPage(SettingsPage.LICENCE_TEXT) }
+            }
+
+            SettingsPage.LICENCE_TEXT -> {
+                LicenceTextPage(state)
+            }
         }
         if (state.showLockDisclosure) LockDisclosure(onAction)
         if (state.optional.showBadgeDisclosure) BadgeDisclosure(state.optional.restrictedSettingsHint, onAction)

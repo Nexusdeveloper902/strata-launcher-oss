@@ -45,6 +45,7 @@ import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.ContactsSource
+import app.strata.launcher.core.platformapi.system.DiagnosticLogService
 import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.LockService
@@ -59,6 +60,7 @@ import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeLibrary
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
+import app.strata.launcher.diagnostics.DefaultDiagnosticLogService
 import app.strata.launcher.diagnostics.LogcatSink
 import app.strata.launcher.platform.apps.AndroidProfileSource
 import app.strata.launcher.platform.apps.AndroidShortcutSource
@@ -105,9 +107,11 @@ class DefaultAppGraph(context: Context) : AppGraph {
         RingLogger(
             sinks =
                 listOf(
-                    RotatingFileLogSink(directory = { File(appContext.noBackupFilesDir, "logs") }),
+                    RotatingFileLogSink(directory = { File(appContext.noBackupFilesDir, LOG_DIR) }),
                     LogcatSink(minLevel = if (BuildConfig.DEBUG) LogLevel.DEBUG else LogLevel.WARN),
                 ),
+            // ARCHITECTURE §11: package names only in debug builds; release logs hashes and no exception messages.
+            redact = !BuildConfig.DEBUG,
         )
     }
 
@@ -365,6 +369,17 @@ class DefaultAppGraph(context: Context) : AppGraph {
 
     override val backup: BackupService get() = backupService
 
+    override val diagnostics: DiagnosticLogService by lazy {
+        DefaultDiagnosticLogService(
+            directory = { File(appContext.noBackupFilesDir, LOG_DIR) },
+            logger = logger,
+            documents = documents,
+            io = dispatchers.io,
+            versionName = BuildConfig.VERSION_NAME,
+            buildType = BuildConfig.BUILD_TYPE,
+        )
+    }
+
     private val backupStarted =
         java.util.concurrent.atomic
             .AtomicBoolean(false)
@@ -392,6 +407,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
         const val ICON_PARALLELISM = 4
         const val THEMES_DIR = "themes"
         const val RESTORE_DIR = "restore"
+        const val LOG_DIR = "logs"
         const val IMPORT_CACHE_MAX_AGE_MS = 60 * 60 * 1000L
     }
 }

@@ -4,13 +4,16 @@ import app.strata.launcher.core.common.Clock
 
 /**
  * [Logger] that keeps the newest [capacity] entries in memory (ARCHITECTURE §11: 2 000) and forwards
- * every entry at or above [minLevel] to [sinks] (file, logcat). Thread-safe.
+ * every entry at or above [minLevel] to [sinks] (file, logcat). Thread-safe. With [redact] (release builds,
+ * ARCHITECTURE §11) messages pass through [LogRedaction.message] and throwables lose their messages before any sink or
+ * the ring sees them, so package names appear only as hashes.
  */
 class RingLogger(
     private val capacity: Int = DEFAULT_CAPACITY,
     private val clock: Clock = Clock.System,
     private val sinks: List<LogSink> = emptyList(),
     private val minLevel: LogLevel = LogLevel.DEBUG,
+    private val redact: Boolean = false,
 ) : Logger {
     init {
         require(capacity > 0) { "capacity must be positive" }
@@ -23,7 +26,18 @@ class RingLogger(
 
     override fun log(level: LogLevel, tag: String, message: String, throwable: Throwable?) {
         if (level < minLevel) return
-        val entry = LogEntry(clock.nowMillis(), level, tag, message, throwable)
+        val entry =
+            if (redact) {
+                LogEntry(
+                    clock.nowMillis(),
+                    level,
+                    tag,
+                    LogRedaction.message(message),
+                    throwable?.let(LogRedaction::throwable),
+                )
+            } else {
+                LogEntry(clock.nowMillis(), level, tag, message, throwable)
+            }
         synchronized(lock) {
             buffer[next] = entry
             next = (next + 1) % capacity

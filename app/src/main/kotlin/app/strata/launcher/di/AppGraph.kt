@@ -17,6 +17,7 @@ import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.settings.ResetNotices
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.ContactsSource
+import app.strata.launcher.core.platformapi.system.DiagnosticLogService
 import app.strata.launcher.core.platformapi.system.DocumentIO
 import app.strata.launcher.core.platformapi.system.Haptics
 import app.strata.launcher.core.platformapi.system.LockService
@@ -91,6 +92,9 @@ interface AppGraph {
 
     /** Temporary `cacheDir/share/` copies behind the FileProvider. */
     val sharedFiles: SharedFiles
+
+    /** About -> "Save diagnostic log" (ARCHITECTURE §11, T-PRIV-06). */
+    val diagnostics: DiagnosticLogService
 
     /** Manual backup and restore (FR-BACKUP-01…04); bound to `:backup`. */
     val backup: BackupService

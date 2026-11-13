@@ -299,6 +299,10 @@ private fun AccessRow(
 internal fun AboutPage(
     state: SettingsUiState,
     onLicences: () -> Unit,
+    diagnostics: DiagnosticLogUiState = DiagnosticLogUiState(),
+    onDiagnosticAction: (DiagnosticAction) -> Unit = {},
+    /** FR-SET-04: opens the system app-language page (API 33+); null hides the row. */
+    onLanguage: (() -> Unit)? = null,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize().safeDrawingPadding().testTag(SettingsPageTags.ABOUT_PAGE)) {
         item { Title(stringResource(R.string.about_page)) }
@@ -311,6 +315,17 @@ internal fun AboutPage(
                 onClick = onLicences,
             )
         }
+        if (onLanguage != null) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.about_language),
+                    summary = stringResource(R.string.about_language_summary),
+                    tag = DiagnosticTags.LANGUAGE_ROW,
+                    onClick = onLanguage,
+                )
+            }
+        }
+        item { DiagnosticLogRows(diagnostics, onDiagnosticAction) }
         item {
             Text(
                 text = stringResource(R.string.about_privacy_title),
