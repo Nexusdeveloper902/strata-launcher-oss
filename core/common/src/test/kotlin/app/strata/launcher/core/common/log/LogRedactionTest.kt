@@ -54,6 +54,28 @@ class LogRedactionTest {
         assertThat(text).contains("LogRedactionTest")
     }
 
+    /** Release frames: Strata's own kept, every other class hashed with no method, file or line. */
+    @Test
+    fun redactedFramesKeepOnlyStrataClasses() {
+        val t = RuntimeException("x")
+        t.stackTrace =
+            arrayOf(
+                StackTraceElement("com.example.lib.Secret", "leak", "Secret.java", 7),
+                StackTraceElement("android.app.ActivityThread", "main", "ActivityThread.java", 9),
+                StackTraceElement("app.strata.launcher.home.HomeActivity", "onCreate", "HomeActivity.kt", 42),
+            )
+        val frames = LogRedaction.throwable(t).stackTrace
+        assertThat(frames[0].className).isEqualTo("<id:${LogRedaction.hash("com.example.lib.Secret")}>")
+        assertThat(frames[0].methodName).isEqualTo("?")
+        assertThat(frames[0].fileName).isNull()
+        assertThat(frames[1].className).isEqualTo("<id:${LogRedaction.hash("android.app.ActivityThread")}>")
+        assertThat(frames[2]).isEqualTo(t.stackTrace[2])
+        val text = RotatingFileLogSink.format(LogEntry(0, LogLevel.WARN, "T", "x", LogRedaction.throwable(t)))
+        assertThat(text).doesNotContain("com.example")
+        assertThat(text).doesNotContain("leak")
+        assertThat(text).contains("app.strata.launcher.home.HomeActivity.onCreate(HomeActivity.kt:42)")
+    }
+
     @Test
     fun ringLoggerRedactsBeforeAnySink() {
         val seen = mutableListOf<LogEntry>()

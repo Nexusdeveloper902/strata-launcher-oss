@@ -5,7 +5,8 @@ import java.security.MessageDigest
 /**
  * Identifier hygiene for logs (ARCHITECTURE §11, NFR-PRIV-04). Fails closed: every dotted name that is not one of our
  * own or a platform/library class is treated as a package or component and replaced by a 6-hex hash, and exception
- * messages (which the platform fills with components, users and paths) are dropped. Labels, queries and contact data
+ * messages (which the platform fills with components, users and paths) are dropped. Release stack traces keep only
+ * Strata's own frames in clear ([throwable]). Labels, queries and contact data
  * are never passed to the logger in the first place; they cannot be recognised in free text.
  */
 object LogRedaction {
@@ -69,7 +70,9 @@ object LogRedaction {
     }
 
     /**
-     * A copy of [t] without any message, for the release logger: class names and stack frames only. Its cause chain is
+     * A copy of [t] for the release logger: no message; the thrown class through [message] (platform names kept,
+     * others hashed); Strata's own frames (`app.strata.`) kept as they are, and every other frame (platform, library,
+     * anything loaded into the process) reduced to `<id:xxxxxx>.?` with no method, file or line. Its cause chain is
      * copied the same way (depth-limited, so a cyclic chain cannot loop).
      */
     fun throwable(t: Throwable): Throwable = copy(t, 0)
@@ -79,13 +82,20 @@ object LogRedaction {
         depth: Int,
     ): Throwable {
         val cause = t.cause?.takeIf { it !== t && depth < MAX_CAUSES }?.let { copy(it, depth + 1) }
-        return RedactedThrowable(t.javaClass.name, cause).also { it.stackTrace = t.stackTrace }
+        return RedactedThrowable(message(t.javaClass.name), cause).also { it.stackTrace = frames(t.stackTrace) }
     }
+
+    private fun frames(trace: Array<StackTraceElement>): Array<StackTraceElement> =
+        Array(trace.size) { i ->
+            val f = trace[i]
+            if (f.className.startsWith(OWN_PREFIX)) f else StackTraceElement("<id:${hash(f.className)}>", "?", null, -1)
+        }
 
     /**
      * The text of a log file made safe to hand out (FR "Save diagnostic log", T-PRIV-06), whatever build wrote it:
-     * log lines keep time, level and tag with their message redacted; stack frames are kept (code locations of
-     * platform and Strata classes; other names hashed); every other continuation line (exception headers, multi-line
+     * log lines keep time, level and tag with their message redacted; stack frames go through [message] (Strata and
+     * platform class names kept, other names hashed; a release file already has only Strata frames in clear); every
+     * other continuation line (exception headers, multi-line
      * messages) keeps only the thrown class name.
      */
     fun exportLine(line: String): String {
@@ -99,6 +109,7 @@ object LogRedaction {
     }
 
     const val REMOVED = "<removed>"
+    private const val OWN_PREFIX = "app.strata."
     private const val HASH_CHARS = 6
     private const val MAX_CAUSES = 16
     private val HEX = "0123456789abcdef".toCharArray()
