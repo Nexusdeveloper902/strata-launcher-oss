@@ -3,7 +3,10 @@
     <!-- Theme library (FR-THEME-27) -->
     <string name="theme_library_title">Themes</string>
     <string name="theme_import">Import</string>
-    <string name="theme_show_hidden">Show hidden (%1$d)</string>
+    <plurals name="theme_show_hidden">
+        <item quantity="one">Show hidden (%1$d)</item>
+        <item quantity="other">Show hidden (%1$d)</item>
+    </plurals>
     <string name="theme_hide_hidden">Hide hidden</string>
     <string name="theme_active">Active</string>
     <string name="theme_built_in">Built-in</string>

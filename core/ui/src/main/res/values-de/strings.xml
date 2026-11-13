@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_main">Privat</string>
+    <string name="profile_work">Arbeit</string>
+    <string name="profile_private">Privater Bereich</string>
+    <string name="profile_other">Anderes Profil</string>
+    <string name="secondary_line_format">%1$s · %2$s</string>
+    <plurals name="badge_description">
+        <item quantity="one">%1$d Benachrichtigung</item>
+        <item quantity="other">%1$d Benachrichtigungen</item>
+    </plurals>
+    <string name="badge_description_dot">Neue Benachrichtigungen</string>
+    <string name="badge_count">%1$d</string>
+    <string name="badge_count_overflow">99+</string>
+    <string name="index_description">Alphabetischer Index</string>
+    <plurals name="index_letter_description">
+        <item quantity="one">Zu %1$s springen, %2$d App</item>
+        <item quantity="other">Zu %1$s springen, %2$d Apps</item>
+    </plurals>
+    <string name="index_fold">•</string>
+    <string name="search_hint">Apps suchen</string>
+</resources>

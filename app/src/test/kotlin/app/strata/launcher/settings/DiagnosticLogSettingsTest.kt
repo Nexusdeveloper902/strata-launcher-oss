@@ -147,4 +147,13 @@ class DiagnosticLogSettingsTest {
         assertThat(started.action).isEqualTo(android.provider.Settings.ACTION_APP_LOCALE_SETTINGS)
         assertThat(started.data.toString()).isEqualTo("package:${context.packageName}")
     }
+
+    /** FR-SET-04 (R half of T-SET-05): with a German configuration the settings pages use the German resources. */
+    @Test
+    @Config(qualifiers = "de-w411dp-h5000dp")
+    fun germanConfigurationShowsGermanText() {
+        openAbout()
+        compose.onNodeWithText("Über Strata").assertIsDisplayed()
+        compose.onNodeWithText("Diagnoseprotokoll speichern").assertIsDisplayed()
+    }
 }

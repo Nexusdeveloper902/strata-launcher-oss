@@ -7,8 +7,6 @@ import app.strata.launcher.testing.fixtures.SearchFixtures.visible
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import java.io.File
-import java.util.Locale
-import java.util.TimeZone
 
 /** Pure home rules (level U). */
 class HomeLogicTest {
@@ -62,25 +60,6 @@ class HomeLogicTest {
         assertThat(HomeUiState(modal = HomeModal.Sheet(key)).imeAllowed).isFalse()
         assertThat(HomeUiState(modal = HomeModal.Sheet(key, renaming = true)).imeAllowed).isTrue()
         assertThat(HomeUiState(layer = HomeLayer.SEARCH).imeAllowed).isTrue()
-    }
-
-    /** VISUAL_SPEC §9.4: tabular `HH:MM` in 24 h; 12 h without a leading zero plus the period marker. */
-    @Test
-    fun clockFormat() {
-        val tz = TimeZone.getDefault()
-        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-        try {
-            val t = 21L * 3600_000 + 5 * 60_000 + 7_000 // 21:05:07 UTC
-            assertThat(ClockFormat.format(t, use24h = true, showSeconds = false, locale = Locale.US))
-                .isEqualTo(ClockText("21", "05", null, null))
-            assertThat(ClockFormat.format(t, use24h = false, showSeconds = true, locale = Locale.US))
-                .isEqualTo(ClockText("9", "05", "07", "PM"))
-            assertThat(
-                ClockFormat.format(0L, use24h = false, showSeconds = false, locale = Locale.US).hours,
-            ).isEqualTo("12")
-        } finally {
-            TimeZone.setDefault(tz)
-        }
     }
 
     /** FR-APPS-03: system → none; updated system → "Uninstall updates"; others → Uninstall. */

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lock_service_label">Strata-Bildschirmsperre</string>
+    <string name="lock_service_description">Damit kann Strata den Bildschirm sperren, wenn du doppelt auf eine leere Stelle des Startbildschirms tippst. Der Dienst liest nichts auf deinem Bildschirm und führt keine andere Aktion aus.</string>
+</resources>

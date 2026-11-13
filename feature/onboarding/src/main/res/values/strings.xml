@@ -9,7 +9,10 @@
     <string name="onboarding_skip">Skip</string>
     <string name="onboarding_not_now">Not now</string>
     <string name="onboarding_favorites_title">Pick favourites</string>
-    <string name="onboarding_favorites_body">Favourites sit on your home screen. Choose up to %1$d, or skip and add them later.</string>
+    <plurals name="onboarding_favorites_body">
+        <item quantity="one">Favourites sit on your home screen. Choose up to %1$d, or skip and add them later.</item>
+        <item quantity="other">Favourites sit on your home screen. Choose up to %1$d, or skip and add them later.</item>
+    </plurals>
     <string name="onboarding_favorites_count">Picked: %1$d of %2$d</string>
     <string name="onboarding_favorites_limit">That\'s the limit: %1$d.</string>
     <string name="onboarding_favorites_search">Search apps</string>

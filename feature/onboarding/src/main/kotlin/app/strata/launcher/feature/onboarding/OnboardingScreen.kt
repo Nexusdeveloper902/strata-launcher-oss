@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -168,7 +169,7 @@ private fun ColumnScope.FavoritesStep(
     onAction: (OnboardingAction) -> Unit,
 ) {
     Heading(stringResource(R.string.onboarding_favorites_title), Modifier.padding(top = 16.dp))
-    Body(stringResource(R.string.onboarding_favorites_body, FavoritesRepository.MAX))
+    Body(pluralStringResource(R.plurals.onboarding_favorites_body, FavoritesRepository.MAX, FavoritesRepository.MAX))
     Text(
         text = stringResource(R.string.onboarding_favorites_count, state.pickedCount, FavoritesRepository.MAX),
         style = MaterialTheme.typography.labelLarge,

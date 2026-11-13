@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_step">Schritt %1$d von %2$d</string>
+    <string name="onboarding_welcome_title">Willkommen bei Strata</string>
+    <string name="onboarding_welcome_body">Ein ruhiger Startbildschirm: deine Apps in einer alphabetischen Liste, ein paar Favoriten und ein Design, das du selbst gestaltest.</string>
+    <string name="onboarding_welcome_privacy">Kein Internet, kein Konto. Strata speichert alles nur auf diesem Telefon.</string>
+    <string name="onboarding_continue">Weiter</string>
+    <string name="onboarding_skip">Überspringen</string>
+    <string name="onboarding_not_now">Nicht jetzt</string>
+    <string name="onboarding_favorites_title">Favoriten wählen</string>
+    <plurals name="onboarding_favorites_body">
+        <item quantity="one">Favoriten liegen auf deinem Startbildschirm. Wähle bis zu %1$d aus oder überspringe das und füge sie später hinzu.</item>
+        <item quantity="other">Favoriten liegen auf deinem Startbildschirm. Wähle bis zu %1$d aus oder überspringe das und füge sie später hinzu.</item>
+    </plurals>
+    <string name="onboarding_favorites_count">Ausgewählt: %1$d von %2$d</string>
+    <string name="onboarding_favorites_limit">Das ist die Grenze: %1$d.</string>
+    <string name="onboarding_favorites_search">Apps suchen</string>
+    <string name="onboarding_set_default_title">Strata als Start-App verwenden</string>
+    <string name="onboarding_set_default_body">Die Home-Taste öffnet dann Strata.</string>
+    <string name="onboarding_set_default_undo">Du kannst jederzeit zurückwechseln: Einstellungen › Apps › Standard-Apps › Start-App.</string>
+    <string name="onboarding_set_default">Als Standard festlegen</string>
+    <string name="onboarding_held_title">Strata ist deine Start-App</string>
+    <string name="onboarding_held_body">Hier ist nichts mehr zu tun. Die Home-Taste öffnet bereits Strata.</string>
+    <string name="onboarding_done_title">Alles bereit</string>
+    <string name="onboarding_done_body">Halte eine leere Stelle auf dem Startbildschirm gedrückt für Designs und Einstellungen. Wische nach oben, um zu suchen.</string>
+    <string name="onboarding_go_home">Zum Startbildschirm</string>
+    <string name="onboarding_write_failed">Das konnte nicht gespeichert werden. Versuche es noch einmal.</string>
+    <string name="set_default_denied_title">Strata ist noch nicht deine Start-App</string>
+    <string name="set_default_denied_body">Du kannst es noch einmal versuchen, Strata in den Systemeinstellungen auswählen oder Strata vorerst als normale App verwenden.</string>
+    <string name="set_default_try_again">Noch einmal versuchen</string>
+    <string name="set_default_open_settings">Einstellungen öffnen</string>
+    <string name="set_default_oem_title">Dein Telefon hat die Start-App nicht gewechselt</string>
+    <string name="set_default_oem_body">Manche Telefone wechseln die Start-App nur in ihren eigenen Einstellungen.</string>
+    <string name="set_default_oem_steps">Öffne die Einstellungen, suche nach \"Start-App\" oder \"Standard-Apps\", wähle Strata und komm dann zurück.</string>
+    <string name="set_default_oem_hyperos">Auf diesem Telefon (HyperOS 2 oder neuer) erlaubt das System vielleicht gar keine andere Start-App oder nur mit Drei-Tasten-Navigation. Strata bleibt als normale App nutzbar.</string>
+    <string name="set_default_retry">Erneut versuchen</string>
+</resources>

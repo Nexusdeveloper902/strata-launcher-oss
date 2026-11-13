@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_field_description">Apps suchen</string>
+    <string name="search_clear">Suche löschen</string>
+    <string name="search_recent_header">Zuletzt verwendet</string>
+    <string name="search_no_results">Keine App passt zu „%1$s“</string>
+    <string name="search_store">Apps im Store suchen</string>
+    <string name="search_hidden_tag">Ausgeblendet</string>
+    <string name="search_results_description">Suchergebnisse</string>
+    <string name="search_launch_failed">%1$s konnte nicht geöffnet werden</string>
+    <string name="search_launch_failed_app_info">App-Info</string>
+    <string name="search_private_tag">Privater Bereich</string>
+    <string name="search_paused_tag">Pausiert</string>
+    <string name="search_contacts_header">Kontakte</string>
+    <string name="search_contacts_hint">Auch Kontakte durchsuchen? Schalte es in den Einstellungen ein</string>
+    <string name="search_contact_failed">Keine App kann diesen Kontakt öffnen</string>
+</resources>

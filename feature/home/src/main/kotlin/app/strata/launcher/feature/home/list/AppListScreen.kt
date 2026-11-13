@@ -46,6 +46,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -436,7 +437,11 @@ private fun ListEnd(
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
         EndRow(stringResource(R.string.list_end_settings), onOpenSettings, AppListTestTags.END_SETTINGS)
-        EndRow(stringResource(R.string.list_end_hidden_apps, hiddenCount), onOpenHiddenApps, AppListTestTags.END_HIDDEN)
+        EndRow(
+            pluralStringResource(R.plurals.list_end_hidden_apps, hiddenCount, hiddenCount),
+            onOpenHiddenApps,
+            AppListTestTags.END_HIDDEN,
+        )
     }
 }
 

@@ -111,6 +111,8 @@ object HomeTestTags {
     const val ICON_NOTICE = "home_icon_notice"
     const val ICON_NOTICE_STORE = "home_icon_notice_store"
     const val CLOCK = "home_clock"
+    const val CLOCK_TIME = "home_clock_time"
+    const val CLOCK_PERIOD = "home_clock_period"
     const val DATE = "home_date"
     const val FAVORITES = "home_favorites"
     const val ADD_FAVORITES = "home_add_favorites"

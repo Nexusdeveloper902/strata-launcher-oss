@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -176,7 +177,7 @@ fun ThemeLibraryScreen(
                             if (state.showHidden) {
                                 stringResource(R.string.theme_hide_hidden)
                             } else {
-                                stringResource(R.string.theme_show_hidden, state.hiddenCount)
+                                pluralStringResource(R.plurals.theme_show_hidden, state.hiddenCount, state.hiddenCount)
                             },
                         )
                     }
