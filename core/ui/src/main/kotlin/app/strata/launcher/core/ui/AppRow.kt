@@ -111,10 +111,14 @@ fun AppRow(
                 .heightIn(min = maxOf(theme.list.rowHeightDp, MIN_TOUCH_DP).dp)
                 .background(if (pressed || focused) colors.highlight else colors.background.copy(alpha = 0f))
                 .then(
-                    if (selected) {
+                    // FR-A11Y-04: keyboard focus and the search selection draw the same accent ring.
+                    if (selected || focused) {
                         Modifier
                             .border(SELECTION_RING_WIDTH, colors.accent, RoundedCornerShape(SELECTION_RING_RADIUS))
-                            .semantics { this.selected = true }
+                            .semantics {
+                                if (selected) this.selected = true
+                                if (focused) this[FocusRingSemantics.Shown] = true
+                            }
                     } else {
                         Modifier
                     },

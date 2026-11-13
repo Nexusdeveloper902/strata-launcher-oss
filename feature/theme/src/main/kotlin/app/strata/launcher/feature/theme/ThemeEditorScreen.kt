@@ -22,19 +22,15 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -75,6 +72,12 @@ import app.strata.launcher.core.theme.editor.FieldKind
 import app.strata.launcher.core.theme.editor.PairCheck
 import app.strata.launcher.core.theme.model.Variant
 import app.strata.launcher.core.theme.parse.ThemeError
+import app.strata.launcher.core.ui.Checkbox
+import app.strata.launcher.core.ui.FilterChip
+import app.strata.launcher.core.ui.Slider
+import app.strata.launcher.core.ui.Switch
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.flow.Flow
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -488,6 +491,7 @@ private fun GroupSection(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .focusRing()
                 .clickable { onAction(EditorAction.Expand(if (expanded) null else group.key)) }
                 .semantics {
                     heading()
@@ -715,6 +719,7 @@ private fun ColourControl(
                     .size(40.dp)
                     .background(Color(argb), RoundedCornerShape(8.dp))
                     .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                    .focusRing()
                     .clickable { open = !open }
                     .testTag(EditorTestTags.swatch(field.id))
                     .semantics { contentDescription = swatchDescription },
@@ -762,6 +767,7 @@ private fun ColourControl(
                         Modifier
                             .size(48.dp)
                             .background(Color(s), RoundedCornerShape(24.dp))
+                            .focusRing()
                             .clickable { onAction(EditorAction.Set(field.id, s)) }
                             .semantics { contentDescription = Rgb.toHex(s) },
                 )
@@ -839,13 +845,16 @@ private fun ImageSection(
         modifier =
             Modifier
                 .padding(horizontal = 8.dp)
-                .clickable { onAction(EditorAction.KeepImageAsWallpaper(!state.keepImageAsWallpaper)) }
-                .testTag(EditorTestTags.KEEP_IMAGE),
+                .heightIn(min = 48.dp)
+                .focusRing()
+                // One focus stop with the label as its name; the box only shows the state (NFR-A11Y-01).
+                .toggleable(
+                    value = state.keepImageAsWallpaper,
+                    role = Role.Checkbox,
+                    onValueChange = { onAction(EditorAction.KeepImageAsWallpaper(it)) },
+                ).testTag(EditorTestTags.KEEP_IMAGE),
     ) {
-        Checkbox(
-            checked = state.keepImageAsWallpaper,
-            onCheckedChange = { onAction(EditorAction.KeepImageAsWallpaper(it)) },
-        )
+        Checkbox(checked = state.keepImageAsWallpaper, onCheckedChange = null)
         Text(stringResource(R.string.editor_keep_image), color = MaterialTheme.colorScheme.onBackground)
     }
 }

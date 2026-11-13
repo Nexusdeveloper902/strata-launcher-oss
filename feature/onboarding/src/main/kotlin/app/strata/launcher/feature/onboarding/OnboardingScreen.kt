@@ -19,14 +19,10 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +44,11 @@ import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
+import app.strata.launcher.core.ui.Button
+import app.strata.launcher.core.ui.Checkbox
+import app.strata.launcher.core.ui.OutlinedButton
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.flow.Flow
 
 object OnboardingTestTags {
@@ -226,6 +227,7 @@ private fun PickRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .focusRing()
                 .toggleable(value = picked, role = Role.Checkbox, onValueChange = { onToggle() })
                 .testTag(OnboardingTestTags.pick(app.key)),
         verticalAlignment = Alignment.CenterVertically,

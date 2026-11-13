@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -41,6 +40,7 @@ import app.strata.launcher.core.model.WidgetHeights
 import app.strata.launcher.core.ui.SheetItem
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.StrataSheet
+import app.strata.launcher.core.ui.TextButton
 
 object WidgetTestTags {
     const val AREA = "widget_area"

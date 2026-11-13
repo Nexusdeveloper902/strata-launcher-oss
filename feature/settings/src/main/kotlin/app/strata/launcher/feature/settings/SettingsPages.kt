@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +34,7 @@ import app.strata.launcher.core.model.IconSource
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.notifications.ListenerAccess
 import app.strata.launcher.core.platformapi.system.PermissionState
+import app.strata.launcher.core.ui.Button
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.iconStyleOf
 

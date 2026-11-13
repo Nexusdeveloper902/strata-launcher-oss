@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -65,8 +64,10 @@ import app.strata.launcher.core.ui.AppIcon
 import app.strata.launcher.core.ui.IconRequestKey
 import app.strata.launcher.core.ui.NotificationBadge
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.WorkBadge
 import app.strata.launcher.core.ui.apply
+import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.rememberAppIconState
 import app.strata.launcher.feature.home.list.originOf
 import kotlin.math.roundToInt
@@ -134,6 +135,7 @@ fun FavoriteRow(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .onGloballyPositioned { coordinates[0] = it }
+                .focusRing()
                 .combinedClickable(
                     role = Role.Button,
                     onLongClick = onLongPress,
@@ -450,6 +452,7 @@ fun FavoritesEditScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp)
+                                .focusRing()
                                 .clickable(role = Role.Button) { onAction(HomeAction.AddInEdit(app.key)) }
                                 .padding(horizontal = theme.list.horizontalPaddingDp.dp)
                                 .testTag(FavEditTestTags.add(app)),

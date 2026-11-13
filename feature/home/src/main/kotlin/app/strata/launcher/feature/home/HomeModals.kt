@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +48,8 @@ import app.strata.launcher.core.ui.AppIcon
 import app.strata.launcher.core.ui.SheetItem
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.StrataSheet
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.iconKey
 import app.strata.launcher.core.ui.rememberAppIconState
 
@@ -223,7 +224,12 @@ private fun AppSheet(
                     Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)
-                        .clickable(enabled = !app.isPrivate, role = Role.Button, onClickLabel = renameLabel) {
+                        .focusRing()
+                        .clickable(
+                            enabled = !app.isPrivate,
+                            role = Role.Button,
+                            onClickLabel = renameLabel,
+                        ) {
                             onAction(HomeAction.StartRename(app.key))
                         }.padding(vertical = 8.dp)
                         .testTag(SheetTestTags.NAME),
@@ -443,6 +449,7 @@ fun LetterGrid(
                     modifier =
                         Modifier
                             .size(48.dp)
+                            .focusRing()
                             .clickable(role = Role.Button) { onPick(i) }
                             .semantics { contentDescription = description }
                             .testTag(SheetTestTags.letter(letter.label)),

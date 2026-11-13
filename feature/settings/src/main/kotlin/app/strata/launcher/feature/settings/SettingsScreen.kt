@@ -20,10 +20,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,7 +38,11 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.VisibleApp
+import app.strata.launcher.core.ui.RadioButton
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.Switch
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.flow.Flow
 
 object SettingsTestTags {
@@ -673,6 +674,7 @@ internal fun SwitchRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .focusRing()
                 .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .testTag(tag),
@@ -701,6 +703,7 @@ internal fun RadioRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .focusRing()
                 .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .testTag(tag),
@@ -737,6 +740,7 @@ internal fun ActionRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .focusRing()
                 .clickable(role = Role.Button, onClick = onClick)
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier),

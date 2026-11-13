@@ -18,12 +18,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +41,9 @@ import app.strata.launcher.core.theme.importing.ConflictChoice
 import app.strata.launcher.core.theme.importing.ImportConflict
 import app.strata.launcher.core.theme.importing.ImportMessage
 import app.strata.launcher.core.theme.store.ImportPreview
+import app.strata.launcher.core.ui.Button
+import app.strata.launcher.core.ui.OutlinedButton
+import app.strata.launcher.core.ui.TextButton
 
 /** The import summary (THEME_SYSTEM §10.4): nothing is written or applied before Add / Add and apply. */
 @Composable

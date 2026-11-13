@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -268,6 +269,37 @@ fun AlphabetIndex(
                         else -> colors.textSecondary.copy(alpha = IDLE_ALPHA)
                     }
                 val glyph = if (dots || (folded && s % 2 == 1)) stringResource(R.string.index_fold) else letter.label
+                // Semantics live on the full-width overlay below (NFR-A11Y-03: the 48 dp strip is the target).
+                Box(
+                    modifier = Modifier.height(pitch).clearAndSetSemantics {},
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = glyph,
+                        style = type.index,
+                        color = color,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.scale(if (isCurrent) ACTIVE_SCALE else 1f),
+                    )
+                }
+            }
+        }
+
+        // One accessibility button per letter, as wide as the touch strip (VISUAL_SPEC §9.3, NFR-A11Y-03): the letter
+        // pitch is 14–28 dp by design, so the effective target is the 48 dp-wide strip over the letter's row. These
+        // boxes take no pointer input; touches reach the scrub area underneath.
+        Column(
+            modifier =
+                Modifier
+                    .offset(y = trackTop)
+                    .fillMaxWidth()
+                    .height(trackHeight),
+        ) {
+            slots.forEachIndexed { s, range ->
+                val folded = range.first != range.last
+                val i = range.first
+                val letter = letters[i]
                 val letterDescription =
                     pluralStringResource(
                         R.plurals.index_letter_description,
@@ -292,21 +324,11 @@ fun AlphabetIndex(
                 Box(
                     modifier =
                         Modifier
-                            .height(
-                                pitch,
-                            ).testTag(AlphabetIndexTestTags.letter(letter.label))
+                            .fillMaxWidth()
+                            .height(pitch)
+                            .testTag(AlphabetIndexTestTags.letter(letter.label))
                             .then(semanticsModifier),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = glyph,
-                        style = type.index,
-                        color = color,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        modifier = Modifier.scale(if (isCurrent) ACTIVE_SCALE else 1f),
-                    )
-                }
+                )
             }
         }
 

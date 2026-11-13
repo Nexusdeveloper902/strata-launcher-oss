@@ -39,6 +39,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.strata.launcher.core.theme.model.ClockStyle
 import app.strata.launcher.core.theme.model.HourFormat
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
@@ -231,6 +232,7 @@ fun HomeHeader(
                     Modifier
                         .testTag(HomeTestTags.CLOCK)
                         .heightIn(min = 48.dp)
+                        .focusRing()
                         .clickable(onClick = onClock)
                         .clearAndSetSemantics {
                             contentDescription = spoken
@@ -254,6 +256,7 @@ fun HomeHeader(
                 modifier =
                     Modifier
                         .heightIn(min = 48.dp)
+                        .focusRing()
                         .clickable(onClick = onDate)
                         .semantics { role = Role.Button }
                         .testTag(HomeTestTags.DATE),
