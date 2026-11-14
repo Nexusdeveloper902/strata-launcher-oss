@@ -59,11 +59,19 @@ where Actions minutes are free.
     (needs `pip install cairosvg pillow`; review tooling only).
 - `tools/mirror/sync-public.sh <branch>...` (needs `pip install git-filter-repo`) filters and
   pushes branches. The filter is deterministic, so syncs are fast-forwards; never force-push
-  the mirror. Before pushing it verifies the filtered history and aborts if any stripped file,
-  any path under a stripped directory, or any canary string (fixed strings from
-  `platform/icons/glyphs-private/canaries.txt`, or the file named by `STRATA_MIRROR_CANARIES`)
-  is still present in any commit or commit message. It refuses to run when the private
-  directory exists but the canary list does not.
+  the mirror. Before pushing it verifies the filtered history and fails closed (any error
+  aborts). Everything is read from the branches being synced, never from the working tree:
+  - no stripped file and no path under a stripped directory may remain in any commit;
+  - no canary may appear in any file of any filtered commit (binary files included), in any
+    path, commit message, author or committer name or e-mail, or ref name. The canaries are
+    every package of the overlay's `index.txt` (whole-word match) minus the short reviewed
+    allowlist `ALLOW` in the script (index packages that legitimately appear in public files),
+    plus the extra strings of the overlay's `canaries.txt` and of the file named by
+    `STRATA_MIRROR_CANARIES`, merged over all synced branches;
+  - a branch that has (or had) the overlay without a usable canary list, or an empty merged
+    list, makes the sync refuse. The script always prints the number of canaries it checked.
+- `tools/mirror/test-sync.sh` proves these refusals on a scratch repository with invented
+  package names (dry runs only); CI runs it in the static-gates job.
 - `tools/mirror/sync-public.sh --dry-run DIR <branch>...` filters and verifies the same way, then
   clones the filtered branches into the new directory `DIR` instead of pushing, so the public
   tree can be inspected and built locally.

@@ -4,21 +4,29 @@
 # the original app removed from every commit (see research/UNRESOLVED.md U-001,
 # U-003, U-004), and the private glyph overlay (platform/icons/glyphs-private/:
 # per-app glyphs and index lines for the owner's apps, CONTRIBUTING.md) removed
-# from every commit too. The filter is deterministic: the same private commit always maps
-# to the same public commit, so every sync is a fast-forward and never needs a
-# force-push.
+# from every commit too.
 #
 # Usage: tools/mirror/sync-public.sh [--dry-run DIR] [branch ...]    (default: main)
 #
 #   --dry-run DIR  filter and verify, then clone the filtered branches into DIR
 #                  (a new directory) instead of pushing. Nothing leaves this machine.
 #
-# Before pushing, the filtered history is verified: no stripped path may remain in
-# any commit, and no canary string may appear in any file of any commit or in any
-# commit message. Canaries are fixed strings, one per line, read from
-# platform/icons/glyphs-private/canaries.txt (private, so never mirrored) in the
-# working tree, or from the file named by STRATA_MIRROR_CANARIES. If the private
-# overlay exists but no canary file does, the sync refuses to run.
+# The filter is deterministic: the same private commit always maps to the same
+# public commit, so every sync is a fast-forward and never needs a force-push.
+#
+# Verification (fails closed: any error aborts before the push). Everything is read
+# from the branches being synced, never from the working tree:
+# - no stripped file and no path under a stripped directory remains in any commit;
+# - canaries never appear in any file of any filtered commit (binary files included),
+#   in any path, in any commit message, author or committer name or e-mail, or in
+#   any ref name. Canaries are, merged over every synced branch (from the latest
+#   commit of its history that has the overlay):
+#     * every package of the overlay's index.txt (matched as whole words), minus the
+#       reviewed allowlist ALLOW below;
+#     * the extra fixed strings of the overlay's canaries.txt (matched anywhere);
+#     * the fixed strings of the file named by STRATA_MIRROR_CANARIES, if set.
+# - If any synced branch has (or had) the overlay, the canary list must not be
+#   empty; otherwise the sync refuses to run.
 #
 # The private repository stays the source of truth. Pull requests are opened on
 # the public repository only to run CI there (Actions minutes are free for public
@@ -28,7 +36,16 @@ set -eu
 PUBLIC_URL="${STRATA_PUBLIC_URL:-https://github.com/Nexusdeveloper902/strata-launcher-oss}"
 STRIP="research/APK_ANALYSIS.md research/PUBLIC_BEHAVIOR.md research/EVIDENCE.md"
 # Directories removed from every commit (every path below them).
-STRIP_DIRS="platform/icons/glyphs-private"
+OVERLAY="platform/icons/glyphs-private"
+STRIP_DIRS="$OVERLAY"
+# Reviewed allowlist: overlay index packages that legitimately appear in public files
+# (a platform app the device tests and gates refer to, and a build-tool group id).
+ALLOW="com.android.settings com.pinterest"
+
+die() {
+  echo "sync-public: $*; refusing to push" >&2
+  exit 1
+}
 
 dry_run=""
 if [ "${1:-}" = "--dry-run" ]; then
@@ -46,24 +63,17 @@ command -v git-filter-repo >/dev/null 2>&1 || {
 src="$(git rev-parse --show-toplevel)"
 [ "$#" -gt 0 ] || set -- main
 
-canaries="${STRATA_MIRROR_CANARIES:-$src/platform/icons/glyphs-private/canaries.txt}"
-if [ ! -s "$canaries" ]; then
-  for d in $STRIP_DIRS; do
-    if [ -e "$src/$d" ]; then
-      echo "sync-public: $d exists but there is no canary list ($canaries); refusing to run" >&2
-      exit 1
-    fi
-  done
-  canaries=""
-else
-  # Copy before the work directory is used: the check must not depend on the source tree afterwards.
-  canaries_copy="$(mktemp)"
-  grep -v '^[[:space:]]*\(#\|$\)' "$canaries" >"$canaries_copy" || true
-  canaries="$canaries_copy"
-fi
-
 work="$(mktemp -d)"
-trap 'rm -rf "$work" ${canaries:+"$canaries"}' EXIT
+trap 'rm -rf "$work"' EXIT
+pkgs="$work/canary-packages"
+extra="$work/canary-strings"
+: >"$pkgs"
+: >"$extra"
+
+# Fixed strings of a canary file: no comments, no blank lines, trimmed.
+clean() {
+  sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' || true
+}
 
 git init -q --bare "$work/repo"
 cd "$work/repo"
@@ -76,40 +86,94 @@ for b in "$@"; do
   fi
 done
 
+# Canaries, from the branches themselves (before filtering).
+overlay_seen=""
+for b in "$@"; do
+  last="$(git log -1 --format=%H "refs/heads/$b" -- "$OVERLAY")"
+  [ -n "$last" ] || continue
+  overlay_seen=1
+  # The latest commit that has the overlay: the last one touching it, or its parent if that one deleted it.
+  at="$last"
+  git cat-file -e "$at:$OVERLAY" 2>/dev/null || at="$last^"
+  n_before=$(cat "$pkgs" "$extra" | wc -l)
+  if git cat-file -e "$at:$OVERLAY/index.txt" 2>/dev/null; then
+    git show "$at:$OVERLAY/index.txt" | clean | awk '{ print $1 }' >>"$pkgs"
+  fi
+  if git cat-file -e "$at:$OVERLAY/canaries.txt" 2>/dev/null; then
+    git show "$at:$OVERLAY/canaries.txt" | clean >>"$extra"
+  fi
+  n_after=$(cat "$pkgs" "$extra" | wc -l)
+  [ "$n_after" -gt "$n_before" ] || die "branch $b has $OVERLAY but no usable canary list (index.txt or canaries.txt)"
+done
+if [ -n "${STRATA_MIRROR_CANARIES:-}" ]; then
+  clean <"$STRATA_MIRROR_CANARIES" >>"$extra"
+fi
+for a in $ALLOW; do
+  grep -vxF "$a" "$pkgs" >"$pkgs.tmp" || true
+  mv "$pkgs.tmp" "$pkgs"
+done
+sort -u -o "$pkgs" "$pkgs"
+sort -u -o "$extra" "$extra"
+n_pkgs=$(wc -l <"$pkgs")
+n_extra=$(wc -l <"$extra")
+n=$((n_pkgs + n_extra))
+if [ -n "$overlay_seen" ] && [ "$n" -eq 0 ]; then
+  die "the synced branches have $OVERLAY but the canary list is empty"
+fi
+
 args=""
 for p in $STRIP; do args="$args --path $p"; done
 for d in $STRIP_DIRS; do args="$args --path $d/"; done
 # shellcheck disable=SC2086
 git filter-repo --force --invert-paths $args --refs $(printf 'refs/heads/%s ' "$@") >/dev/null
 
-paths="$(git log --format= --name-only "$@" --)"
+# Matches the canaries against a file: 0 = clean, anything else aborts.
+scan_file() {
+  for list in "$pkgs" "$extra"; do
+    [ -s "$list" ] || continue
+    w=""
+    [ "$list" = "$pkgs" ] && w="-w"
+    status=0
+    # shellcheck disable=SC2086
+    grep -q -a $w -F -f "$list" "$1" || status=$?
+    [ "$status" -eq 1 ] || return 1
+  done
+  return 0
+}
+
+paths="$work/paths"
+git log --format= --name-only --no-renames "$@" -- >"$paths"
 for p in $STRIP; do
-  if printf '%s\n' "$paths" | grep -qxF "$p"; then
-    echo "sync-public: $p still present after filtering; refusing to push" >&2
-    exit 1
-  fi
+  if grep -qxF "$p" "$paths"; then die "$p still present after filtering"; fi
 done
 for d in $STRIP_DIRS; do
-  if printf '%s\n' "$paths" | grep -qF "$d/"; then
-    echo "sync-public: a path under $d/ is still present after filtering; refusing to push" >&2
-    exit 1
-  fi
+  if grep -q "^$d/" "$paths"; then die "a path under $d/ is still present after filtering"; fi
 done
-if [ -n "$canaries" ] && [ -s "$canaries" ]; then
-  # git grep: 0 = match, 1 = no match, anything else = error (treated as a failure, never as clean).
-  # shellcheck disable=SC2046
-  status=0
-  git grep -q -I -F -f "$canaries" $(git rev-list "$@") -- || status=$?
-  if [ "$status" -ne 1 ]; then
-    echo "sync-public: a canary string is still present in a filtered commit (git grep status $status); refusing to push" >&2
-    exit 1
-  fi
-  if git log --format=%B "$@" | grep -q -F -f "$canaries"; then
-    echo "sync-public: a canary string is present in a commit message; refusing to push" >&2
-    exit 1
-  fi
-  echo "sync-public: verified: no stripped path and none of $(wc -l <"$canaries") canaries in the filtered history" >&2
-fi
+scan_file "$paths" || die "a canary string is present in a file path"
+
+meta="$work/meta"
+git log --format='%B%n%an%n%ae%n%cn%n%ce' "$@" -- >"$meta"
+git for-each-ref --format='%(refname)' >>"$meta"
+scan_file "$meta" || die "a canary string is present in a commit message, an identity or a ref name"
+
+# File contents of every filtered commit, binary files included, in batches (no ARG_MAX limit).
+revs="$work/revs"
+git rev-list "$@" >"$revs"
+for list in "$pkgs" "$extra"; do
+  [ -s "$list" ] || continue
+  w=""
+  [ "$list" = "$pkgs" ] && w="-w"
+  hits="$work/hits"
+  # Each batch prints MATCH on a hit and fails on any git grep error (status other than 0 or 1).
+  # shellcheck disable=SC2016
+  W="$w" xargs -n 64 sh -c 's=0; git grep -q -a $W -F -f "$0" "$@" -- || s=$?
+    if [ "$s" -eq 0 ]; then echo MATCH; elif [ "$s" -ne 1 ]; then exit 1; fi' "$list" <"$revs" >"$hits" ||
+    die "git grep failed while scanning file contents"
+  if [ -s "$hits" ]; then die "a canary string is still present in a filtered commit"; fi
+done
+
+echo "sync-public: verified: no stripped path and none of $n canaries ($n_pkgs packages, $n_extra strings)" \
+  "in paths, file contents (binary included), messages, identities or ref names" >&2
 
 if [ -n "$dry_run" ]; then
   git clone -q "$work/repo" "$dry_run"

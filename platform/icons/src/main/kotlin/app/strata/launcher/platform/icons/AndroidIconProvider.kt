@@ -73,6 +73,8 @@ class AndroidIconProvider(
     private val dayOfMonth: () -> Int = { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) },
     /** The Strata glyph set (FR-THEME-35); default: the bundled index and drawables. */
     glyphs: GlyphLookup? = null,
+    /** The app's own launcher icon (component, user, density); default: `LauncherApps`. Swapped in tests. */
+    private val systemIcons: ((ComponentName, UserHandle, Int) -> Drawable?)? = null,
 ) : IconProvider {
     private val appContext = context.applicationContext
     private val diskDir: File by lazy { diskDir?.invoke() ?: File(appContext.cacheDir, "icons") }
@@ -287,7 +289,8 @@ class AndroidIconProvider(
             }
         val supplied = overrideDrawable ?: packDrawable
         val tinted = supplied == null && IconSourceResolver.isTinted(style)
-        val icon: Drawable? = if (supplied != null) null else systemIcon(component, user, densityDpi)
+        val icon: Drawable? =
+            if (supplied != null) null else (systemIcons ?: ::systemIcon).invoke(component, user, densityDpi)
         val monochrome =
             if (tinted &&
                 apiLevel >= IconSourceResolver.MONOCHROME_API &&

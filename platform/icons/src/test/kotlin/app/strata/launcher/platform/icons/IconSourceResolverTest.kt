@@ -48,7 +48,12 @@ class IconSourceResolverTest {
             .isEqualTo(IconSource.PLATFORM_MONOCHROME)
     }
 
-    /** D-020: the app's own monochrome layer comes first on API 33+; the glyph covers API < 33 and apps without one. */
+    /**
+     * D-020: the app's own monochrome layer comes first on API 33+; the glyph covers API < 33 and apps without one.
+     * The provider never reports both inputs as true (it looks the glyph up only without a usable layer, and reads no
+     * layer below API 33), but the resolver is a pure total function shared with the coverage tool, so its answer for
+     * every combination is pinned here.
+     */
     @Test
     fun tTheme54_monochromeLayerBeforeGlyph() {
         // Glyph and monochrome layer: the layer on API 33+, the glyph below.

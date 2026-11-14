@@ -23,8 +23,10 @@ set fills the gaps: apps without a usable layer, and every app on API < 33.
 Some apps ship a monochrome layer that is effectively empty (transparent) or a full-bleed opaque square. Such a
 layer is treated as absent, so the glyph (else the desaturated icon) is used.
 - `MonochromeLayers.isUsable` (`:platform:icons`) draws the layer once into a 36 × 36 px bitmap.
-- **Empty:** fewer than 0.5 % of the pixels have alpha above 32.
-- **Block:** at least 95 % of the visible area (the inner 2/3, the part the adaptive mask shows) has alpha above 224.
+- Both tests look only at the visible area: the inner 2/3 of the layer, the part the adaptive mask shows.
+- **Empty:** fewer than 0.5 % of the visible pixels have alpha above 32.
+- **Block:** at least 95 % of the visible pixels have alpha above 224.
+- **Failure:** a layer that throws while drawing counts as unusable, so the glyph fallback still applies.
 - It runs inside the existing pipeline when the icon's sources are decided: on the render dispatcher, or on the I/O
   dispatcher for the coverage tool. It never runs on main. The result is baked into the cached bitmap, so it runs once
   per rendered icon.

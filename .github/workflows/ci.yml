@@ -136,6 +136,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: T-CI-01 checkPermissions, T-CI-02 checkDependencies, T-CI-03 checkModuleGraph, T-CI-08 checkEntitlements, T-CI-05 checkLicences
         run: ./gradlew checkPermissions checkDependencies checkModuleGraph checkEntitlements checkLicences --stacktrace
+      - name: Mirror sync safety net (tools/mirror/test-sync.sh, dry runs on a scratch repository)
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q git-filter-repo
+          sh tools/mirror/test-sync.sh
 
   gmd-smoke:
     name: GMD smoke (API ${{ matrix.api }})

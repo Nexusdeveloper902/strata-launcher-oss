@@ -155,6 +155,43 @@ class GlyphBundleTest {
         assertThat(MonochromeLayers.isUsable(glyph)).isTrue()
     }
 
+    /**
+     * D-020 through the provider (sources() via coverage(), shared with render): an app with a glyph and an adaptive
+     * icon whose monochrome layer is transparent or a full-bleed block gets the glyph; a usable layer wins; no layer:
+     * the glyph.
+     */
+    @Test
+    fun tTheme54_providerChecksTheMonochromeLayer() {
+        val comp = "com.example.mail/com.example.mail.Main"
+        val glyphs = BundledGlyphs({ "com.example.mail strata\n" }, mapOf("strata" to R.drawable.glyph_strata))
+        val tinted = IconStyle(tint = IconTintMode.MONOCHROME, tintColor = Color.WHITE, plateColor = Color.BLACK)
+
+        fun sourceWith(mono: android.graphics.drawable.Drawable?): IconSource {
+            val icon =
+                android.graphics.drawable.AdaptiveIconDrawable(
+                    android.graphics.drawable.ColorDrawable(Color.BLUE),
+                    android.graphics.drawable.ColorDrawable(Color.RED),
+                    mono,
+                )
+            val provider = provider(glyphs, systemIcons = { _, _, _ -> icon })
+            return runBlocking { provider.coverage(listOf(visible(comp)), tinted) }.single().source
+        }
+        assertThat(sourceWith(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))).isEqualTo(IconSource.GLYPH)
+        assertThat(sourceWith(android.graphics.drawable.ColorDrawable(Color.BLACK))).isEqualTo(IconSource.GLYPH)
+        assertThat(sourceWith(null)).isEqualTo(IconSource.GLYPH)
+        assertThat(sourceWith(app.getDrawable(R.drawable.glyph_strata))).isEqualTo(IconSource.PLATFORM_MONOCHROME)
+    }
+
+    /** A layer that throws while drawing counts as unusable (D-020). */
+    @Test
+    fun tTheme54_layerThatFailsToDrawIsUnusable() {
+        val broken =
+            object : android.graphics.drawable.ColorDrawable(Color.BLACK) {
+                override fun draw(canvas: android.graphics.Canvas): Unit = throw IllegalStateException("broken")
+            }
+        assertThat(MonochromeLayers.isUsable(broken)).isFalse()
+    }
+
     /** D-020: the precedence change invalidates every cached bitmap: the key starts with the pipeline version. */
     @Test
     fun cacheKeyCarriesThePipelineVersion() {
@@ -216,6 +253,10 @@ class GlyphBundleTest {
     private fun provider(
         glyphs: GlyphLookup,
         packs: FakePackSource = FakePackSource(),
+        systemIcons: (
+            (android.content.ComponentName, android.os.UserHandle, Int) -> android.graphics.drawable.Drawable?
+        )? =
+            null,
     ) = AndroidIconProvider(
         context = app,
         renderDispatcher = Dispatchers.Unconfined,
@@ -225,5 +266,6 @@ class GlyphBundleTest {
         diskDir = { File(app.cacheDir, "icons-glyph").also { it.deleteRecursively() } },
         packSource = packs,
         glyphs = glyphs,
+        systemIcons = systemIcons,
     )
 }
