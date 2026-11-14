@@ -149,6 +149,8 @@ fun HomeRoute(
     widgetSlot: HomeWidgetSlot? = null,
     /** Drawn above everything else (the widget menu sheet), supplied by `:app`. */
     overlay: @Composable () -> Unit = {},
+    /** [overlay] currently shows a modal (the widget menu): the index is covered. */
+    overlayModal: Boolean = false,
 ) {
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -200,6 +202,20 @@ fun HomeRoute(
                             )
                         if (result == SnackbarResult.ActionPerformed) {
                             currentOnAction(HomeAction.SetHidden(effect.key, hidden = false))
+                        }
+                    }
+                }
+
+                is HomeEffect.FavoriteRemoved -> {
+                    launch {
+                        val result =
+                            snackbar.showTimed(
+                                resources.getString(R.string.fav_removed, effect.label),
+                                resources.getString(R.string.undo),
+                                UNDO_MS,
+                            )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            currentOnAction(HomeAction.UndoRemoveFromEdit(effect.key, effect.index))
                         }
                     }
                 }
@@ -261,7 +277,9 @@ fun HomeRoute(
             .isAtLeast(Lifecycle.State.RESUMED)
     // System gesture exclusion only for an index the user can touch now: never under search, a sheet or a dialog,
     // where the back gesture from that edge must reach the system (owner report: search closed only from the left).
-    val indexTouchable = resumed && search == null && noModal
+    // Also not under onboarding (home's first layer), the letter grid or an overlay sheet (review of PR #32).
+    val indexTouchable =
+        resumed && search == null && noModal && !state.showOnboarding && !letterGrid && !overlayModal
     val exclusion =
         when {
             !indexTouchable -> IndexExclusion.NONE
@@ -456,7 +474,7 @@ private val WIDGET_GAP = 12.dp
 /** INTERACTION_SPEC §7 "HOME → SEARCH": home content fades to 0.3 α. */
 private const val UNDER_SEARCH_ALPHA = 0.3f
 
-/** J-05: the hide undo snackbar stays 5 s. */
+/** J-05: the hide undo snackbar stays 5 s (also removal in Edit favourites). */
 private const val UNDO_MS = 5_000L
 
 /**
@@ -693,7 +711,7 @@ private fun FavoritesBlock(
         if (favorites.isEmpty() && state.list != null) {
             // INTERACTION_SPEC §8 "No favourites".
             TextButton(
-                onClick = { onAction(HomeAction.EditFavorites) },
+                onClick = { onAction(HomeAction.AddFavoritesFromHome) },
                 modifier = Modifier.padding(horizontal = 8.dp).testTag(HomeTestTags.ADD_FAVORITES),
             ) {
                 Text(text = stringResource(R.string.add_favorites), style = Strata.typography.label)

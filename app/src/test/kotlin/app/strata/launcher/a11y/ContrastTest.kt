@@ -230,6 +230,9 @@ class ContrastTest(
                 "app sheet (rename)" to setOf(SheetTestTags.SHEET),
                 "home menu" to setOf(SheetTestTags.MENU),
                 "edit favourites" to setOf(FavEditTestTags.SCREEN),
+                "favourites picker" to setOf(FavEditTestTags.PICKER),
+                // The JSON view covers the editor form (same window).
+                "theme editor json" to setOf(EditorTestTags.JSON_VIEW),
             )
 
         /** `spec/sample-themes/`, from the module directory Gradle runs the tests in. */

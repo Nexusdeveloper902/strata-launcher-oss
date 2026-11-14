@@ -44,6 +44,9 @@ import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
+import app.strata.launcher.core.ui.AppPicker
+import app.strata.launcher.core.ui.AppPickerTags
+import app.strata.launcher.core.ui.AppPickerTexts
 import app.strata.launcher.core.ui.Button
 import app.strata.launcher.core.ui.Checkbox
 import app.strata.launcher.core.ui.OutlinedButton
@@ -173,38 +176,21 @@ private fun ColumnScope.FavoritesStep(
 ) {
     Heading(stringResource(R.string.onboarding_favorites_title), Modifier.padding(top = 16.dp))
     Body(pluralStringResource(R.plurals.onboarding_favorites_body, FavoritesRepository.MAX, FavoritesRepository.MAX))
-    Text(
-        text = stringResource(R.string.onboarding_favorites_count, state.pickedCount, FavoritesRepository.MAX),
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.padding(top = 8.dp).testTag(OnboardingTestTags.FAVORITES_COUNT),
+    AppPicker(
+        apps = state.apps,
+        query = state.query,
+        picked = state.picked,
+        limitReached = state.limitReached,
+        texts =
+            AppPickerTexts(
+                count = stringResource(R.string.onboarding_favorites_count, state.pickedCount, FavoritesRepository.MAX),
+                limit = stringResource(R.string.onboarding_favorites_limit, FavoritesRepository.MAX),
+                search = stringResource(R.string.onboarding_favorites_search),
+            ),
+        tags = PICKER_TAGS,
+        onQuery = { onAction(OnboardingAction.Query(it)) },
+        onToggle = { onAction(OnboardingAction.TogglePick(it)) },
     )
-    if (state.limitReached) {
-        Text(
-            text = stringResource(R.string.onboarding_favorites_limit, FavoritesRepository.MAX),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
-            modifier =
-                Modifier
-                    .testTag(OnboardingTestTags.FAVORITES_LIMIT)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-        )
-    }
-    OutlinedTextField(
-        value = state.query,
-        onValueChange = { onAction(OnboardingAction.Query(it)) },
-        label = { Text(stringResource(R.string.onboarding_favorites_search)) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag(OnboardingTestTags.FAVORITES_SEARCH),
-    )
-    val apps = state.apps
-    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().testTag(OnboardingTestTags.FAVORITES)) {
-        if (apps != null) {
-            items(apps, key = { it.key.component + ":" + it.key.userSerial }) { app ->
-                PickRow(app, picked = app.key in state.picked) { onAction(OnboardingAction.TogglePick(app.key)) }
-            }
-        }
-    }
     Buttons {
         TextButton(
             onClick = { onAction(OnboardingAction.SkipFavorites) },
@@ -218,27 +204,14 @@ private fun ColumnScope.FavoritesStep(
     }
 }
 
-@Composable
-private fun PickRow(
-    app: VisibleApp,
-    picked: Boolean,
-    onToggle: () -> Unit,
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .focusRing()
-                .toggleable(value = picked, role = Role.Checkbox, onValueChange = { onToggle() })
-                .testTag(OnboardingTestTags.pick(app.key)),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Checkbox(checked = picked, onCheckedChange = null)
-        Text(text = app.displayLabel, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-    }
-}
+private val PICKER_TAGS =
+    AppPickerTags(
+        search = OnboardingTestTags.FAVORITES_SEARCH,
+        list = OnboardingTestTags.FAVORITES,
+        count = OnboardingTestTags.FAVORITES_COUNT,
+        limit = OnboardingTestTags.FAVORITES_LIMIT,
+        row = OnboardingTestTags::pick,
+    )
 
 /** J-01 step 3 and the step-4 result cards (FR-ONBOARD-02/03). */
 @Composable

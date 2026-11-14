@@ -37,6 +37,7 @@ import app.strata.launcher.core.platformapi.system.RoleController
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeRepository
+import app.strata.launcher.core.ui.AppPickerLogic
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,6 +50,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -174,6 +176,8 @@ data class HomeUiState(
     /** FAVEDIT working order. */
     val favEdit: List<VisibleApp> = emptyList(),
     val favEditAnnouncement: FavoriteMoved? = null,
+    /** The "Add apps" picker of Edit favourites, when open (FR-FAV-02). */
+    val favPicker: FavPickerUi? = null,
     val listJump: ListJump? = null,
     /** FR-GEST-03: the double-tap lock is turned on in Strata (API 28+). */
     val lockGestureOn: Boolean = false,
@@ -341,6 +345,24 @@ sealed interface HomeAction {
 
     data class AddInEdit(val key: AppKey) : HomeAction
 
+    /** Undo of a removal in Edit favourites: [key] goes back to [index]. */
+    data class UndoRemoveFromEdit(val key: AppKey, val index: Int) : HomeAction
+
+    /** "Add apps" in Edit favourites: the picker, with the current favourites checked. */
+    data object OpenFavPicker : HomeAction
+
+    /** Home without favourites: "Add favourites" opens the picker directly; confirming saves and returns home. */
+    data object AddFavoritesFromHome : HomeAction
+
+    data class FavPickerQuery(val text: String) : HomeAction
+
+    data class FavPickerToggle(val key: AppKey) : HomeAction
+
+    /** Applies the picks: unchecked favourites leave, new ones are appended in pick order. */
+    data object FavPickerConfirm : HomeAction
+
+    data object FavPickerCancel : HomeAction
+
     /** Drag start / drop in FAVEDIT (haptics `GESTURE_START` / `GESTURE_END`). */
     data class FavoriteDrag(val started: Boolean) : HomeAction
 
@@ -366,6 +388,9 @@ sealed interface HomeEffect {
 
     /** J-05: snackbar "Hidden. [Undo]" for 5 s. */
     data class Hidden(val key: AppKey) : HomeEffect
+
+    /** Edit favourites: "<label> removed from favourites. [Undo]" for 5 s, the J-05 pattern. */
+    data class FavoriteRemoved(val key: AppKey, val index: Int, val label: String) : HomeEffect
 
     /** INTERACTION_SPEC §8: the sheet's app was removed while the sheet was open. */
     data object AppRemoved : HomeEffect
@@ -416,6 +441,23 @@ private data class Local(
     val favEdit: List<AppKey> = emptyList(),
     val announcement: FavoriteMoved? = null,
     val jump: ListJump? = null,
+    val picker: FavPicker? = null,
+)
+
+/** The picker's working state: [picked] in pick order; [standalone] = opened from home's empty state. */
+private data class FavPicker(
+    val picked: List<AppKey>,
+    val query: String = "",
+    val limitReached: Boolean = false,
+    val standalone: Boolean = false,
+)
+
+/** What the picker shows: the visible apps (no hidden, no private space) matching [query]. */
+data class FavPickerUi(
+    val apps: List<VisibleApp>,
+    val query: String,
+    val picked: List<AppKey>,
+    val limitReached: Boolean,
 )
 
 /** One VM for home, list, sheet, home menu and FAVEDIT, so the layers share state (ARCHITECTURE §5). */
@@ -610,6 +652,15 @@ class HomeViewModel(
                 sheetApp = sheetApp,
                 favEdit = ui.favEdit.mapNotNull { shown[it] },
                 favEditAnnouncement = ui.announcement,
+                favPicker =
+                    ui.picker?.let { p ->
+                        FavPickerUi(
+                            apps = AppPickerLogic.filter(pickable(list), p.query),
+                            query = p.query,
+                            picked = p.picked,
+                            limitReached = p.limitReached,
+                        )
+                    },
                 listJump = ui.jump,
                 lockGestureOn = lockService.supported && s?.lockGestureEnabled == true,
                 lockServiceEnabled = lockEnabled,
@@ -865,7 +916,48 @@ class HomeViewModel(
             }
 
             is HomeAction.RemoveFromEdit -> {
-                local.update { it.copy(favEdit = it.favEdit - action.key) }
+                removeFromEdit(action.key)
+            }
+
+            is HomeAction.UndoRemoveFromEdit -> {
+                local.update { ui ->
+                    if (ui.layer != HomeLayer.FAV_EDIT || action.key in ui.favEdit ||
+                        ui.favEdit.size >= FavoritesRepository.MAX
+                    ) {
+                        ui
+                    } else {
+                        val list = ui.favEdit.toMutableList()
+                        list.add(action.index.coerceIn(0, list.size), action.key)
+                        ui.copy(favEdit = list)
+                    }
+                }
+            }
+
+            HomeAction.OpenFavPicker -> {
+                local.update { it.copy(picker = FavPicker(picked = it.favEdit)) }
+            }
+
+            HomeAction.AddFavoritesFromHome -> {
+                editFavorites()
+                local.update { it.copy(picker = FavPicker(picked = it.favEdit, standalone = true)) }
+            }
+
+            is HomeAction.FavPickerQuery -> {
+                local.update { ui -> ui.copy(picker = ui.picker?.copy(query = action.text)) }
+            }
+
+            is HomeAction.FavPickerToggle -> {
+                pickerToggle(action.key)
+            }
+
+            HomeAction.FavPickerConfirm -> {
+                pickerConfirm()
+            }
+
+            HomeAction.FavPickerCancel -> {
+                val standalone = local.value.picker?.standalone == true
+                local.update { it.copy(picker = null) }
+                if (standalone) local.update { it.copy(layer = HomeLayer.REST, favEdit = emptyList()) }
             }
 
             is HomeAction.AddInEdit -> {
@@ -1207,9 +1299,23 @@ class HomeViewModel(
     }
 
     private fun editFavorites() {
+        // Opened from Settings while home is still starting: wait for the list, or Done would save an empty set.
+        if (state.value.list == null) {
+            viewModelScope.launch {
+                state.first { it.list != null }
+                editFavorites()
+            }
+            return
+        }
         val order = state.value.favorites.map { it.key }
         local.update {
-            it.copy(layer = HomeLayer.FAV_EDIT, modal = HomeModal.None, favEdit = order, announcement = null)
+            it.copy(
+                layer = HomeLayer.FAV_EDIT,
+                modal = HomeModal.None,
+                favEdit = order,
+                announcement = null,
+                picker = null,
+            )
         }
     }
 
@@ -1258,9 +1364,54 @@ class HomeViewModel(
         }
     }
 
+    private fun removeFromEdit(key: AppKey) {
+        val index = local.value.favEdit.indexOf(key)
+        if (index < 0) return
+        local.update { it.copy(favEdit = it.favEdit - key) }
+        val label = appOf(key)?.displayLabel ?: return
+        effectChannel.trySend(HomeEffect.FavoriteRemoved(key, index, label))
+    }
+
+    /** Apps the picker offers: shown, not hidden, not in private space (P-5: nothing about them is stored). */
+    private fun pickable(list: AppList?): List<VisibleApp> =
+        list
+            ?.sections
+            ?.flatMap { it.apps }
+            ?.filter { !it.hidden && it.profileKind != ProfileKind.PRIVATE && !isPrivate(it.key) }
+            .orEmpty()
+
+    private fun pickerToggle(key: AppKey) {
+        local.update { ui ->
+            val p = ui.picker ?: return@update ui
+            val next = AppPickerLogic.toggle(p.picked, key, FavoritesRepository.MAX)
+            ui.copy(
+                picker =
+                    if (next ==
+                        null
+                    ) {
+                        p.copy(limitReached = true)
+                    } else {
+                        p.copy(picked = next, limitReached = false)
+                    },
+            )
+        }
+    }
+
+    private fun pickerConfirm() {
+        val p = local.value.picker ?: return
+        val kept = local.value.favEdit.filter { it in p.picked }
+        val order = (kept + p.picked.filterNot { it in kept }).take(FavoritesRepository.MAX)
+        if (p.standalone) {
+            saveFavEdit(order)
+            local.update { it.copy(layer = HomeLayer.REST, favEdit = emptyList(), announcement = null, picker = null) }
+        } else {
+            local.update { it.copy(favEdit = order, picker = null) }
+        }
+    }
+
     private fun doneEditing() {
         saveFavEdit(local.value.favEdit)
-        local.update { it.copy(layer = HomeLayer.REST, favEdit = emptyList(), announcement = null) }
+        local.update { it.copy(layer = HomeLayer.REST, favEdit = emptyList(), announcement = null, picker = null) }
     }
 
     /** FR-FAV-02: the edited order replaces the shown favourites in one transaction (removed ones deleted). */

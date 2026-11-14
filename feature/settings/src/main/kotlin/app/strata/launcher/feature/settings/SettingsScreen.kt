@@ -146,6 +146,7 @@ fun SettingsRoute(
                     is SettingsEffect.OpenHomeSettings,
                     SettingsEffect.RequestContacts,
                     SettingsEffect.OpenThemes,
+                    SettingsEffect.EditFavorites,
                     -> null
                 }
             if (text != null) {
@@ -236,6 +237,13 @@ private fun SettingsRoot(
                     summary = stringResource(R.string.settings_uninstall_strata_summary),
                     tag = SettingsTestTags.UNINSTALL_STRATA,
                 ) { onAction(SettingsAction.UninstallStrata) }
+            }
+            item {
+                ActionRow(
+                    title = stringResource(R.string.settings_favorites),
+                    summary = stringResource(R.string.settings_favorites_summary),
+                    tag = SettingsPageTags.FAVORITES,
+                ) { onAction(SettingsAction.EditFavorites) }
             }
             toggle(Toggle.HOME_PRESS_OPENS_SEARCH, R.string.settings_home_press_search, s, onAction)
             toggle(Toggle.HIDE_STATUS_BAR, R.string.settings_hide_status_bar, s, onAction)

@@ -192,3 +192,63 @@ layer and no modal (sheet, dialog, menu). Otherwise `NONE`. The bubble work of �
 ### Manual check on the A56
 Gesture navigation on. On home, tap the search pill, then swipe back from the right edge at the height of the index:
 search closes. Same from the list's search field, and with an app's sheet open over the list (the sheet closes).
+
+## 5. Feature: "Add a way to modify what your favourite apps are" (Proposed, owner request)
+
+Before: favourites were added or removed one at a time from the app sheet; Edit favourites reordered, removed with a
+text button (draft, no Undo) and listed every other app as an "Add X" row below the favourites. The owner did not find
+it. Now Edit favourites is the one place to manage the set (PRODUCT_SPEC FR-FAV-01/02 and INTERACTION_SPEC J-07
+updated, marked Proposed).
+
+- **Remove:** each row has an × control (48 dp, `focusRing`, spoken "Remove <label> from favourites"). The row goes at
+  once; a 5 s snackbar "<label> removed from favourites [Undo]" (the J-05 hide pattern, `showTimed`, `UNDO_MS`) puts
+  it back at its old position. Removals, like every edit, are saved by Done or Back in one `saveEdit` transaction
+  (the repository's serialised write, off the main thread). The a11y "Remove" action and the Move actions stay.
+- **Add apps:** an "Add apps" button opens the picker: the onboarding checklist extracted to `:core:ui`
+  `AppPicker` (+ `AppPickerLogic.filter/toggle`), now used by both onboarding and Edit favourites. It lists the
+  visible apps (hidden apps and private space left out, P-5), current favourites checked, search by label, the cap of
+  12 with a limit line. Done applies: unchecked favourites leave, new picks are appended in pick order; Cancel or Back
+  changes nothing. At 12 favourites the editor shows the cap line above the button.
+- **Entries:** home menu "Edit favourites" and the app sheet's "Edit favourites" (unchanged); new Settings → Home →
+  "Favourites" row, which starts `HomeActivity` with the internal action `app.strata.launcher.action.EDIT_FAVORITES`
+  (explicit intent, no extras; home reads only the action). Home opened that way waits for its list before entering
+  the editor, so Done can never save an empty set. Home without favourites: "Add favourites" (INTERACTION_SPEC §8)
+  now opens the picker directly; its Done saves and returns home.
+- **Strings:** en and de (`fav_remove_named`, `fav_removed`, `fav_picker_*`, `settings_favorites*`); the unused
+  `fav_add_app` was removed.
+- **Tests:** `FavoritesManageTest` T-FAV-06 (remove + Undo, removal saved, control name and 48 dp), T-FAV-07 (picker:
+  checked favourites, search, append, uncheck removes, Cancel, hidden apps not offered), T-FAV-08 (cap);
+  `FavoritesEntryTest` T-FAV-09 (Settings row → home in Edit favourites); `HomeScreenTest.emptyFavouritesOfferPicker`
+  updated. The picker joined `AccessibilityScenarios` (keyboard walk, touch targets, large text, pseudo-locales) and
+  `ContrastTest` (all presets, light and dark). TEST_PLAN rows T-FAV-06…09 added; traceability regenerated.
+- **Manual check on the A56:** home menu → Edit favourites: tap × on one (it goes, Undo brings it back), "Add apps",
+  search, check two, Done, Done: home shows them at the end. Settings → Home → Favourites opens the same editor.
+
+## 6. Review fixes (PR #32)
+
+1. **Contrast check skipped text drawn in the background colour.** `Shot.sample` returned "not drawn" when no pixel
+   differed, which is exactly black-on-#000000. Now only a line box that is entirely off screen or clipped is
+   skipped; a uniform region is a 1:1 failure. `ContrastChecksTest.noColourTextOnMidnightOled_fails` draws a `Text`
+   with Compose's default black on Midnight OLED and gets one failure at ~1:1; the themed text passes.
+5. **Foreground sampling** (same function, `contrastOf`): the text colour is weighted by pixel count: of the pixels
+   that differ from the background, ranked by contrast, the one at the top 5 % (at least the 3rd). A few bright
+   pixels of an icon edge or divider can no longer stand in for dim text (`strongEdgeDoesNotHideWeakText`); a pure
+   "largest colour cluster" rule was tried first and rejected because thin glyphs (the editor's "←") have no solid
+   core, so it measured their antialiasing. The stricter checks also exposed two sampler issues, fixed: centred
+   index letters are laid out wider than their node, so the node's bounds are sampled when the line box lies mostly
+   outside them; and the JSON view case is scoped to the JSON view, which covers the editor form in the same window.
+   With these, `ContrastTest` reports 0 failures on this branch.
+2. **Exclusion under onboarding:** `indexTouchable` now also needs `!state.showOnboarding`
+   (`BackFromEitherEdgeTest.onboardingOverHome_noExclusion`).
+3. **Letter grid and overlays:** `!letterGrid` added; the widget menu (the `overlay()` content from `:app`) is
+   reported through a new `HomeRoute(overlayModal = …)` parameter fed from the widget area's `menuOpen`; it is the only
+   overlay content (`letterGrid_noExclusion`).
+4. **Onboarding store vs saved state:** with a saved step, the stored step is adopted only when it is further on; only
+   a host without saved state takes the store as is. `persist` is monotonic inside `settings.update`: it never lowers
+   the stored progress except for an explicit Back. Tests `savedRoleRequested_storeBehind_keepsSavedStep` (handle at
+   ROLE_REQUESTED, store at FAVORITES, role held → Done, store DONE) and `persistNeverLowersExceptBack`.
+6. **`OnboardingDeviceTest` `@After`:** when HOME had no holder at the start, Strata is removed again with
+   `cmd role remove-role-holder --user <id> android.app.role.HOME <pkg>`.
+7. **Timeouts:** a shared `DEVICE_TIMEOUT_MS` in `DeviceState.kt`; the onboarding device test waits on the settings
+   flow (`first { … }` under `withTimeoutOrNull`) instead of spinning on `waitForIdleSync`, and `HomeDeviceTest` uses
+   `UiDevice.wait(Until.hasObject / Until.gone)` with it.
