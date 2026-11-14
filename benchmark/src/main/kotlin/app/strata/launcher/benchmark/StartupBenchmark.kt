@@ -83,10 +83,20 @@ class StartupBenchmark {
     @Test
     fun tPerf12_coldStartNoProfile() = coldStart(CompilationMode.None(), iterations = 10)
 
-    /** T-PERF-12, "with": the APK's Baseline Profile applied (fails if the APK has none). Recorded, not gated. */
+    /**
+     * T-PERF-12, "with": the APK's Baseline Profile applied. Recorded, not gated. On the device gate (a physical
+     * device, after `app/src/main/baseline-prof.txt` is committed) the profile is required, so a missing one fails.
+     * On the CI emulator (correctness run, dry run) it is used if available, so the job does not depend on a profile.
+     */
     @Test
     fun tPerf12_coldStartBaselineProfile() =
-        coldStart(CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require), iterations = 10)
+        coldStart(
+            CompilationMode.Partial(
+                baselineProfileMode =
+                    if (BudgetGate.enforced) BaselineProfileMode.Require else BaselineProfileMode.UseIfAvailable,
+            ),
+            iterations = 10,
+        )
 
     private fun coldStart(
         mode: CompilationMode,

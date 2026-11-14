@@ -12,7 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-${{ github.ref }}
+  # The event name keeps a manual run and the scheduled run in separate groups, so neither cancels the other.
+  group: nightly-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:

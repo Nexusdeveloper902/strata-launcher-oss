@@ -24,7 +24,8 @@ import org.junit.runner.RunWith
  * 220×300 dp to 1920×1200 dp with `wm density 160` (1 dp = 1 px, so the large end stays a cheap 1920×1200 surface) and
  * `wm size`. HomeActivity handles size and density changes in place (configChanges, ANDROID_PLATFORM §22): after every
  * step home is still composed with its root and pill (no crash, no blank state). Split-screen and free-form windows are
- * T-COMPAT-07 on the API 36 desktop/foldable emulators and RD-5 (manual pass sheet). The display is always reset.
+ * T-COMPAT-07 on the API 36 desktop/foldable emulators and RD-5 (manual pass sheet). The display's own size and density
+ * overrides (e.g. Screen zoom) are recorded first and restored exactly; only values that had no override are reset.
  */
 @RunWith(AndroidJUnit4::class)
 class WindowSizesDeviceTest {
@@ -35,9 +36,14 @@ class WindowSizesDeviceTest {
 
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
+    /** The display overrides found before the test (e.g. Samsung Screen zoom), restored exactly afterwards. */
+    private var savedSize: String? = null
+    private var savedDensity: String? = null
+
     @Before
     fun ready() {
-        resetDisplay()
+        savedSize = override(shell("wm size"), "Override size:")
+        savedDensity = override(shell("wm density"), "Override density:")
         compose.waitForIdle()
         compose.passOnboarding()
         compose.waitUntil(10_000) { count(HomeTestTags.ROOT) > 0 }
@@ -45,7 +51,7 @@ class WindowSizesDeviceTest {
 
     @After
     fun tearDown() {
-        resetDisplay()
+        restoreDisplay()
         var owned: HomeActivity? = null
         runCatching { compose.activityRule.scenario.onActivity { owned = it } }
         compose.coverForeignActivities(HomeActivity::class.java, owned)
@@ -77,11 +83,25 @@ class WindowSizesDeviceTest {
 
     private fun count(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().size
 
-    private fun resetDisplay() {
-        shell("wm size reset")
-        shell("wm density reset")
+    /** Puts back the owner's own overrides; resets only what had no override before. */
+    private fun restoreDisplay() {
+        shell(savedSize?.let { "wm size $it" } ?: "wm size reset")
+        shell(savedDensity?.let { "wm density $it" } ?: "wm density reset")
         device.waitForIdle()
     }
+
+    /** `wm size` / `wm density` print `Physical …: v` and, when overridden, `Override …: v`. */
+    private fun override(
+        output: String,
+        label: String,
+    ): String? =
+        output
+            .lines()
+            .map(String::trim)
+            .firstOrNull { it.startsWith(label) }
+            ?.removePrefix(label)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
     private companion object {
         const val STEPS = 20

@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
  * T-PRIV-01 (NFR-PRIV-01, D-007): Strata opens no socket. Three independent proofs, all automated on every GMD run:
  * 1. Strata does not hold `INTERNET` (the permission gate T-CI-01 keeps it out of the manifest).
  * 2. The kernel refuses Strata's UID any IP socket: without the `inet` group, creating a TCP or UDP socket (IPv4 or
- *    IPv6, loopback included) fails with EACCES. The test runs in Strata's process and UID, so this is Strata's real
+ *    IPv6, loopback included) fails with EACCES (or EPERM where an eBPF filter enforces it). The test runs in Strata's process and UID, so this is Strata's real
  *    capability, not a policy check. It runs off the main thread (StrictMode network death stays armed for the app).
  * 3. After home, the list and search have run, `/proc/net/{tcp,tcp6,udp,udp6}` (read by the shell) lists no socket
  *    owned by Strata's UID.
@@ -72,10 +72,13 @@ class NoNetworkDeviceTest {
             for ((name, attempt) in attempts) {
                 val error = pool.submit(Callable { runCatching { attempt() }.exceptionOrNull() }).get()
                 assertWithMessage("$name socket opened by Strata's UID").that(error).isNotNull()
-                assertWithMessage("$name: expected EACCES (no inet group), got $error")
+                // EACCES: no inet group (classic paranoid networking). EPERM: kernels whose eBPF inet_create filter
+                // enforces the INTERNET permission. Either way the kernel refused the socket.
+                assertWithMessage("$name: expected EACCES or EPERM (no INTERNET), got $error")
                     .that(
                         generateSequence(error) { it.cause }.any {
                             "EACCES" in it.toString() ||
+                                "EPERM" in it.toString() ||
                                 it is SecurityException
                         },
                     ).isTrue()

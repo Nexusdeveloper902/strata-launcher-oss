@@ -18,8 +18,8 @@ import app.strata.launcher.appGraph
 import app.strata.launcher.awaitWindowFocus
 import app.strata.launcher.core.common.log.RingLogger
 import app.strata.launcher.coverForeignActivities
-import app.strata.launcher.diagnostics.StrictModeConfig
-import app.strata.launcher.diagnostics.StrictPenalty
+import app.strata.launcher.diagnostics.StrictModeSetup
+import app.strata.launcher.diagnostics.ThreadDeath
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.feature.settings.SettingsTestTags
@@ -64,10 +64,12 @@ class StrictModeCampaignDeviceTest {
             "StrictMode death is off in this build (-Pstrata.strictModeDeath=true)",
             BuildConfig.STRICT_MODE_DEATH,
         )
-        val config = StrictModeConfig.forDebug(StrictPenalty.DEATH, Build.VERSION.SDK_INT)
-        assertWithMessage(
-            "thread-policy death must cover every violation",
-        ).that(config.deathOnAllThreadViolations).isTrue()
+        // What the app really installed in this process (StrataApplication), not a config built here.
+        val installed = StrictModeSetup.installed
+        assertWithMessage("StrictMode was not installed by the app").that(installed).isNotNull()
+        assertWithMessage("installed thread policy must kill on every violation")
+            .that(StrictModeSetup.threadDeath(installed!!))
+            .isEqualTo(ThreadDeath.ALL)
         compose.waitForIdle()
         compose.passOnboarding()
         compose.waitUntil(
@@ -114,19 +116,37 @@ class StrictModeCampaignDeviceTest {
         // Penalty listeners run on their own executor: give them a moment, then read what reached the local log.
         Thread.sleep(LISTENER_SETTLE_MS)
         val logger = context.appGraph.logger
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || logger !is RingLogger) return
+        assumeTrue("violations reach the local log only on API 28+", Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+        assumeTrue("the app logger is not the ring logger", logger is RingLogger)
+        val testClasses = testApkClasses()
         val ours =
-            logger
+            (logger as RingLogger)
                 .snapshot()
                 .filter { it.tag == "StrictMode" }
                 .filter { e ->
                     e.throwable
                         ?.stackTrace
                         .orEmpty()
-                        .any { it.className.startsWith("app.strata.launcher") }
+                        .any { isStrataFrame(it.className, testClasses) }
                 }.map { "${it.message}: ${it.throwable?.stackTrace?.take(STACK_LINES)?.joinToString(" <- ")}" }
         assertWithMessage("StrictMode violations raised by Strata code").that(ours).isEmpty()
     }
+
+    /** Classes of the test APK (this test, DeviceState helpers, fixtures): their frames are not Strata's code. */
+    @Suppress("DEPRECATION")
+    private fun testApkClasses(): Set<String> {
+        val dex = dalvik.system.DexFile(instrumentation.context.packageCodePath)
+        return try {
+            dex.entries().toList().toSet()
+        } finally {
+            dex.close()
+        }
+    }
+
+    private fun isStrataFrame(
+        className: String,
+        testClasses: Set<String>,
+    ): Boolean = className.startsWith("app.strata.launcher") && className.substringBefore('$') !in testClasses
 
     private companion object {
         const val THEME_LIBRARY = "theme_library"

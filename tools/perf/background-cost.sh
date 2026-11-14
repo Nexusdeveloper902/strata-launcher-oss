@@ -15,6 +15,8 @@ mkdir -p "$out"
 echo "T-PERF-09: $pkg (uid $uid), $minutes min screen off -> $out/"
 echo "Unplug USB power if you can (wireless adb), or batterystats stops counting while charging."
 adb shell dumpsys batterystats --reset >/dev/null
+# Whatever happens (Ctrl-C, a failed adb call), the battery state is handed back to the system.
+trap 'adb shell dumpsys battery reset >/dev/null 2>&1 || true' EXIT INT TERM
 adb shell dumpsys battery unplug
 adb shell input keyevent KEYCODE_SLEEP
 sleep $((minutes * 60))
@@ -22,7 +24,6 @@ adb shell input keyevent KEYCODE_WAKEUP
 adb shell dumpsys batterystats --charged "$pkg" > "$out/batterystats.txt"
 adb shell dumpsys jobscheduler > "$out/jobscheduler.txt"
 adb shell dumpsys alarm > "$out/alarm.txt"
-adb shell dumpsys battery reset
 jobs=$(grep "JOB #" "$out/jobscheduler.txt" | grep -c "$pkg/" || true)
 alarms=$(grep "Alarm{" "$out/alarm.txt" | grep -c "$pkg" || true)
 # batterystats per-uid section: "Wake lock" and "Wakeup alarm" lines for the uid.

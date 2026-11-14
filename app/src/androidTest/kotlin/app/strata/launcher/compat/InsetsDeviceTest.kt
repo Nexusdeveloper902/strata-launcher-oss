@@ -66,9 +66,13 @@ class InsetsDeviceTest {
         compose.activityRule.scenario.onActivity { activity ->
             val view = activity.window.decorView
             val insets = ViewCompat.getRootWindowInsets(view)
-            val sys = insets?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            bars = Bars(sys?.top ?: 0, sys?.bottom ?: 0, view.height)
+            checkNotNull(insets) { "no root window insets on the home window" }
+            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            bars = Bars(sys.top, sys.bottom, view.height)
         }
+        // GMD phones (and every phone) have a status bar at rest: a zero top would make the clock check vacuous.
+        assertWithMessage("status bar inset (top) on the home window").that(bars.top).isGreaterThan(0)
+        assertWithMessage("window height").that(bars.height).isGreaterThan(0)
         return bars
     }
 

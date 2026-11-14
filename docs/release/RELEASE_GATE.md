@@ -82,6 +82,8 @@ cp "$(find benchmark/build/outputs -name '*generate-baseline-prof.txt' | head -1
 ```
 Commit `app/src/main/baseline-prof.txt` on a branch (it should list `app/strata/launcher/...` classes), then run
 `StartupBenchmark` and record `tPerf12_coldStartNoProfile` vs `tPerf12_coldStartBaselineProfile` medians.
+On a physical device `tPerf12_coldStartBaselineProfile` uses `BaselineProfileMode.Require` (a missing profile fails
+it), so run it only after the commit. In CI (emulator, dry run) it uses `UseIfAvailable` and needs no profile.
 
 ### 3.3 Start-up and theme (rows 2, 3, 13, 14)
 `StartupBenchmark` then `ThemeBenchmark` (§3.1 with `class=`). The `strata.*FirstMs` start-up sections in the JSON show

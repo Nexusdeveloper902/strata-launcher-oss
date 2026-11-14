@@ -67,14 +67,18 @@ class SearchBenchmark {
     @Test
     fun tPerf06_searchWithContacts() {
         val shell = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        // Only the fixture account counts (tools/perf/contacts2000.sh), never the owner's own contacts. The command is
+        // not run through a shell, so the where clause must not contain spaces.
         val contacts =
             shell
-                .executeShellCommand("content query --uri content://com.android.contacts/contacts --projection _id")
-                .lines()
+                .executeShellCommand(
+                    "content query --uri content://com.android.contacts/raw_contacts --projection _id " +
+                        "--where account_name='$FIXTURE_ACCOUNT'AND(deleted=0)",
+                ).lines()
                 .count { it.startsWith("Row:") }
-        BudgetGate.log("T-PERF-06: $contacts contacts on the device")
+        BudgetGate.log("T-PERF-06: $contacts CONTACTS2000 fixture contacts on the device")
         // Emulator (CI): no fixture contacts, nothing to measure. On a device a missing fixture is a failed precondition.
-        assumeTrue("no contacts on this emulator", contacts > 0 || BudgetGate.enforced)
+        assumeTrue("no CONTACTS2000 fixture on this emulator", contacts > 0 || BudgetGate.enforced)
         check(contacts >= CONTACTS2000) {
             "T-PERF-06 needs CONTACTS2000: run tools/perf/contacts2000.sh load ($contacts found)"
         }
@@ -121,5 +125,6 @@ class SearchBenchmark {
         const val RANK = "strata.searchRank"
         const val CONTACTS = "strata.contactsQuery"
         const val CONTACTS2000 = 2_000
+        const val FIXTURE_ACCOUNT = "strata-fixture"
     }
 }

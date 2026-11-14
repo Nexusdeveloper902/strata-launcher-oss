@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.junit.After
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -51,25 +52,34 @@ class MonkeyTest {
         BudgetGate.log("T-REL-01 short: $events events, seed $seed: $verdict")
         assertTrue("T-REL-01: $verdict\n${out.takeLast(OUTPUT_TAIL)}", verdict.passed)
 
+        // T-PRIV-01 on the release-like build. Both preconditions are explicit: no silent pass.
         val uid = uidOf(Strata.TARGET)
-        if (uid != null) {
-            val tables =
-                listOf(
-                    "tcp",
-                    "tcp6",
-                    "udp",
-                    "udp6",
-                ).associateWith { device.executeShellCommand("cat /proc/net/$it") }
-            val owned =
-                tables.flatMap { (t, text) ->
-                    text
-                        .lines()
-                        .drop(1)
-                        .filter { socketUid(it) == uid }
-                        .map { "$t: $it" }
-                }
-            assertTrue("T-PRIV-01: sockets owned by the target UID $uid:\n${owned.joinToString("\n")}", owned.isEmpty())
-        }
+        assertNotNull("T-PRIV-01: no UID for ${Strata.TARGET} from `cmd package list packages -U`", uid)
+        val tables =
+            listOf(
+                "tcp",
+                "tcp6",
+                "udp",
+                "udp6",
+            ).associateWith { device.executeShellCommand("cat /proc/net/$it") }
+        // The monkey verdict above has already passed; an unreadable /proc/net shows this test as skipped, not passed.
+        assumeTrue(
+            "T-PRIV-01: the shell cannot read /proc/net here (monkey passed): ${tables.mapValues {
+                it.value.take(
+                    80,
+                )
+            }}",
+            tables.values.all { "local_address" in it },
+        )
+        val owned =
+            tables.flatMap { (t, text) ->
+                text
+                    .lines()
+                    .drop(1)
+                    .filter { socketUid(it) == uid }
+                    .map { "$t: $it" }
+            }
+        assertTrue("T-PRIV-01: sockets owned by the target UID $uid:\n${owned.joinToString("\n")}", owned.isEmpty())
     }
 
     private fun uidOf(pkg: String): Int? =
