@@ -2,6 +2,7 @@ package app.strata.launcher.core.data.settings
 
 import app.strata.launcher.core.model.AppearanceSetting
 import app.strata.launcher.core.model.BadgeStyle
+import app.strata.launcher.core.model.OnboardingProgress
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.platformapi.settings.ResetCause
 import app.strata.launcher.testing.fakes.FakeResetNotices
@@ -106,6 +107,7 @@ class SettingsRepositoryTest {
                 privateSpaceContainerHidden = true,
                 listSortByUsage = true,
                 lockGestureEnabled = true,
+                onboardingProgress = OnboardingProgress.ROLE_REQUESTED,
             )
         val id =
             withRepo { repo ->

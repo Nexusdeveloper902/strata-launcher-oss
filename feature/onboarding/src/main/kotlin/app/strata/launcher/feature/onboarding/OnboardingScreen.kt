@@ -122,6 +122,8 @@ fun OnboardingRoute(
                 .semantics { testTagsAsResourceId = true }
                 .testTag(OnboardingTestTags.ROOT),
     ) {
+        // The stored step is still being read: draw only the background, never a wrong step (no Welcome flash).
+        if (!state.loaded) return@Surface
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 16.dp)) {
             Text(
                 text = stringResource(R.string.onboarding_step, state.stepNumber, OnboardingStep.entries.size),
