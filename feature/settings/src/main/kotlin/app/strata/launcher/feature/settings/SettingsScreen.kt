@@ -16,14 +16,13 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,7 +40,12 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.VisibleApp
+import app.strata.launcher.core.ui.DialogText
+import app.strata.launcher.core.ui.RadioButton
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.Switch
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.flow.Flow
 
 object SettingsTestTags {
@@ -120,6 +124,11 @@ fun SettingsRoute(
     /** FR-BACKUP-01…03 Backup page. */
     backup: BackupUiState = BackupUiState(),
     onBackupAction: (BackupAction) -> Unit = {},
+    /** About -> "Save diagnostic log" (ARCHITECTURE §11). */
+    diagnostics: DiagnosticLogUiState = DiagnosticLogUiState(),
+    onDiagnosticAction: (DiagnosticAction) -> Unit = {},
+    /** FR-SET-04: the system app-language page; null when the platform has none (API < 33). */
+    onLanguage: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val currentOnNavigate by rememberUpdatedState(onNavigate)
@@ -158,14 +167,37 @@ fun SettingsRoute(
                 .semantics { testTagsAsResourceId = true },
     ) {
         when (page) {
-            SettingsPage.ROOT -> SettingsRoot(state, onAction, onPage)
-            SettingsPage.HIDDEN_APPS -> HiddenAppsPage(state, onAction)
-            SettingsPage.ICONS -> IconCoveragePage(icons, onIconsAction)
-            SettingsPage.BACKUP -> BackupPage(backup, onBackupAction)
-            SettingsPage.PRIVACY -> PrivacyPage(state, onAction)
-            SettingsPage.ABOUT -> AboutPage(state) { onPage(SettingsPage.LICENCES) }
-            SettingsPage.LICENCES -> LicencesPage(state, onAction) { onPage(SettingsPage.LICENCE_TEXT) }
-            SettingsPage.LICENCE_TEXT -> LicenceTextPage(state)
+            SettingsPage.ROOT -> {
+                SettingsRoot(state, onAction, onPage)
+            }
+
+            SettingsPage.HIDDEN_APPS -> {
+                HiddenAppsPage(state, onAction)
+            }
+
+            SettingsPage.ICONS -> {
+                IconCoveragePage(icons, onIconsAction)
+            }
+
+            SettingsPage.BACKUP -> {
+                BackupPage(backup, onBackupAction)
+            }
+
+            SettingsPage.PRIVACY -> {
+                PrivacyPage(state, onAction)
+            }
+
+            SettingsPage.ABOUT -> {
+                AboutPage(state, { onPage(SettingsPage.LICENCES) }, diagnostics, onDiagnosticAction, onLanguage)
+            }
+
+            SettingsPage.LICENCES -> {
+                LicencesPage(state, onAction) { onPage(SettingsPage.LICENCE_TEXT) }
+            }
+
+            SettingsPage.LICENCE_TEXT -> {
+                LicenceTextPage(state)
+            }
         }
         if (state.showLockDisclosure) LockDisclosure(onAction)
         if (state.optional.showBadgeDisclosure) BadgeDisclosure(state.optional.restrictedSettingsHint, onAction)
@@ -396,7 +428,7 @@ private fun LockDisclosure(onAction: (SettingsAction) -> Unit) {
     AlertDialog(
         onDismissRequest = { onAction(SettingsAction.DismissLockDisclosure) },
         title = { Text(text = stringResource(R.string.settings_lock_disclosure_title)) },
-        text = { Text(text = stringResource(R.string.settings_lock_disclosure_body)) },
+        text = { DialogText(stringResource(R.string.settings_lock_disclosure_body)) },
         confirmButton = {
             TextButton(
                 onClick = { onAction(SettingsAction.AcceptLockDisclosure) },
@@ -522,7 +554,10 @@ private fun BadgeDisclosure(
         onDismissRequest = { onAction(SettingsAction.DismissBadgeDisclosure) },
         title = { Text(text = stringResource(R.string.settings_badge_disclosure_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
                 Text(text = stringResource(R.string.settings_badge_disclosure_body))
                 if (restrictedHint) Text(text = stringResource(R.string.settings_badges_restricted_hint))
             }
@@ -548,7 +583,7 @@ private fun ContactsDisclosure(onAction: (SettingsAction) -> Unit) {
     AlertDialog(
         onDismissRequest = { onAction(SettingsAction.DismissContactsDisclosure) },
         title = { Text(text = stringResource(R.string.settings_contacts_disclosure_title)) },
-        text = { Text(text = stringResource(R.string.settings_contacts_disclosure_body)) },
+        text = { DialogText(stringResource(R.string.settings_contacts_disclosure_body)) },
         confirmButton = {
             TextButton(
                 onClick = { onAction(SettingsAction.AcceptContactsDisclosure) },
@@ -570,7 +605,7 @@ private fun UninstallGuidance(onAction: (SettingsAction) -> Unit) {
     AlertDialog(
         onDismissRequest = { onAction(SettingsAction.DismissUninstallGuidance) },
         title = { Text(text = stringResource(R.string.settings_uninstall_guidance_title)) },
-        text = { Text(text = stringResource(R.string.settings_uninstall_guidance_body)) },
+        text = { DialogText(stringResource(R.string.settings_uninstall_guidance_body)) },
         confirmButton = {
             TextButton(
                 onClick = { onAction(SettingsAction.UninstallGuidanceContinue) },
@@ -645,6 +680,7 @@ internal fun SwitchRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .focusRing()
                 .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .testTag(tag),
@@ -673,6 +709,7 @@ internal fun RadioRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .focusRing()
                 .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .testTag(tag),
@@ -709,6 +746,7 @@ internal fun ActionRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .focusRing()
                 .clickable(role = Role.Button, onClick = onClick)
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier),

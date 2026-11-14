@@ -56,7 +56,7 @@ data class StrataTypography(
 )
 
 private val LocalResolvedTheme = staticCompositionLocalOf { StrataDefault.resolved(systemDark = false) }
-private val LocalStrataColors = staticCompositionLocalOf { colorsOf(StrataDefault.resolved(systemDark = false)) }
+internal val LocalStrataColors = staticCompositionLocalOf { colorsOf(StrataDefault.resolved(systemDark = false)) }
 private val LocalStrataTypography =
     staticCompositionLocalOf { typographyOf(StrataDefault.resolved(systemDark = false)) }
 

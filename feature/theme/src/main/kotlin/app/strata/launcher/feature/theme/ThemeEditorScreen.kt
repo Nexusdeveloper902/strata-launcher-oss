@@ -22,19 +22,15 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -59,6 +56,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.json.JsonBool
 import app.strata.launcher.core.json.JsonNumber
@@ -75,6 +73,14 @@ import app.strata.launcher.core.theme.editor.FieldKind
 import app.strata.launcher.core.theme.editor.PairCheck
 import app.strata.launcher.core.theme.model.Variant
 import app.strata.launcher.core.theme.parse.ThemeError
+import app.strata.launcher.core.ui.Checkbox
+import app.strata.launcher.core.ui.DialogText
+import app.strata.launcher.core.ui.FilterChip
+import app.strata.launcher.core.ui.Slider
+import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.Switch
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.flow.Flow
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -156,11 +162,15 @@ fun ThemeEditorRoute(
     val context = LocalContext.current
     val pick by rememberUpdatedState(onPickImage)
     val scroll = rememberScrollState()
+    val animateScroll = Strata.theme.animation.enabled
     LaunchedEffect(effects) {
         effects.collect { e ->
             when (e) {
                 EditorEffect.PickImage -> pick()
-                EditorEffect.ScrollToPreview -> scroll.animateScrollTo(0)
+
+                // NFR-A11Y-05: a jump with reduced motion.
+                EditorEffect.ScrollToPreview -> if (animateScroll) scroll.animateScrollTo(0) else scroll.scrollTo(0)
+
                 is EditorEffect.Message -> Toast.makeText(context, messageText(e.message), Toast.LENGTH_SHORT).show()
             }
         }
@@ -264,7 +274,8 @@ private fun TopBar(
                 state.document?.name ?: stringResource(R.string.editor_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             if (state.dirty) {
                 Text(
@@ -274,6 +285,12 @@ private fun TopBar(
                 )
             }
         }
+    }
+    // The actions scroll sideways, so the title keeps its width at large text sizes (NFR-A11Y-02).
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         TextButton(
             onClick = { onAction(EditorAction.Undo) },
             enabled = state.canUndo,
@@ -284,11 +301,6 @@ private fun TopBar(
             enabled = state.canRedo,
             modifier = Modifier.testTag(EditorTestTags.REDO),
         ) { Text(stringResource(R.string.editor_redo)) }
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
         TextButton(onClick = { onAction(EditorAction.OpenJson) }, modifier = Modifier.testTag(EditorTestTags.JSON)) {
             Text(stringResource(R.string.editor_json))
         }
@@ -369,7 +381,7 @@ private fun DraftOfferCard(onAction: (EditorAction) -> Unit) {
     AlertDialog(
         onDismissRequest = {},
         modifier = Modifier.testTag(EditorTestTags.DRAFT_OFFER),
-        text = { Text(stringResource(R.string.editor_draft_offer)) },
+        text = { DialogText(stringResource(R.string.editor_draft_offer)) },
         confirmButton = {
             TextButton(
                 onClick = { onAction(EditorAction.RestoreDraft) },
@@ -488,6 +500,7 @@ private fun GroupSection(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .focusRing()
                 .clickable { onAction(EditorAction.Expand(if (expanded) null else group.key)) }
                 .semantics {
                     heading()
@@ -712,12 +725,15 @@ private fun ColourControl(
         Box(
             modifier =
                 Modifier
-                    .size(40.dp)
-                    .background(Color(argb), RoundedCornerShape(8.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                    // A 40 dp swatch inside a 48 dp target (NFR-A11Y-03).
+                    .size(48.dp)
+                    .focusRing()
                     .clickable { open = !open }
                     .testTag(EditorTestTags.swatch(field.id))
-                    .semantics { contentDescription = swatchDescription },
+                    .semantics { contentDescription = swatchDescription }
+                    .padding(4.dp)
+                    .background(Color(argb), RoundedCornerShape(8.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
         )
         Text(
             Rgb.toHex(argb),
@@ -762,6 +778,7 @@ private fun ColourControl(
                         Modifier
                             .size(48.dp)
                             .background(Color(s), RoundedCornerShape(24.dp))
+                            .focusRing()
                             .clickable { onAction(EditorAction.Set(field.id, s)) }
                             .semantics { contentDescription = Rgb.toHex(s) },
                 )
@@ -839,13 +856,16 @@ private fun ImageSection(
         modifier =
             Modifier
                 .padding(horizontal = 8.dp)
-                .clickable { onAction(EditorAction.KeepImageAsWallpaper(!state.keepImageAsWallpaper)) }
-                .testTag(EditorTestTags.KEEP_IMAGE),
+                .heightIn(min = 48.dp)
+                .focusRing()
+                // One focus stop with the label as its name; the box only shows the state (NFR-A11Y-01).
+                .toggleable(
+                    value = state.keepImageAsWallpaper,
+                    role = Role.Checkbox,
+                    onValueChange = { onAction(EditorAction.KeepImageAsWallpaper(it)) },
+                ).testTag(EditorTestTags.KEEP_IMAGE),
     ) {
-        Checkbox(
-            checked = state.keepImageAsWallpaper,
-            onCheckedChange = { onAction(EditorAction.KeepImageAsWallpaper(it)) },
-        )
+        Checkbox(checked = state.keepImageAsWallpaper, onCheckedChange = null)
         Text(stringResource(R.string.editor_keep_image), color = MaterialTheme.colorScheme.onBackground)
     }
 }

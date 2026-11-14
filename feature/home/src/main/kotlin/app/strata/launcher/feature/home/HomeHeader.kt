@@ -39,40 +39,179 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.strata.launcher.core.theme.model.ClockStyle
 import app.strata.launcher.core.theme.model.HourFormat
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import app.strata.launcher.core.theme.model.Alignment as ThemeAlignment
 
-/** Clock text for one instant (VISUAL_SPEC §9.4); pure so the 12/24 h rules are unit-tested. */
-data class ClockText(val hours: String, val minutes: String, val seconds: String?, val period: String?)
+/**
+ * Clock text for one instant (VISUAL_SPEC §9.4, NFR-I18N-04): the pieces of the locale's best time pattern for the
+ * `Hm`/`hm` skeleton (plus `s`), so separator, digits and the position of the day period follow the locale; only the
+ * 12/24 h choice comes from the caller (system setting or theme override).
+ */
+data class ClockText(
+    val hours: String,
+    val minutes: String,
+    val seconds: String?,
+    val period: String?,
+    val separator: String = ":",
+    /** The day period comes before the time (e.g. ja `午後9:05`). */
+    val periodFirst: Boolean = false,
+    /** The whole time as the locale writes it; the spoken text. */
+    val full: String = "",
+    /**
+     * The time without the day period, with the locale's own literals between and around the fields (fr-CA
+     * `21 h 05 min 07 s`, bg `21:05:07 ч.`).
+     */
+    val time: String = listOfNotNull(hours, minutes, seconds).joinToString(separator),
+)
 
 object ClockFormat {
+    fun pattern(
+        use24h: Boolean,
+        showSeconds: Boolean,
+        locale: Locale,
+    ): String {
+        val skeleton = (if (use24h) "Hm" else "hm") + if (showSeconds) "s" else ""
+        val best = runCatching { DateFormat.getBestDateTimePattern(locale, skeleton) }.getOrNull()
+        return best?.takeIf { p -> p.any { it in HOUR_LETTERS } && p.contains('m') }
+            ?: ((if (use24h) "HH:mm" else "h:mm") + (if (showSeconds) ":ss" else "") + if (use24h) "" else " a")
+    }
+
     fun format(
         millis: Long,
         use24h: Boolean,
         showSeconds: Boolean,
         locale: Locale,
+        timeZone: TimeZone = TimeZone.getDefault(),
+    ): ClockText = format(millis, use24h, showSeconds, locale, timeZone, pattern(use24h, showSeconds, locale))
+
+    /**
+     * [pattern] as the clock shows it. A pattern the platform's formatter rejects falls back to `HH:mm` / `h:mm a`
+     * (plus seconds), so a bad locale pattern can never throw on every tick.
+     */
+    internal fun format(
+        millis: Long,
+        use24h: Boolean,
+        showSeconds: Boolean,
+        locale: Locale,
+        timeZone: TimeZone,
+        pattern: String,
+    ): ClockText =
+        try {
+            render(millis, use24h, showSeconds, locale, timeZone, pattern)
+        } catch (e: RuntimeException) {
+            render(millis, use24h, showSeconds, locale, timeZone, fallback(use24h, showSeconds))
+        }
+
+    private fun fallback(
+        use24h: Boolean,
+        showSeconds: Boolean,
+    ) = (if (use24h) "HH:mm" else "h:mm") + (if (showSeconds) ":ss" else "") + if (use24h) "" else " a"
+
+    private fun render(
+        millis: Long,
+        use24h: Boolean,
+        showSeconds: Boolean,
+        locale: Locale,
+        timeZone: TimeZone,
+        pattern: String,
     ): ClockText {
-        val c = Calendar.getInstance(locale).apply { timeInMillis = millis }
-        val h24 = c.get(Calendar.HOUR_OF_DAY)
-        val hour = if (use24h) h24 else (h24 % 12).let { if (it == 0) 12 else it }
-        val hours = if (use24h) "%02d".format(locale, hour) else "%d".format(locale, hour)
-        val minutes = "%02d".format(locale, c.get(Calendar.MINUTE))
-        val seconds = if (showSeconds) "%02d".format(locale, c.get(Calendar.SECOND)) else null
-        val period =
-            if (use24h) {
-                null
+        val tokens = tokens(pattern)
+        val date = Date(millis)
+
+        fun field(t: Token?) =
+            t?.let { SimpleDateFormat(it.text, locale).apply { this.timeZone = timeZone }.format(date) }
+        val hourIdx = tokens.indexOfFirst { it.field && it.text[0] in HOUR_LETTERS }
+        val minuteIdx = tokens.indexOfFirst { it.field && it.text[0] == 'm' }
+        val periodIdx = tokens.indexOfFirst { it.field && it.text[0] in PERIOD_LETTERS }
+        val separator =
+            if (hourIdx >= 0 && minuteIdx > hourIdx) {
+                tokens
+                    .subList(hourIdx + 1, minuteIdx)
+                    .filter { !it.field }
+                    .joinToString("") { it.text }
+                    .ifEmpty { ":" }
             } else {
-                java.text.DateFormatSymbols
-                    .getInstance(locale)
-                    .amPmStrings[c.get(Calendar.AM_PM)]
+                ":"
             }
-        return ClockText(hours, minutes, seconds, period)
+        // The time is every token but the day period and the whitespace that joins it to the time.
+        val timeTokens =
+            tokens.filterIndexed { i, t ->
+                when {
+                    i == periodIdx -> false
+                    !t.field && t.text.isBlank() && (i == periodIdx - 1 || i == periodIdx + 1) -> false
+                    else -> true
+                }
+            }
+        val time = timeTokens.joinToString("") { t -> if (t.field) field(t).orEmpty() else t.text }.trim()
+        return ClockText(
+            hours = field(tokens.getOrNull(hourIdx)) ?: "",
+            minutes = field(tokens.getOrNull(minuteIdx)) ?: "",
+            seconds = if (showSeconds) field(tokens.firstOrNull { it.field && it.text[0] == 's' }) else null,
+            period = if (use24h) null else field(tokens.getOrNull(periodIdx)),
+            separator = separator,
+            periodFirst = !use24h && periodIdx in 0 until hourIdx,
+            full = SimpleDateFormat(pattern, locale).apply { this.timeZone = timeZone }.format(date),
+            time = time,
+        )
     }
+
+    private class Token(
+        val text: String,
+        val field: Boolean,
+    )
+
+    /** Splits a date pattern into letter runs (fields) and literals (quotes removed, `''` = `'`). */
+    private fun tokens(pattern: String): List<Token> {
+        val out = mutableListOf<Token>()
+        var i = 0
+        val literal = StringBuilder()
+
+        fun flush() {
+            if (literal.isNotEmpty()) out += Token(literal.toString(), field = false)
+            literal.clear()
+        }
+        while (i < pattern.length) {
+            val c = pattern[i]
+            when {
+                c == '\'' -> {
+                    val close = pattern.indexOf('\'', i + 1)
+                    if (close == i + 1) {
+                        literal.append('\'')
+                        i += 2
+                    } else {
+                        val end = if (close < 0) pattern.length else close
+                        literal.append(pattern, i + 1, end)
+                        i = end + 1
+                    }
+                }
+
+                c in 'a'..'z' || c in 'A'..'Z' -> {
+                    flush()
+                    var j = i
+                    while (j < pattern.length && pattern[j] == c) j++
+                    out += Token(pattern.substring(i, j), field = true)
+                    i = j
+                }
+
+                else -> {
+                    literal.append(c)
+                    i++
+                }
+            }
+        }
+        flush()
+        return out
+    }
+
+    private const val HOUR_LETTERS = "hHkK"
+    private const val PERIOD_LETTERS = "abB"
 }
 
 /**
@@ -123,11 +262,12 @@ fun HomeHeader(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (clock.visible) {
-            val spoken = remember(millis, use24h) { DateFormat.getTimeFormat(context).format(Date(millis)) }
             val text =
                 remember(millis, use24h, clock.showSeconds, locale) {
                     ClockFormat.format(millis, use24h, clock.showSeconds, locale)
                 }
+            // The spoken time follows the same 12/24 h choice as the digits (theme override included).
+            val spoken = text.full
             Clock(
                 text = text,
                 millis = millis,
@@ -136,6 +276,7 @@ fun HomeHeader(
                     Modifier
                         .testTag(HomeTestTags.CLOCK)
                         .heightIn(min = 48.dp)
+                        .focusRing()
                         .clickable(onClick = onClock)
                         .clearAndSetSemantics {
                             contentDescription = spoken
@@ -159,6 +300,7 @@ fun HomeHeader(
                 modifier =
                     Modifier
                         .heightIn(min = 48.dp)
+                        .focusRing()
                         .clickable(onClick = onDate)
                         .semantics { role = Role.Button }
                         .testTag(HomeTestTags.DATE),
@@ -188,15 +330,26 @@ private fun Clock(
         // `words` falls back to `numeric`: there is no words formatter (VISUAL_SPEC §9.4).
         ClockStyle.NUMERIC, ClockStyle.WORDS -> {
             Row(modifier = modifier, verticalAlignment = Alignment.Bottom) {
-                Text(text = hm(text), style = base, color = colors.textPrimary, maxLines = 1)
-                if (text.period != null) {
-                    Text(
-                        text = text.period,
-                        style = base.copy(fontSize = (size * PERIOD_SCALE).sp),
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                    )
+                val period: @Composable () -> Unit = {
+                    if (text.period != null) {
+                        Text(
+                            text = text.period,
+                            style = base.copy(fontSize = (size * PERIOD_SCALE).sp),
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            modifier = Modifier.testTag(HomeTestTags.CLOCK_PERIOD),
+                        )
+                    }
                 }
+                if (text.periodFirst) period()
+                Text(
+                    text = text.time,
+                    style = base,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    modifier = Modifier.testTag(HomeTestTags.CLOCK_TIME),
+                )
+                if (!text.periodFirst) period()
             }
         }
 
@@ -218,16 +371,6 @@ private fun Clock(
         }
     }
 }
-
-@Composable
-private fun hm(text: ClockText): String =
-    if (text.seconds != null) {
-        androidx.compose.ui.res
-            .stringResource(R.string.clock_hms, text.hours, text.minutes, text.seconds)
-    } else {
-        androidx.compose.ui.res
-            .stringResource(R.string.clock_hm, text.hours, text.minutes)
-    }
 
 /** `analogMinimal` (VISUAL_SPEC §9.4): circle, one accent dot at 12, hour hand 4 dp, minute hand 2 dp, round caps. */
 @Composable

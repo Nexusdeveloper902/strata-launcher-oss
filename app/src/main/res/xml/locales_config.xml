@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v1 locale set (PRODUCT_SPEC §5). M0 ships `en` only; each locale is added with its translation,
-     together with androidResources.localeFilters in app/build.gradle.kts. -->
+<!-- v1 locale set (PRODUCT_SPEC §5). Each locale is added with its translation, together with
+     androidResources.localeFilters in app/build.gradle.kts. -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="en" />
+    <locale android:name="de" />
 </locale-config>

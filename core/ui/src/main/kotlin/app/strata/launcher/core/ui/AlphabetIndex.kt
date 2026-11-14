@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -236,6 +237,10 @@ fun AlphabetIndex(
                     },
         )
 
+        // Growth from a large font scale stops at the 14–28 dp row (VISUAL_SPEC §9.3); the theme's own size is kept. At
+        // large text sizes the letter grid ("Jump to letter…") is the readable alternative (NFR-A11Y-02).
+        val indexStyle =
+            remember(type.index, pitch, density) { type.index.capFontScaleGrowth(density, pitch * INDEX_FILL) }
         val trackWidth = if (active) ACTIVE_WIDTH else VISUAL_WIDTH
         Column(
             modifier =
@@ -268,6 +273,37 @@ fun AlphabetIndex(
                         else -> colors.textSecondary.copy(alpha = IDLE_ALPHA)
                     }
                 val glyph = if (dots || (folded && s % 2 == 1)) stringResource(R.string.index_fold) else letter.label
+                // Semantics live on the full-width overlay below (NFR-A11Y-03: the 48 dp strip is the target).
+                Box(
+                    modifier = Modifier.height(pitch).clearAndSetSemantics {},
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = glyph,
+                        style = indexStyle,
+                        color = color,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.scale(if (isCurrent) ACTIVE_SCALE else 1f),
+                    )
+                }
+            }
+        }
+
+        // One accessibility button per letter, as wide as the touch strip (VISUAL_SPEC §9.3, NFR-A11Y-03): the letter
+        // pitch is 14–28 dp by design, so the effective target is the 48 dp-wide strip over the letter's row. These
+        // boxes take no pointer input; touches reach the scrub area underneath.
+        Column(
+            modifier =
+                Modifier
+                    .offset(y = trackTop)
+                    .fillMaxWidth()
+                    .height(trackHeight),
+        ) {
+            slots.forEachIndexed { s, range ->
+                val folded = range.first != range.last
+                val i = range.first
+                val letter = letters[i]
                 val letterDescription =
                     pluralStringResource(
                         R.plurals.index_letter_description,
@@ -292,21 +328,11 @@ fun AlphabetIndex(
                 Box(
                     modifier =
                         Modifier
-                            .height(
-                                pitch,
-                            ).testTag(AlphabetIndexTestTags.letter(letter.label))
+                            .fillMaxWidth()
+                            .height(pitch)
+                            .testTag(AlphabetIndexTestTags.letter(letter.label))
                             .then(semanticsModifier),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = glyph,
-                        style = type.index,
-                        color = color,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        modifier = Modifier.scale(if (isCurrent) ACTIVE_SCALE else 1f),
-                    )
-                }
+                )
             }
         }
 
@@ -359,6 +385,7 @@ private fun Modifier.indexExclusion(
 }
 
 private val TOUCH_WIDTH = 48.dp
+private const val INDEX_FILL = 0.8f
 private val VISUAL_WIDTH = 24.dp
 private val ACTIVE_WIDTH = 32.dp
 private val BUBBLE_SIZE = 64.dp

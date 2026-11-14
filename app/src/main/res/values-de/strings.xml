@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Strata</string>
+    <string name="theme_share_chooser">Design teilen</string>
+    <string name="themes_label">Designs</string>
+    <string name="icon_chooser_label">App-Symbol</string>
+    <string name="theme_editor_label">Design bearbeiten</string>
+    <string name="theme_import_label">Design importieren</string>
+    <string name="widget_picker_label">Widgets</string>
+    <string name="badge_service_label">Strata-Benachrichtigungspunkte</string>
+</resources>

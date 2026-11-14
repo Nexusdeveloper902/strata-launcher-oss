@@ -22,7 +22,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -47,7 +46,10 @@ import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.WidgetProviderRef
 import app.strata.launcher.core.platformapi.widgets.WidgetPreview
 import app.strata.launcher.core.platformapi.widgets.WidgetProviderModel
+import app.strata.launcher.core.ui.DialogText
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 
 /** Loads previews and group icons for S-WPICK (the [app.strata.launcher.core.platformapi.widgets.WidgetHostController]). */
 interface WidgetPreviewSource {
@@ -135,7 +137,7 @@ fun WidgetPickerScreen(
         AlertDialog(
             onDismissRequest = { onAction(WidgetPickerAction.ReplaceClock(null)) },
             title = { Text(stringResource(R.string.widget_replace_clock_title)) },
-            text = { Text(stringResource(R.string.widget_replace_clock_text)) },
+            text = { DialogText(stringResource(R.string.widget_replace_clock_text)) },
             confirmButton = {
                 TextButton(
                     onClick = { onAction(WidgetPickerAction.ReplaceClock(true)) },
@@ -213,6 +215,7 @@ private fun ProviderRow(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .testTag(WidgetTestTags.provider(provider.ref.component))
+                .focusRing()
                 .clickable(enabled = enabled, onClick = onClick)
                 .clearAndSetSemantics {
                     contentDescription = description

@@ -1,7 +1,6 @@
 package app.strata.launcher.platform.apps
 
 import android.app.ActivityOptions
-import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -68,33 +67,14 @@ class LauncherAppsAppLauncher(
     ): LaunchResult {
         val component = ComponentName.unflattenFromString(key.component) ?: return Outcome.Err(LaunchError.NOT_FOUND)
         var private = false
-        return try {
-            val user = resolver.userOf(key.userSerial) ?: return Outcome.Err(LaunchError.NOT_FOUND)
+        return guardLaunch(logger, TAG, what, { private }) {
+            val user = resolver.userOf(key.userSerial) ?: return@guardLaunch Outcome.Err(LaunchError.NOT_FOUND)
             // An unreadable type counts as private: nothing about it is logged.
             private = resolver.kindOf(user).let { it == null || it == ProfileKind.PRIVATE }
-            if (resolver.quiet(user)) return Outcome.Err(LaunchError.PROFILE_PAUSED)
+            if (resolver.quiet(user)) return@guardLaunch Outcome.Err(LaunchError.PROFILE_PAUSED)
             block(component, user)
             Outcome.Ok(Unit)
-        } catch (e: ActivityNotFoundException) {
-            fail(what, LaunchError.NOT_FOUND, e, private)
-        } catch (e: SecurityException) {
-            fail(what, LaunchError.SECURITY, e, private)
-        } catch (e: IllegalStateException) {
-            fail(what, LaunchError.UNKNOWN, e, private)
-        } catch (e: IllegalArgumentException) {
-            fail(what, LaunchError.NOT_FOUND, e, private)
         }
-    }
-
-    /** Platform messages can name the component and user: for a private-space app only the error kind is logged (P-5). */
-    private fun fail(
-        what: String,
-        error: LaunchError,
-        e: Exception,
-        private: Boolean,
-    ): LaunchResult {
-        logger.w(TAG, "$what failed: $error", e.takeUnless { private })
-        return Outcome.Err(error)
     }
 
     /** Keep the system icon splash (API 33+, ANDROID_PLATFORM §4). */

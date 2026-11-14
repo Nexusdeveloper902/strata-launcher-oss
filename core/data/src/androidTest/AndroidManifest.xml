@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Test APK only (never merged into the app): the T-THEME-45 writer runs in its own process so the test can kill it. -->
+<!-- Test APK only (never merged into the app): the T-THEME-45 and T-REL-03 writers run in their own processes so the tests can kill them. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <service
             android:name="app.strata.launcher.core.data.theme.ThemeWriterService"
             android:exported="false"
             android:process=":t45writer" />
+        <!-- T-REL-03 writer (reorder, rename, settings, theme save), killed at random by KillDuringWriteDeviceTest. -->
+        <service
+            android:name="app.strata.launcher.core.data.rel.StoreWriterService"
+            android:exported="false"
+            android:process=":rel03writer" />
     </application>
 </manifest>

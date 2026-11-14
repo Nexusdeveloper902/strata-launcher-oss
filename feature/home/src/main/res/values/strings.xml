@@ -10,7 +10,10 @@
 
     <!-- List end rows (FR-LIST-06) -->
     <string name="list_end_settings">Settings</string>
-    <string name="list_end_hidden_apps">Hidden apps (%1$d)</string>
+    <plurals name="list_end_hidden_apps">
+        <item quantity="one">Hidden apps (%1$d)</item>
+        <item quantity="other">Hidden apps (%1$d)</item>
+    </plurals>
     <!-- Empty list (INTERACTION_SPEC §8) -->
     <string name="list_all_hidden">All apps are hidden</string>
     <string name="list_manage_hidden">Manage hidden apps</string>
@@ -36,8 +39,6 @@
     <string name="theme_banner_details">Details</string>
 
     <!-- Header (FR-HOME-03, VISUAL_SPEC §9.4) -->
-    <string name="clock_hm">%1$s:%2$s</string>
-    <string name="clock_hms">%1$s:%2$s:%3$s</string>
     <string name="no_handler">No app can open this</string>
     <string name="write_failed">Couldn\'t save that change</string>
 

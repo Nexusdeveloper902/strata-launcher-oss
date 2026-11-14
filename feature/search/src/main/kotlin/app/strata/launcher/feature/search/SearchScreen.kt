@@ -94,6 +94,7 @@ import app.strata.launcher.core.platformapi.system.ContactHit
 import app.strata.launcher.core.ui.AppRow
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.iconKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -287,12 +288,15 @@ fun SearchScreen(
         }
     }
 
-    // Selection follows the keyboard (keep the ring on screen).
+    // Selection follows the keyboard (keep the ring on screen); a jump with reduced motion (NFR-A11Y-05).
+    val animateScroll = Strata.theme.animation.enabled
     LaunchedEffect(state.selected, state.items.size, state.query) {
         if (state.items.isNotEmpty()) {
             val target = state.selected + if (state.isBlank && state.recents.isNotEmpty()) 1 else 0
             val visible = listState.layoutInfo.visibleItemsInfo
-            if (visible.none { it.index == target }) listState.animateScrollToItem(target)
+            if (visible.none { it.index == target }) {
+                if (animateScroll) listState.animateScrollToItem(target) else listState.scrollToItem(target)
+            }
         }
     }
 
@@ -454,6 +458,7 @@ private fun ClearButton(onClick: () -> Unit) {
         modifier =
             Modifier
                 .size(48.dp)
+                .focusRing()
                 .clickable(role = Role.Button, onClick = onClick)
                 .semantics { contentDescription = description }
                 .testTag(SearchTestTags.CLEAR),
@@ -577,6 +582,7 @@ private fun ContactRow(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .then(if (selected) Modifier.border(2.dp, colors.accent) else Modifier)
+                .focusRing()
                 .clickable(role = Role.Button) { onOpen(coordinates[0]?.let { originOf(it, view) }) }
                 .onGloballyPositioned { coordinates[0] = it }
                 .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp)
@@ -632,6 +638,7 @@ private fun ContactsHintRow(onClick: () -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .focusRing()
                 .clickable(role = Role.Button, onClick = onClick)
                 .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 8.dp)
                 .testTag(SearchTestTags.CONTACTS_HINT),
@@ -654,6 +661,7 @@ private fun StoreRow(onClick: () -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .focusRing()
                 .clickable(role = Role.Button, onClick = onClick)
                 .padding(horizontal = theme.list.horizontalPaddingDp.dp)
                 .testTag(SearchTestTags.STORE_ROW),

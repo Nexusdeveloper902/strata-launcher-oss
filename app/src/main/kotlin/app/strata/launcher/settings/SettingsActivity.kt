@@ -31,6 +31,9 @@ import app.strata.launcher.feature.onboarding.SetDefaultViewModel
 import app.strata.launcher.feature.settings.BackupAction
 import app.strata.launcher.feature.settings.BackupEffect
 import app.strata.launcher.feature.settings.BackupViewModel
+import app.strata.launcher.feature.settings.DiagnosticAction
+import app.strata.launcher.feature.settings.DiagnosticEffect
+import app.strata.launcher.feature.settings.DiagnosticLogViewModel
 import app.strata.launcher.feature.settings.IconCoverageViewModel
 import app.strata.launcher.feature.settings.SettingsAction
 import app.strata.launcher.feature.settings.SettingsEffect
@@ -119,6 +122,18 @@ class SettingsActivity : ComponentActivity() {
     private val openBackup =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             backupViewModel.onAction(BackupAction.RestoreFrom(uri?.toString()))
+        }
+
+    /** About -> "Save diagnostic log" (ARCHITECTURE §11); the picker in flight lives in its saved state. */
+    private val diagnosticViewModel: DiagnosticLogViewModel by viewModels {
+        viewModelFactory {
+            initializer { DiagnosticLogViewModel(appGraph.diagnostics, appGraph.logger, createSavedStateHandle()) }
+        }
+    }
+
+    private val createDiagnostic =
+        registerForActivityResult(ActivityResultContracts.CreateDocument(DIAGNOSTIC_MIME)) { uri ->
+            diagnosticViewModel.onAction(DiagnosticAction.SaveTo(uri?.toString()))
         }
 
     /** First run from the launcher icon (D-008, FR-ONBOARD-01). */
@@ -220,6 +235,7 @@ class SettingsActivity : ComponentActivity() {
                         val state by viewModel.state.collectAsStateWithLifecycle()
                         val icons by iconCoverage.state.collectAsStateWithLifecycle()
                         val backup by backupViewModel.state.collectAsStateWithLifecycle()
+                        val diagnostics by diagnosticViewModel.state.collectAsStateWithLifecycle()
                         SettingsRoute(
                             state = state,
                             effects = settingsEffects,
@@ -233,6 +249,9 @@ class SettingsActivity : ComponentActivity() {
                             onIconsAction = iconCoverage::onAction,
                             backup = backup,
                             onBackupAction = backupViewModel::onAction,
+                            diagnostics = diagnostics,
+                            onDiagnosticAction = diagnosticViewModel::onAction,
+                            onLanguage = if (Build.VERSION.SDK_INT >= 33) ::openAppLanguage else null,
                         )
                         val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
                         SetDefaultDialogs(setDefault, setDefaultViewModel.flow)
@@ -246,6 +265,9 @@ class SettingsActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { backupViewModel.effects.collect(::onBackupEffect) }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { diagnosticViewModel.effects.collect(::onDiagnosticEffect) }
         }
         lifecycleScope.launch {
             val done =
@@ -344,6 +366,41 @@ class SettingsActivity : ComponentActivity() {
         if (!started) backupViewModel.onAction(BackupAction.PickerUnavailable)
     }
 
+    private fun onDiagnosticEffect(effect: DiagnosticEffect) {
+        when (effect) {
+            is DiagnosticEffect.CreateDocument -> {
+                try {
+                    createDiagnostic.launch(effect.suggestedName)
+                } catch (e: android.content.ActivityNotFoundException) {
+                    appGraph.logger.w(TAG, "no handler for the diagnostic log", e)
+                    diagnosticViewModel.onAction(DiagnosticAction.PickerUnavailable)
+                }
+            }
+        }
+    }
+
+    /**
+     * FR-SET-04: the system per-app language page (API 33+, `localeConfig`). Below 33 the platform has none and Strata
+     * follows the system language, so the row is not shown.
+     */
+    @androidx.annotation.RequiresApi(33)
+    private fun openAppLanguage() {
+        val intent =
+            Intent(android.provider.Settings.ACTION_APP_LOCALE_SETTINGS)
+                .setData(android.net.Uri.fromParts("package", packageName, null))
+        try {
+            startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            appGraph.logger.w(TAG, "no app language page", e)
+            android.widget.Toast
+                .makeText(
+                    this,
+                    app.strata.launcher.feature.settings.R.string.settings_no_handler,
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+        }
+    }
+
     private fun show(route: EntryRoute) {
         appGraph.logger.d(TAG, "entry route $route")
         if (route == EntryRoute.HOME) openHome() else screen = route
@@ -358,6 +415,7 @@ class SettingsActivity : ComponentActivity() {
         private const val TAG = "Entry"
         private const val STATE_PAGE = "settings_page"
         private const val BACKUP_MIME = "application/json"
+        private const val DIAGNOSTIC_MIME = "text/plain"
 
         /** THEME_SYSTEM §3.1: backup restore accepts these types (not offered to other apps). */
         private val BACKUP_OPEN_TYPES = arrayOf("application/json", "application/octet-stream", "text/plain")

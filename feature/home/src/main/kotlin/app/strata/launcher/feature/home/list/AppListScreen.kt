@@ -23,10 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +43,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -63,10 +61,14 @@ import app.strata.launcher.core.theme.model.IndexSide
 import app.strata.launcher.core.theme.model.IndexVisibility
 import app.strata.launcher.core.ui.AlphabetIndex
 import app.strata.launcher.core.ui.AppRow
+import app.strata.launcher.core.ui.FilterChip
 import app.strata.launcher.core.ui.IndexExclusion
 import app.strata.launcher.core.ui.IndexMath
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.Switch
+import app.strata.launcher.core.ui.TextButton
+import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.iconKey
 import app.strata.launcher.feature.home.ListJump
 import app.strata.launcher.feature.home.PrivateSpaceUi
@@ -436,7 +438,11 @@ private fun ListEnd(
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
         EndRow(stringResource(R.string.list_end_settings), onOpenSettings, AppListTestTags.END_SETTINGS)
-        EndRow(stringResource(R.string.list_end_hidden_apps, hiddenCount), onOpenHiddenApps, AppListTestTags.END_HIDDEN)
+        EndRow(
+            pluralStringResource(R.plurals.list_end_hidden_apps, hiddenCount, hiddenCount),
+            onOpenHiddenApps,
+            AppListTestTags.END_HIDDEN,
+        )
     }
 }
 
@@ -452,6 +458,7 @@ private fun EndRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .focusRing()
                 .clickable(role = Role.Button, onClick = onClick)
                 .padding(horizontal = theme.list.horizontalPaddingDp.dp)
                 .testTag(tag),
@@ -502,7 +509,10 @@ private fun WorkBar(
             modifier =
                 Modifier
                     .heightIn(min = 48.dp)
-                    .toggleable(value = !work.paused, role = Role.Switch, onValueChange = { on -> onPaused(!on) })
+                    .focusRing()
+                    .toggleable(value = !work.paused, role = Role.Switch, onValueChange = { on ->
+                        onPaused(!on)
+                    })
                     .testTag(AppListTestTags.WORK_SWITCH),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),

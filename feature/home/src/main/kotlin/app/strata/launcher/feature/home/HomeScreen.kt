@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -29,7 +28,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -86,10 +85,14 @@ import app.strata.launcher.core.theme.model.VerticalPosition
 import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeBannerKind
 import app.strata.launcher.core.ui.AlphabetIndex
+import app.strata.launcher.core.ui.Button
 import app.strata.launcher.core.ui.IndexExclusion
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
+import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.backdropFade
+import app.strata.launcher.core.ui.blockFocus
+import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.strataBackdrop
 import app.strata.launcher.feature.home.list.AppListScreen
 import app.strata.launcher.feature.home.list.PrivateSpaceCommand
@@ -111,6 +114,8 @@ object HomeTestTags {
     const val ICON_NOTICE = "home_icon_notice"
     const val ICON_NOTICE_STORE = "home_icon_notice_store"
     const val CLOCK = "home_clock"
+    const val CLOCK_TIME = "home_clock_time"
+    const val CLOCK_PERIOD = "home_clock_period"
     const val DATE = "home_date"
     const val FAVORITES = "home_favorites"
     const val ADD_FAVORITES = "home_add_favorites"
@@ -259,6 +264,9 @@ fun HomeRoute(
             else -> IndexExclusion.FULL
         }
     val actions = rememberAppActions(state.favoriteKeys, onAction)
+    // INTERACTION_SPEC §5: Tab opens the list while nothing on home has focus; once arrow keys moved focus into home
+    // (favourites, pill, clock), Tab moves focus like anywhere else (FR-A11Y-04).
+    var childFocused by remember { mutableStateOf(false) }
     // Test tags double as resource ids, so UiAutomator and Macrobenchmark can find nodes (T-PERF-03/04/10).
     Box(
         modifier =
@@ -267,7 +275,8 @@ fun HomeRoute(
                 // Home / list backdrop E(W) (VISUAL_SPEC §6), once under every layer.
                 .strataBackdrop(Strata.theme, Strata.colors, Strata.backdropFade)
                 .semantics { testTagsAsResourceId = true }
-                .onKeyEvent { event -> handleHomeKey(event, state, onAction) },
+                .onFocusChanged { childFocused = it.hasFocus }
+                .onKeyEvent { event -> handleHomeKey(event, state, onAction, childFocused) },
     ) {
         val underSearch = search != null
         Box(
@@ -276,11 +285,22 @@ fun HomeRoute(
                     .fillMaxSize()
                     // INTERACTION_SPEC §7: home (or list) content fades to 0.3 α under search.
                     .alpha(if (underSearch) UNDER_SEARCH_ALPHA else 1f)
-                    .then(if (underSearch || !noModal) Modifier.clearAndSetSemantics {} else Modifier),
+                    .then(if (underSearch || !noModal) Modifier.clearAndSetSemantics {} else Modifier)
+                    // Under search or a modal nothing here is a Tab stop (FR-A11Y-04): only the top layer is.
+                    .blockFocus(underSearch || !noModal),
         ) {
             HomeScreen(
                 // The list layer replaces the rest page (INTERACTION_SPEC §3); it stays composed but unseen.
-                modifier = if (listShown) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier,
+                modifier =
+                    if (listShown || state.layer == HomeLayer.FAV_EDIT) {
+                        // Hidden (list) or covered (edit favourites): no semantics and no focus stops.
+                        Modifier
+                            .then(if (listShown) Modifier.alpha(0f) else Modifier)
+                            .clearAndSetSemantics {}
+                            .blockFocus(true)
+                    } else {
+                        Modifier
+                    },
                 state = state,
                 showSetDefaultButton = showSetDefaultButton,
                 onSetDefault = onSetDefault,
@@ -369,6 +389,7 @@ private fun handleHomeKey(
     event: KeyEvent,
     state: HomeUiState,
     onAction: (HomeAction) -> Unit,
+    childFocused: Boolean = false,
 ): Boolean {
     val layer = state.layer
     if (event.type != KeyEventType.KeyDown || layer == HomeLayer.SEARCH || layer == HomeLayer.FAV_EDIT) return false
@@ -378,7 +399,7 @@ private fun handleHomeKey(
             onAction(HomeAction.OpenSettings)
         }
 
-        event.key == Key.Tab && layer == HomeLayer.REST -> {
+        event.key == Key.Tab && layer == HomeLayer.REST && !childFocused -> {
             onAction(HomeAction.OpenList)
         }
 
@@ -688,6 +709,7 @@ private fun AllAppsRow(onOpen: () -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .focusRing()
                 .clickable(role = Role.Button, onClick = onOpen)
                 .padding(horizontal = theme.list.horizontalPaddingDp.dp)
                 .testTag(HomeTestTags.ALL_APPS),
@@ -723,7 +745,8 @@ private fun HomePill(
                     text = stringResource(UiR.string.search_hint),
                     style = Strata.typography.label,
                     color = colors.textSecondary,
-                    maxLines = 1,
+                    // Two lines at large text sizes; the pill grows with it (NFR-A11Y-02).
+                    maxLines = 2,
                 )
             }
         }
@@ -731,6 +754,7 @@ private fun HomePill(
             modifier =
                 Modifier
                     .size(48.dp)
+                    .focusRing()
                     .clickable(role = Role.Button, onClick = onMenu)
                     .semantics { contentDescription = menuDescription }
                     .testTag(HomeTestTags.PILL_MENU),

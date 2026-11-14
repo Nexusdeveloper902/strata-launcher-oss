@@ -126,6 +126,15 @@
     <string name="about_version">Version %1$s</string>
     <string name="about_licences">Open-source licences</string>
     <string name="about_licences_summary">Libraries and fonts used by Strata</string>
+    <string name="about_language">Language</string>
+    <string name="about_language_summary">Choose the language of Strata in system settings</string>
+    <string name="diagnostic_row">Save diagnostic log</string>
+    <string name="diagnostic_row_summary">A text file to help find a problem. You see it before it is saved.</string>
+    <string name="diagnostic_preview_title">Diagnostic log</string>
+    <string name="diagnostic_preview_body">App names, searches and contacts are never in this log. Package names are replaced by short codes. Nothing is sent anywhere: you choose where the file is saved.</string>
+    <string name="diagnostic_save">Save</string>
+    <string name="diagnostic_saved">Diagnostic log saved</string>
+    <string name="diagnostic_failed">The diagnostic log couldn\'t be saved</string>
     <string name="about_privacy_title">Privacy</string>
     <string name="about_privacy_statement">Strata Launcher collects no data. It has no internet access, no analytics, no ads and no accounts. Your settings, themes and app history are stored only on this phone and, if you turn it on, in your own Android backup. Notification contents, contact data and searches are never stored.</string>
     <string name="licences_page">Open-source licences</string>

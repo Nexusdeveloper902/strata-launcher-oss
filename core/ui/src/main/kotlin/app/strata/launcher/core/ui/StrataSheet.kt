@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -80,6 +81,8 @@ fun StrataSheet(
                     .fillMaxSize()
                     .graphicsLayer { alpha = enter.value * (1f - back) }
                     .background(colors.scrim.copy(alpha = SCRIM_ALPHA))
+                    // A touch target only: keyboard focus skips it (Back or Esc closes the sheet).
+                    .focusProperties { canFocus = false }
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -130,6 +133,7 @@ fun SheetItem(
             modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .focusRing()
                 .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier)
                 .padding(vertical = 8.dp),

@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -44,7 +43,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.IconResult
 import app.strata.launcher.core.ui.AppIcon
+import app.strata.launcher.core.ui.FilterChip
 import app.strata.launcher.core.ui.IconRequestKey
+import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.rememberAppIconState
 
 /** Test tags of S-ICON. */
@@ -119,7 +120,8 @@ fun IconChooserScreen(
                             .semantics(mergeDescendants = true) {
                                 selected = app.iconOverride == null
                                 role = Role.Button
-                            }.clickable { onAction(IconChooserAction.UseThemeIcon) },
+                            }.focusRing()
+                            .clickable { onAction(IconChooserAction.UseThemeIcon) },
                 ) {
                     AppIcon(app.displayLabel, themeIcon, CELL_ICON, RoundedCornerShape(12.dp))
                     Text(
@@ -232,7 +234,8 @@ private fun PackIconCell(
                     contentDescription = label
                     this.selected = selected
                     role = Role.Button
-                }.clickable(onClick = onClick),
+                }.focusRing()
+                .clickable(onClick = onClick),
     ) {
         val b = bitmap
         if (b != null) Image(bitmap = b, contentDescription = null, modifier = Modifier.size(CELL_ICON))

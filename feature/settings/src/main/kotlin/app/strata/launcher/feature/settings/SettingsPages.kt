@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +34,7 @@ import app.strata.launcher.core.model.IconSource
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.platformapi.notifications.ListenerAccess
 import app.strata.launcher.core.platformapi.system.PermissionState
+import app.strata.launcher.core.ui.Button
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.iconStyleOf
 
@@ -299,6 +299,10 @@ private fun AccessRow(
 internal fun AboutPage(
     state: SettingsUiState,
     onLicences: () -> Unit,
+    diagnostics: DiagnosticLogUiState = DiagnosticLogUiState(),
+    onDiagnosticAction: (DiagnosticAction) -> Unit = {},
+    /** FR-SET-04: opens the system app-language page (API 33+); null hides the row. */
+    onLanguage: (() -> Unit)? = null,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize().safeDrawingPadding().testTag(SettingsPageTags.ABOUT_PAGE)) {
         item { Title(stringResource(R.string.about_page)) }
@@ -311,6 +315,17 @@ internal fun AboutPage(
                 onClick = onLicences,
             )
         }
+        if (onLanguage != null) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.about_language),
+                    summary = stringResource(R.string.about_language_summary),
+                    tag = DiagnosticTags.LANGUAGE_ROW,
+                    onClick = onLanguage,
+                )
+            }
+        }
+        item { DiagnosticLogRows(diagnostics, onDiagnosticAction) }
         item {
             Text(
                 text = stringResource(R.string.about_privacy_title),

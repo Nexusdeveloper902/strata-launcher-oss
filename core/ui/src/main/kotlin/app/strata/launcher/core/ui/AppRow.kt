@@ -111,10 +111,14 @@ fun AppRow(
                 .heightIn(min = maxOf(theme.list.rowHeightDp, MIN_TOUCH_DP).dp)
                 .background(if (pressed || focused) colors.highlight else colors.background.copy(alpha = 0f))
                 .then(
-                    if (selected) {
+                    // FR-A11Y-04: keyboard focus and the search selection draw the same accent ring.
+                    if (selected || focused) {
                         Modifier
                             .border(SELECTION_RING_WIDTH, colors.accent, RoundedCornerShape(SELECTION_RING_RADIUS))
-                            .semantics { this.selected = true }
+                            .semantics {
+                                if (selected) this.selected = true
+                                if (focused) this[FocusRingSemantics.Shown] = true
+                            }
                     } else {
                         Modifier
                     },
@@ -255,6 +259,15 @@ fun MonogramTile(
     val colors = Strata.colors
     val type = Strata.typography
     val glyph = remember(label) { firstGrapheme(label) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // The letter grows with the font scale until it fills its tile (the label beside it carries the text); its theme
+    // size is kept.
+    val glyphStyle =
+        remember(type.label, size, density) {
+            type.label
+                .copy(fontSize = type.label.fontSize * MONOGRAM_SCALE, fontWeight = FontWeight.Medium)
+                .capFontScaleGrowth(density, size * MONOGRAM_FILL)
+        }
     Box(
         // Decorative: the row already carries the label.
         modifier = modifier.size(size).background(colors.surface, shape).clearAndSetSemantics {},
@@ -262,7 +275,7 @@ fun MonogramTile(
     ) {
         Text(
             text = glyph,
-            style = type.label.copy(fontSize = type.label.fontSize * MONOGRAM_SCALE, fontWeight = FontWeight.Medium),
+            style = glyphStyle,
             color = colors.textSecondary,
             maxLines = 1,
         )
@@ -364,4 +377,5 @@ fun NotificationBadge(
 private const val MIN_TOUCH_DP = 48
 private const val DIM_ALPHA = 0.6f
 private const val MAX_COUNT = 99
+private const val MONOGRAM_FILL = 0.6f
 private const val MONOGRAM_SCALE = 1.1f

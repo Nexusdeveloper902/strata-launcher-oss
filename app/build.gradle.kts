@@ -16,12 +16,15 @@ android {
     }
 
     androidResources {
-        // v1 locale set (PRODUCT_SPEC §5). M0 ships `en` only; keep in sync with res/xml/locales_config.xml.
-        localeFilters += listOf("en")
+        // v1 locale set (PRODUCT_SPEC §5): the translated locales so far; keep in sync with res/xml/locales_config.xml.
+        // en-XA / ar-XB are the debug pseudo-locales (T-I18N-01); release builds generate no resources for them.
+        localeFilters += listOf("en", "de", "en-rXA", "ar-rXB")
     }
 
     buildTypes {
         debug {
+            // T-I18N-01: en-XA (accented, expanded) and ar-XB (mirrored) in the system language list.
+            isPseudoLocalesEnabled = true
             // StrictMode thread-policy death (docs/impl-notes/M0.md). Off by default: OEM framework code (Samsung
             // One UI) does disk I/O on the main thread and killed the sideloaded debug APK at launch. The emulator
             // smoke tests turn it on with -Pstrata.strictModeDeath=true (tools/ci/run-gmd.sh).
