@@ -89,11 +89,19 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()
         if (wait(Until.hasObject(By.res(ONBOARDING_ROOT_TAG)), SHORT_WAIT_MS) != true) break
-        // The set-default step shows its buttons once the role check (off main) has finished.
+        // The set-default step shows its buttons once the role check (off main) has finished. After the last click
+        // ("Not now" / "Go to home") the layer is still leaving when the root is checked above, so the poll also ends
+        // when the root is gone (CI run 43563634680, BackgroundCostTest: it waited 10 s for buttons of a closed layer).
         val next =
             pollFor(Strata.TIMEOUT_MS) {
-                order.firstOrNull { (marker, _) -> hasObject(By.res(marker)) }?.second
+                if (!hasObject(By.res(ONBOARDING_ROOT_TAG))) {
+                    ONBOARDING_GONE
+                } else {
+                    order.firstOrNull { (marker, _) -> hasObject(By.res(marker)) }?.second
+                }
             } ?: error("onboarding is showing but none of its buttons appeared")
+        if (next == ONBOARDING_GONE) break
+        // Re-find right before the click: the object seen by the poll may belong to a frame that has since changed.
         findOrFail(next).click()
         screens++
     }
@@ -126,9 +134,11 @@ private val ONBOARDING_ORDER_REST =
     listOf(
         "onboarding_skip" to "onboarding_skip",
         "onboarding_not_now" to "onboarding_not_now",
+        // The Done step (its column is tagged onboarding_done) has a single "Go to home" button tagged continue.
+        "onboarding_done" to "onboarding_continue",
         "onboarding_continue" to "onboarding_continue",
-        "onboarding_done" to "onboarding_done",
     )
+private const val ONBOARDING_GONE = "<onboarding gone>"
 private const val MAX_ONBOARDING_SCREENS = 6
 private const val MAX_SCROLLS = 200
 private const val SHORT_WAIT_MS = 1_500L

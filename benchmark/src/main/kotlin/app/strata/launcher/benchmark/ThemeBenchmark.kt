@@ -47,12 +47,22 @@ class ThemeBenchmark {
         device.wait(Until.hasObject(By.res(EDITOR_PREVIEW)), TIMEOUT_MS)
     }
 
-    private fun MacrobenchmarkScope.find(
-        res: String,
-        scroll: UiObject2?,
-    ): UiObject2? {
-        device.findObject(By.res(res))?.let { return it }
-        return scroll?.scrollUntil(Direction.DOWN, Until.findObject(By.res(res)))
+    /**
+     * Scrolls the editor in small steps until [res] is on screen and clear of the bottom quarter (the gesture area and
+     * the navigation bar, where a tap does not reach the control), then returns a freshly found object. Fails loudly
+     * when the editor runs out of content without showing it.
+     */
+    private fun MacrobenchmarkScope.reveal(res: String): UiObject2 {
+        repeat(MAX_REVEAL_SCROLLS) {
+            val found = device.findObject(By.res(res))
+            val b = found?.visibleBounds
+            if (b != null && b.height() > 0 && b.bottom <= device.displayHeight * 3 / 4) return found
+            val scrolled = device.findOrFail(EDITOR_SCROLL).scroll(Direction.DOWN, REVEAL_STEP)
+            device.waitForIdle()
+            // At the end of the content a control low on screen is as good as it gets.
+            if (!scrolled) device.findObject(By.res(res))?.let { return it }
+        }
+        error("'$res' not on screen after $MAX_REVEAL_SCROLLS scrolls of the theme editor")
     }
 
     /** T-THEME-48, discrete half: preview light/dark toggles (one frame each). */
@@ -80,9 +90,11 @@ class ThemeBenchmark {
             iterations = 5,
             setupBlock = {
                 openEditor()
-                val scroll = device.findObject(By.res(EDITOR_SCROLL))
-                checkNotNull(find(ACCENT_SWATCH, scroll)) { "accent swatch not found" }.click()
-                checkNotNull(find(ACCENT_HUE, scroll)) { "accent hue slider not found" }
+                // The swatch toggles the colour control open; the hue slider appears below it. CI run 43563634680:
+                // a swatch found mid-scroll at the screen's bottom edge was tapped without opening the control.
+                reveal(ACCENT_SWATCH).click()
+                device.waitForIdle()
+                reveal(ACCENT_HUE)
             },
         ) {
             val slider = checkNotNull(device.findObject(By.res(ACCENT_HUE))) { "accent hue slider not found" }
@@ -187,6 +199,8 @@ class ThemeBenchmark {
         const val PAPER = "c5017d5b-b2b0-48ff-83ed-33f77fd14754"
         const val STRATA_DEFAULT = "a413ab93-de91-4614-8c5c-cfbe6d79231b"
         const val DRAG_STEPS = 500
+        const val MAX_REVEAL_SCROLLS = 15
+        const val REVEAL_STEP = 0.3f
         const val TIMEOUT_MS = 5_000L
     }
 }

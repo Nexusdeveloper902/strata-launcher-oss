@@ -2,6 +2,7 @@ package app.strata.launcher.rel
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -11,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.DeviceStateRule
+import app.strata.launcher.appGraph
 import app.strata.launcher.awaitWindowFocus
 import app.strata.launcher.coverForeignActivities
 import app.strata.launcher.feature.home.HomeTestTags
@@ -21,7 +23,10 @@ import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertWithMessage
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -65,15 +70,35 @@ class OptionalAccessDeniedDeviceTest {
 
     @Test
     fun tRel04_preconditionsAllOptionalAccessDenied() {
-        assertWithMessage("READ_CONTACTS must not be granted")
-            .that(context.checkSelfPermission(Manifest.permission.READ_CONTACTS))
-            .isEqualTo(PackageManager.PERMISSION_DENIED)
         val listeners = shell("settings get secure enabled_notification_listeners")
         assertWithMessage(
             "notification listener access must be off",
         ).that(listeners).doesNotContain(context.packageName)
         val a11y = shell("settings get secure enabled_accessibility_services")
         assertWithMessage("the lock accessibility service must be off").that(a11y).doesNotContain(context.packageName)
+        // Whatever the grant, contact search itself must be off: Strata reads contacts only when the user turns it on.
+        assertWithMessage("contact search setting must be off")
+            .that(
+                runBlocking {
+                    context.appGraph.settingsRepository.settings
+                        .first()
+                        .contactsSearchEnabled
+                },
+            ).isFalse()
+        val contactsGranted =
+            context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        // Below API 33 a READ_CONTACTS grant cannot be taken back from inside the suite: `pm revoke` kills every process
+        // of Strata's UID, and the instrumentation runs in that process. OptionalAccessDeviceTest (tSearch13) grants it,
+        // and it only revokes on 33+ (revokeSelfPermissionOnKill), so on 26-32 a later class can find it granted (CI
+        // run 43563634680, API 26). There the denied-contacts precondition is shown as skipped, not passed; it is
+        // asserted on API 33+ (GMD 34/36) and in the manual first-run pass (RELEASE_GATE §4.1).
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            assumeFalse(
+                "READ_CONTACTS left granted by an earlier class; cannot revoke in-process below API 33",
+                contactsGranted,
+            )
+        }
+        assertWithMessage("READ_CONTACTS must not be granted").that(contactsGranted).isFalse()
     }
 
     @Test
