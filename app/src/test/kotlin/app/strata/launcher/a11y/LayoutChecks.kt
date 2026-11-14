@@ -38,6 +38,10 @@ fun ComposeTestRule.clippedTexts(allowEllipsis: Set<String> = emptySet()): List<
         }
     }
 
+/** Every text on screen (unmerged), to check that a pseudo-locale really reached the UI. */
+fun ComposeTestRule.screenTexts(): List<String> =
+    textNodes().mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
+
 /** Pairs of texts that are drawn over each other (bounds intersect by more than [slackPx] in both directions). */
 fun ComposeTestRule.overlappingTexts(slackPx: Float = 2f): List<String> {
     val nodes = textNodes().filter { it.boundsInRoot.width > 0f && it.boundsInRoot.height > 0f }

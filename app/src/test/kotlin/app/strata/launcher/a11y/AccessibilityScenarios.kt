@@ -444,6 +444,10 @@ class PseudoLocaleLayoutTest : AccessibilityScenarios() {
             context.resources.configuration.locales[0]
                 .toLanguageTag(),
         ).isEqualTo("en-XA")
+        // At least one string on screen is really pseudo-localized ("[Šéţţîñĝš one two]"), not the English fallback.
+        assertWithMessage("$screen: no pseudo-localized string on screen")
+            .that(compose.screenTexts().any { it.startsWith("[") && it.endsWith("]") && it.any { c -> c.code > 0x7F } })
+            .isTrue()
         assertWithMessage("$screen: clipped text in en-XA").that(compose.clippedTexts()).isEmpty()
         if (screen !in
             LAYERS
@@ -467,6 +471,10 @@ class PseudoBidiLayoutTest : AccessibilityScenarios() {
         assertWithMessage("$screen: ar-XB is not right to left")
             .that(context.resources.configuration.layoutDirection)
             .isEqualTo(android.view.View.LAYOUT_DIRECTION_RTL)
+        // At least one string on screen is really bidi pseudo-localized (wrapped in RIGHT-TO-LEFT OVERRIDE marks).
+        assertWithMessage("$screen: no ar-XB string on screen")
+            .that(compose.screenTexts().any { it.contains('\u202E') })
+            .isTrue()
         assertWithMessage("$screen: clipped text in ar-XB").that(compose.clippedTexts()).isEmpty()
         if (screen !in
             LAYERS
