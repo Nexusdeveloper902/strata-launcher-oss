@@ -34,7 +34,13 @@ class FakePackSource : IconPackSource {
         packs.remove(pkg)
     }
 
-    override fun discover(): List<PackCandidate>? = if (failDiscovery) null else packs.values.map { it.first }
+    var discoveries = 0
+        private set
+
+    override fun discover(): List<PackCandidate>? {
+        discoveries++
+        return if (failDiscovery) null else packs.values.map { it.first }
+    }
 
     override fun appFilter(pack: String): AppFilterResult {
         parses++
@@ -134,5 +140,26 @@ class IconPackRegistryTest {
         assertThat(registry.packs.value).isEqualTo(before)
         assertThat(registry.revision.value).isEqualTo(revision)
         assertThat(registry.isUsable(FakePackSource.PACK_OK)).isTrue()
+    }
+
+    /**
+     * T-PERF-14 (battery): a burst of package broadcasts (each one calls refresh) runs one discovery after the burst,
+     * not one per broadcast; a broadcast after that pass started still gets its own pass.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun tPerf14_burstOfRefreshesDiscoversOnce() {
+        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+        val worker = kotlinx.coroutines.test.StandardTestDispatcher(scheduler)
+        val queued = IconPackRegistry(source, worker, CoroutineScope(worker), RecordingLogger())
+        repeat(50) { queued.refresh() }
+        scheduler.advanceUntilIdle()
+        assertThat(source.discoveries).isAtMost(2)
+        val after = source.discoveries
+        source.install(FakePackSource.PACK_OK, FakePackSource.OK_FILTER)
+        queued.refresh()
+        scheduler.advanceUntilIdle()
+        assertThat(source.discoveries).isEqualTo(after + 1)
+        assertThat(queued.packs.value.usable).containsExactly(FakePackSource.PACK_OK)
     }
 }

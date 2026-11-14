@@ -35,7 +35,9 @@ import kotlinx.coroutines.withContext
  * The listener's main-thread callbacks only enqueue an event. One consumer on [worker] (a single-thread dispatcher)
  * owns the active-notification facts, resolves profiles to serial numbers, makes the binder calls
  * (`getActiveNotifications`, `getCurrentRanking`, `requestUnbind`/`requestRebind`) and publishes the counts and the
- * access state on [publish] (the main dispatcher). Nothing is ever written to disk or logged beyond event kinds.
+ * access state on [publish] (the main dispatcher). Events that arrive together are applied together and the counts are
+ * published once, and only when they changed (battery: a burst of updates costs one main-thread hop, not one each).
+ * Nothing is ever written to disk or logged beyond event kinds.
  */
 class AndroidBadgeSource internal constructor(
     context: Context,
@@ -75,20 +77,34 @@ class AndroidBadgeSource internal constructor(
     override val access: StateFlow<ListenerAccess> = accessState
     override val badges: StateFlow<Map<BadgeKey, Int>> = badgeState
 
+    /** Worker-only: the facts changed since the counts were last published. */
+    private var countsDirty = false
+
+    /** Worker-only: the counts last handed to [publish]. */
+    private var published: Map<BadgeKey, Int> = emptyMap()
+
     init {
         instance = this
         scope.launch(worker) {
             for (event in events) {
-                try {
-                    handle(event)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: RuntimeException) {
-                    // A revoked grant races every call (SecurityException); never crash home for a badge.
-                    logger.w(TAG, "badge event ${event::class.simpleName} failed: ${e.javaClass.simpleName}")
-                    if (event is Event.Refresh) event.reply.complete(accessState.value)
-                }
+                run(event)
+                // A burst (a chat app updating its notifications, the initial flood after connect) is applied as a
+                // whole and then published once: one main-thread hop per burst, none when the counts did not change.
+                while (true) run(events.tryReceive().getOrNull() ?: break)
+                flushCounts()
             }
+        }
+    }
+
+    private suspend fun run(event: Event) {
+        try {
+            handle(event)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {
+            // A revoked grant races every call (SecurityException); never crash home for a badge.
+            logger.w(TAG, "badge event ${event::class.simpleName} failed: ${e.javaClass.simpleName}")
+            if (event is Event.Refresh) event.reply.complete(accessState.value)
         }
     }
 
@@ -270,8 +286,17 @@ class AndroidBadgeSource internal constructor(
         withContext(publish) { accessState.value = access }
     }
 
-    private suspend fun publishCounts() {
+    /** The counts are recomputed and published once the current burst of events is applied ([flushCounts]). */
+    private fun publishCounts() {
+        countsDirty = true
+    }
+
+    private suspend fun flushCounts() {
+        if (!countsDirty) return
+        countsDirty = false
         val counts = BadgeCounter.counts(facts.values)
+        if (counts == published) return
+        published = counts
         withContext(publish) { badgeState.value = counts }
     }
 

@@ -286,7 +286,8 @@ fun HomeHeader(
         }
         if (clock.dateVisible) {
             val date =
-                remember(millis / DAY_BUCKET_MS, clock.dateSkeleton, locale) {
+                // Keyed on the local day: the minute ticks leave the date (and the ICU pattern lookup) alone.
+                remember(localDay(millis), clock.dateSkeleton, locale) {
                     val pattern =
                         runCatching { DateFormat.getBestDateTimePattern(locale, clock.dateSkeleton) }
                             .getOrDefault(DEFAULT_DATE_PATTERN)
@@ -411,8 +412,14 @@ private fun AnalogClock(
     }
 }
 
+/** The day of [millis] in the default time zone (a time-zone change is a tick, so the next read sees it). */
+private fun localDay(millis: Long): Long {
+    val zone = TimeZone.getDefault()
+    return Math.floorDiv(millis + zone.getOffset(millis), DAY_MS)
+}
+
 private const val SECOND_MS = 1_000L
-private const val DAY_BUCKET_MS = 60_000L
+private const val DAY_MS = 86_400_000L
 private const val LINE_HEIGHT = 1.15f
 private const val STACKED_LINE_HEIGHT = 0.9f
 private const val PERIOD_SCALE = 0.3f
