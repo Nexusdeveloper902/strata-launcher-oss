@@ -2,6 +2,7 @@ package app.strata.launcher.core.data.theme
 
 import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.common.log.Logger
+import app.strata.launcher.core.common.trace.TraceSections
 import app.strata.launcher.core.json.JsonObject
 import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.model.AppearanceSetting
@@ -184,7 +185,7 @@ class DefaultThemeRepository(
 
     override fun start() {
         if (!started.compareAndSet(false, true)) return
-        scope.launch(themeDispatcher) { boot() }
+        scope.launch(themeDispatcher) { traced(TraceSections.THEME_BOOT) { boot() } }
         scope.launch(publishDispatcher) {
             val globals = settings.map(::globalsOf).catch { emit(ThemeGlobals()) }.distinctUntilChanged()
             val resolved =
@@ -192,7 +193,7 @@ class DefaultThemeRepository(
                     .mapLatest { (a, p, g) ->
                         latestInputs = p
                         latestGlobals = g
-                        a to resolvePair(a, p, g)
+                        a to traced(TraceSections.THEME_RESOLVE) { resolvePair(a, p, g) }
                     }.flowOn(resolveDispatcher)
             combine(resolved, dismissedPackNotices) { r, d -> r to d }
                 .collect { (ar, dismissed) ->
@@ -902,5 +903,18 @@ class DefaultThemeRepository(
                 ThemeBannerKind.CRASH_GUARD -> "The theme caused a problem and was not applied."
                 ThemeBannerKind.LOAD_FAILED -> "The theme could not be loaded."
             }
+    }
+}
+
+/** A synchronous `android.os.Trace` section (T-THEME-44: theme boot and resolve on the cold-start path). */
+private inline fun <T> traced(
+    name: String,
+    block: () -> T,
+): T {
+    android.os.Trace.beginSection(name)
+    try {
+        return block()
+    } finally {
+        android.os.Trace.endSection()
     }
 }

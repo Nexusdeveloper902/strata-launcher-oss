@@ -190,13 +190,18 @@ class DeviceStateRule : TestRule {
                 shell("settings put global hide_error_dialogs 1")
                 val previousScales = animationScales.associateWith { shell("settings get global $it") }
                 animationScales.forEach { shell("settings put global $it 0") }
-                closeSystemErrorDialog(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()))
-                // Each test is a short process that never lives the 10 s that mark a start good (ARCHITECTURE §10).
-                // Without this, the third test in a row would boot in safe mode with its banner.
-                File(InstrumentationRegistry.getInstrumentation().targetContext.noBackupFilesDir, "boot.state").delete()
+                var restoreNav: (() -> Unit)? = null
                 try {
+                    // Inside the try: a failing nav-mode switch must still restore everything changed above.
+                    restoreNav = applyNavMode()
+                    closeSystemErrorDialog(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()))
+                    // Each test is a short process that never lives the 10 s that mark a start good (ARCHITECTURE
+                    // §10). Without this, the third test in a row would boot in safe mode with its banner.
+                    File(InstrumentationRegistry.getInstrumentation().targetContext.noBackupFilesDir, "boot.state")
+                        .delete()
                     base.evaluate()
                 } finally {
+                    restoreNav?.let { runCatching(it).onFailure { e -> Log.e(TAG, "nav mode not restored", e) } }
                     restoreGlobal("hide_error_dialogs", previousHideErrorDialogs)
                     previousScales.forEach { (key, value) -> restoreGlobal(key, value) }
                     if (previousHome != null && !previousHome.startsWith("app.strata.launcher/")) {
@@ -206,6 +211,60 @@ class DeviceStateRule : TestRule {
             }
         }
 }
+
+/**
+ * T-COMPAT-02: the navigation mode for this run, from the instrumentation argument `strata.navMode` (`gestural` or
+ * `threebutton`; API 29+, where both are runtime overlays). Absent: the device's own mode is used and left alone.
+ * Fails when the wanted overlay is not active afterwards. Returns how to put back exactly the navigation overlays that
+ * were enabled before (two-button, gestural variants, or none), or null when nothing changed.
+ */
+private fun applyNavMode(): (() -> Unit)? {
+    val wanted = InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return null
+    val overlay =
+        NAV_OVERLAYS[wanted] ?: throw IllegalArgumentException("strata.navMode=$wanted: use ${NAV_OVERLAYS.keys}")
+    val before = enabledNavOverlays()
+    if (before == listOf(overlay)) return null
+    setNavOverlay(overlay)
+    val after = enabledNavOverlays()
+    check(overlay in after) { "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)" }
+    return {
+        if (before.isEmpty()) {
+            // No navigation overlay was enabled: the device default. Turn ours off again.
+            Log.i(TAG, "nav mode restore: " + shell("cmd overlay disable $overlay"))
+            android.os.SystemClock.sleep(NAV_SETTLE_MS)
+        } else {
+            before.forEach { setNavOverlay(it) }
+        }
+        val restored = enabledNavOverlays()
+        if (restored != before) Log.e(TAG, "nav mode restore: expected $before, found $restored")
+    }
+}
+
+/** Enabled overlays of the `com.android.internal.systemui.navbar.*` family, from `cmd overlay list android`. */
+private fun enabledNavOverlays(): List<String> =
+    shell("cmd overlay list android")
+        .lines()
+        .map(String::trim)
+        .filter { it.startsWith("[x]") }
+        .map { it.removePrefix("[x]").trim() }
+        .filter { it.startsWith(NAV_OVERLAY_PREFIX) }
+
+private fun setNavOverlay(overlay: String) {
+    Log.i(TAG, "nav mode: " + shell("cmd overlay enable-exclusive --category $overlay"))
+    // System UI re-lays out its navigation bar and gesture insets asynchronously.
+    android.os.SystemClock.sleep(NAV_SETTLE_MS)
+}
+
+private const val NAV_OVERLAY_PREFIX = "com.android.internal.systemui.navbar."
+
+private val NAV_OVERLAYS =
+    mapOf(
+        "gestural" to "com.android.internal.systemui.navbar.gestural",
+        "threebutton" to "com.android.internal.systemui.navbar.threebutton",
+    )
+
+private const val NAV_SETTLE_MS = 3_000L
 
 private val animationScales = listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
 

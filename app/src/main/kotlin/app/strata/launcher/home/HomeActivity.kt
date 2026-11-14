@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.BuildConfig
 import app.strata.launcher.appGraph
+import app.strata.launcher.core.common.trace.TraceSections
 import app.strata.launcher.core.ui.LocalIconLoader
 import app.strata.launcher.di.localeTags
 import app.strata.launcher.feature.home.HomeAction
@@ -58,6 +59,7 @@ import app.strata.launcher.feature.widgets.WidgetAreaViewModel
 import app.strata.launcher.feature.widgets.WidgetMenu
 import app.strata.launcher.onboarding.SystemScreenLauncher
 import app.strata.launcher.settings.SettingsActivity
+import app.strata.launcher.startup.AndroidTracer
 import app.strata.launcher.theme.IconChooserActivity
 import app.strata.launcher.theme.ThemeHost
 import app.strata.launcher.theme.ThemesActivity
@@ -178,79 +180,86 @@ class HomeActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
-        super.onCreate(savedInstanceState)
-        appGraph.startTheme()
-        appGraph.startCatalog()
-        appGraph.attachWindow(window.decorView)
-        val iconLoader = ProviderIconLoader(appGraph.iconProvider)
-        systemScreens.bind(onboardingViewModel.setDefault)
-        systemScreens.bind(setDefaultViewModel.flow)
-        themeHost.holdFirstFrame(window.decorView)
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                widgetArea.effects.collect { effect ->
-                    if (effect is WidgetAreaEffect.OpenPicker) {
-                        startActivity(WidgetPickerActivity.intent(this@HomeActivity, effect.readd))
+        AndroidTracer.begin(TraceSections.HOME_CREATE)
+        try {
+            enableEdgeToEdge()
+            super.onCreate(savedInstanceState)
+            // ARCHITECTURE §10 step 3: housekeeping deferred at start runs once the list is on screen (reportFullyDrawn).
+            fullyDrawnReporter.addOnReportDrawnListener { appGraph.firstFrameDrawn() }
+            appGraph.startTheme()
+            appGraph.startCatalog()
+            appGraph.attachWindow(window.decorView)
+            val iconLoader = ProviderIconLoader(appGraph.iconProvider)
+            systemScreens.bind(onboardingViewModel.setDefault)
+            systemScreens.bind(setDefaultViewModel.flow)
+            themeHost.holdFirstFrame(window.decorView)
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    widgetArea.effects.collect { effect ->
+                        if (effect is WidgetAreaEffect.OpenPicker) {
+                            startActivity(WidgetPickerActivity.intent(this@HomeActivity, effect.readd))
+                        }
                     }
                 }
             }
-        }
-        setContent {
-            themeHost.Content(window) {
-                CompositionLocalProvider(LocalIconLoader provides iconLoader) {
-                    val state by viewModel.state.collectAsStateWithLifecycle()
-                    // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
-                    ReportDrawnWhen { state.listReady }
-                    WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
-                    HideStrayIme(state.imeAllowed)
-                    val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
-                    HomeRoute(
-                        state = state,
-                        effects = viewModel.effects,
-                        onAction = viewModel::onAction,
-                        onNavigate = ::navigate,
-                        showSetDefaultButton = true,
-                        onSetDefault = { setDefaultViewModel.flow.setAsDefault() },
-                        timeTicks = appGraph.timeTicks.ticks,
-                        widgetSlot = widgetSlot(),
-                        overlay = {
-                            val area by widgetArea.state.collectAsStateWithLifecycle()
-                            WidgetMenu(area, widgetArea::onAction)
-                        },
-                        searchLayer = { session ->
-                            val searchState by searchViewModel.state.collectAsStateWithLifecycle()
-                            SearchRoute(
-                                state = searchState,
-                                effects = searchViewModel.effects,
-                                onAction = searchViewModel::onAction,
-                                onClose = { viewModel.onAction(HomeAction.CloseSearch) },
-                                seed = session.seed,
-                                session = session.session,
-                                onLongPress = { viewModel.onAction(HomeAction.OpenSheet(it)) },
-                                rowActions = appActions,
-                                closeLog = searchCloseLog,
-                                onProfilePaused = { viewModel.onAction(HomeAction.Launch(it, null)) },
-                                onOpenSettings = { viewModel.onAction(HomeAction.OpenSettings) },
-                            )
-                        },
-                    )
-                    if (state.showOnboarding) {
-                        val onboarding by onboardingViewModel.state.collectAsStateWithLifecycle()
-                        // Done or "Not now" store `onboarding_done`; home's state then removes this layer.
-                        OnboardingRoute(
-                            state = onboarding,
-                            effects = onboardingViewModel.effects,
-                            onAction = onboardingViewModel::onAction,
-                            onFinished = {},
-                            onLeave = null,
+            setContent {
+                themeHost.Content(window) {
+                    CompositionLocalProvider(LocalIconLoader provides iconLoader) {
+                        val state by viewModel.state.collectAsStateWithLifecycle()
+                        // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
+                        ReportDrawnWhen { state.listReady }
+                        WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
+                        HideStrayIme(state.imeAllowed)
+                        val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
+                        HomeRoute(
+                            state = state,
+                            effects = viewModel.effects,
+                            onAction = viewModel::onAction,
+                            onNavigate = ::navigate,
+                            showSetDefaultButton = true,
+                            onSetDefault = { setDefaultViewModel.flow.setAsDefault() },
+                            timeTicks = appGraph.timeTicks.ticks,
+                            widgetSlot = widgetSlot(),
+                            overlay = {
+                                val area by widgetArea.state.collectAsStateWithLifecycle()
+                                WidgetMenu(area, widgetArea::onAction)
+                            },
+                            searchLayer = { session ->
+                                val searchState by searchViewModel.state.collectAsStateWithLifecycle()
+                                SearchRoute(
+                                    state = searchState,
+                                    effects = searchViewModel.effects,
+                                    onAction = searchViewModel::onAction,
+                                    onClose = { viewModel.onAction(HomeAction.CloseSearch) },
+                                    seed = session.seed,
+                                    session = session.session,
+                                    onLongPress = { viewModel.onAction(HomeAction.OpenSheet(it)) },
+                                    rowActions = appActions,
+                                    closeLog = searchCloseLog,
+                                    onProfilePaused = { viewModel.onAction(HomeAction.Launch(it, null)) },
+                                    onOpenSettings = { viewModel.onAction(HomeAction.OpenSettings) },
+                                )
+                            },
                         )
-                    } else {
-                        val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
-                        SetDefaultDialogs(setDefault, setDefaultViewModel.flow)
+                        if (state.showOnboarding) {
+                            val onboarding by onboardingViewModel.state.collectAsStateWithLifecycle()
+                            // Done or "Not now" store `onboarding_done`; home's state then removes this layer.
+                            OnboardingRoute(
+                                state = onboarding,
+                                effects = onboardingViewModel.effects,
+                                onAction = onboardingViewModel::onAction,
+                                onFinished = {},
+                                onLeave = null,
+                            )
+                        } else {
+                            val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
+                            SetDefaultDialogs(setDefault, setDefaultViewModel.flow)
+                        }
                     }
                 }
             }
+        } finally {
+            AndroidTracer.end()
         }
     }
 
@@ -329,14 +338,19 @@ class HomeActivity : ComponentActivity() {
     }
 
     override fun onStart() {
-        super.onStart()
-        appGraph.refreshThemeInputs()
-        // Callbacks are missed while not registered: reconcile on every start (ANDROID_PLATFORM §3.1).
-        appGraph.appCatalog.requestReconcile()
-        appGraph.profiles.refresh()
-        // ANDROID_PLATFORM §7: the host listens while home is started; widgets are re-created on startListening.
-        appGraph.widgetHost.startListening()
-        widgetArea.refresh()
+        AndroidTracer.begin(TraceSections.HOME_START)
+        try {
+            super.onStart()
+            appGraph.refreshThemeInputs()
+            // Callbacks are missed while not registered: reconcile on every start (ANDROID_PLATFORM §3.1).
+            appGraph.appCatalog.requestReconcile()
+            appGraph.profiles.refresh()
+            // ANDROID_PLATFORM §7: the host listens while home is started; widgets are re-created on startListening.
+            appGraph.widgetHost.startListening()
+            widgetArea.refresh()
+        } finally {
+            AndroidTracer.end()
+        }
     }
 
     override fun onStop() {
@@ -396,22 +410,27 @@ class HomeActivity : ComponentActivity() {
     }
 
     override fun onResume() {
-        super.onResume()
-        viewModel.onAction(HomeAction.RefreshRole)
-        onboardingViewModel.onAction(OnboardingAction.Resume)
-        setDefaultViewModel.flow.refresh()
-        // ARCHITECTURE §10 step 4: listener access (FR-NOTIF-01; revoked → badges vanish) and the contact permission.
-        val graph = appGraph
-        lifecycleScope.launch {
-            try {
-                graph.badges.refresh()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                graph.logger.w(TAG_BADGES, "listener access check failed", e)
+        AndroidTracer.begin(TraceSections.HOME_RESUME)
+        try {
+            super.onResume()
+            viewModel.onAction(HomeAction.RefreshRole)
+            onboardingViewModel.onAction(OnboardingAction.Resume)
+            setDefaultViewModel.flow.refresh()
+            // ARCHITECTURE §10 step 4: listener access (FR-NOTIF-01; revoked → badges vanish) and the contact permission.
+            val graph = appGraph
+            lifecycleScope.launch {
+                try {
+                    graph.badges.refresh()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    graph.logger.w(TAG_BADGES, "listener access check failed", e)
+                }
             }
+            searchViewModel.onAction(SearchAction.Resume)
+        } finally {
+            AndroidTracer.end()
         }
-        searchViewModel.onAction(SearchAction.Resume)
     }
 
     /**

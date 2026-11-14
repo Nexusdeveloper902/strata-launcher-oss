@@ -48,4 +48,7 @@ include(":backup")
 include(":testing:fakes")
 include(":testing:fixtures")
 include(":benchmark")
+
+// Fixture APKs for device tests and benchmarks (authored by us, never shipped).
+include(":fixtures:zz")
 include(":lint-rules")

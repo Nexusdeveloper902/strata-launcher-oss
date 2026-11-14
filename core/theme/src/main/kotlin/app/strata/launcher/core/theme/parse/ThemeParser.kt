@@ -1,6 +1,9 @@
 package app.strata.launcher.core.theme.parse
 
 import app.strata.launcher.core.common.Outcome
+import app.strata.launcher.core.common.trace.TraceSections
+import app.strata.launcher.core.common.trace.Tracer
+import app.strata.launcher.core.common.trace.section
 import app.strata.launcher.core.json.JsonArray
 import app.strata.launcher.core.json.JsonBool
 import app.strata.launcher.core.json.JsonError
@@ -54,17 +57,23 @@ class ThemeParser(
     private val migrations: ThemeMigrations = ThemeMigrations.V1,
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val limits: JsonLimits = JsonLimits.THEME,
+    /** `strata.themeParse` around stages 1–5 for T-THEME-44 on a device; [Tracer.NONE] on the JVM. */
+    private val tracer: Tracer = Tracer.NONE,
 ) {
     fun parse(bytes: ByteArray): Outcome<ParsedTheme, ThemeError> =
-        when (val r = JsonParser.parse(bytes, limits)) {
-            is Outcome.Ok -> validate(r.value)
-            is Outcome.Err -> Outcome.Err(jsonError(r.error))
+        tracer.section(TraceSections.THEME_PARSE) {
+            when (val r = JsonParser.parse(bytes, limits)) {
+                is Outcome.Ok -> validate(r.value)
+                is Outcome.Err -> Outcome.Err(jsonError(r.error))
+            }
         }
 
     fun parse(input: InputStream): Outcome<ParsedTheme, ThemeError> =
-        when (val r = JsonParser.parse(input, limits)) {
-            is Outcome.Ok -> validate(r.value)
-            is Outcome.Err -> Outcome.Err(jsonError(r.error))
+        tracer.section(TraceSections.THEME_PARSE) {
+            when (val r = JsonParser.parse(input, limits)) {
+                is Outcome.Ok -> validate(r.value)
+                is Outcome.Err -> Outcome.Err(jsonError(r.error))
+            }
         }
 
     /** Stages 4–5 on an already parsed tree. */

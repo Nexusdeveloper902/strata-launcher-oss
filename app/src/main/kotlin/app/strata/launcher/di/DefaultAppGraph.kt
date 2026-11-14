@@ -56,6 +56,7 @@ import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.platformapi.system.TimeTicks
 import app.strata.launcher.core.platformapi.widgets.WidgetHostController
 import app.strata.launcher.core.platformapi.widgets.WidgetRepository
+import app.strata.launcher.core.theme.parse.ThemeParser
 import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeLibrary
 import app.strata.launcher.core.theme.store.ThemeManager
@@ -81,6 +82,8 @@ import app.strata.launcher.platform.system.AndroidWallpaperColorsSource
 import app.strata.launcher.platform.system.IcuCollation
 import app.strata.launcher.platform.system.ViewHaptics
 import app.strata.launcher.platform.widgets.AndroidWidgetHost
+import app.strata.launcher.startup.AfterFirstFrame
+import app.strata.launcher.startup.AndroidTracer
 import app.strata.launcher.theme.FileProviderSharedFiles
 import app.strata.launcher.theme.PlatformThemeInputs
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -254,6 +257,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
                         ),
                     builtIns = AssetBuiltInThemeSource(appContext.assets),
                     clock = Clock.System,
+                    parser = ThemeParser(tracer = AndroidTracer),
                 )
             },
             files = { themeFiles },
@@ -287,7 +291,8 @@ class DefaultAppGraph(context: Context) : AppGraph {
         themeRepository.start()
         // THEME_SYSTEM §10.1: share copies older than 24 h are deleted at process start.
         if (themeStarted.compareAndSet(false, true)) {
-            appScope.launch {
+            // Housekeeping only: waits for home's first full frame (ARCHITECTURE §10 step 3, M9).
+            afterFirstFrame.launch {
                 sharedFiles.purgeExpired()
                 withContext(dispatchers.io) { purgeImportCache() }
             }
@@ -387,7 +392,8 @@ class DefaultAppGraph(context: Context) : AppGraph {
     override fun startCatalog() {
         profileSource
         catalogRepository.start()
-        appScope.launch(dispatchers.io) { runCatching { roomLaunchLog.pruneExpired() } }
+        // NFR-PRIV-05 retention: nothing on the first frame reads expired rows, so the prune waits for it (M9).
+        afterFirstFrame.launch(dispatchers.io) { runCatching { roomLaunchLog.pruneExpired() } }
         // ARCHITECTURE §12.3 steps 5–6: replay an interrupted restore, drop the last undo snapshot, detect an Auto
         // Backup restore. Off main; the catalog start above is not delayed (its first frame comes from the snapshot).
         if (backupStarted.compareAndSet(false, true)) {
@@ -397,6 +403,11 @@ class DefaultAppGraph(context: Context) : AppGraph {
             }
         }
     }
+
+    /** Start-up housekeeping held until home is fully drawn (ARCHITECTURE §10 step 3). */
+    private val afterFirstFrame by lazy { AfterFirstFrame(appScope) }
+
+    override fun firstFrameDrawn() = afterFirstFrame.firstFrameDrawn()
 
     override fun attachWindow(view: View?) {
         if (view == null) viewHaptics.detachAll() else viewHaptics.attach(view)

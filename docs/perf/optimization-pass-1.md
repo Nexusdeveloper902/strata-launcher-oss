@@ -1,5 +1,9 @@
 # Optimization pass 1 (after M0–M3)
 
+> Since M9: `benchmark-rules.pro` is gone (release and `benchmark` share `app/proguard-rules.pro`, no renaming), the
+> benchmarks check the M9 budgets on a device, and the up-to-date run instructions are in
+> `docs/release/RELEASE_GATE.md`. §6 below is kept as the record of this pass.
+
 Branch `perf-pass-1`, based on `main` at `b21fead` (M3 merged). Everything here is `Proposed` (AGENTS.md
 evidence labels): it was measured at build level in a cloud container with no device. The device numbers in §6
 are still to be collected on the Galaxy A56 (D-011).

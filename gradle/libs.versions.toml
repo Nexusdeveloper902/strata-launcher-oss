@@ -67,6 +67,8 @@ androidx-test-ext-junit = { module = "androidx.test.ext:junit-ktx", version.ref 
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 androidx-test-orchestrator = { module = "androidx.test:orchestrator", version.ref = "androidx-test-orchestrator" }
 androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "androidx-benchmark" }
+# Already on the Macrobenchmark runtime classpath; declared so custom TraceMetrics can compile (test APK only).
+androidx-benchmark-traceprocessor = { module = "androidx.benchmark:benchmark-traceprocessor", version.ref = "androidx-benchmark" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 android-lint-api = { module = "com.android.tools.lint:lint-api", version.ref = "android-lint" }
 android-lint-checks = { module = "com.android.tools.lint:lint-checks", version.ref = "android-lint" }

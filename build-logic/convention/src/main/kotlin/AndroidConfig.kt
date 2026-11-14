@@ -42,11 +42,15 @@ internal fun Project.addAndroidTestDependencies() {
     dependencies.add("testImplementation", libs.lib("androidx-test-ext-junit"))
 }
 
+/** The rest of the T-COMPAT-01 API matrix (26, 34 and 36 run on every PR). */
+internal val COMPAT_NIGHTLY_APIS = listOf(28, 29, 31, 33, 35)
+
 /**
  * Gradle Managed Devices for the per-PR smoke matrix (ARCHITECTURE 14.3: API 26, 34, 36 phones, x86_64) and the
  * AndroidX Test Orchestrator (each test in its own process, state cleared).
  * All three use the regular Google APIs image: ATD images ship without a soft keyboard, which T-SEARCH-10 needs.
  */
+
 internal fun TestOptions.configureStrataManagedDevices() {
     execution = "ANDROIDX_TEST_ORCHESTRATOR"
     managedDevices.localDevices.apply {
@@ -64,6 +68,14 @@ internal fun TestOptions.configureStrataManagedDevices() {
             device = "Pixel 6"
             apiLevel = 36
             systemImageSource = "google"
+        }
+        // T-COMPAT-01 nightly matrix (ARCHITECTURE 14.3; .github/workflows/nightly.yml). Not run per PR.
+        for (api in COMPAT_NIGHTLY_APIS) {
+            create("api$api") {
+                device = "Pixel 6"
+                apiLevel = api
+                systemImageSource = "google"
+            }
         }
     }
 }

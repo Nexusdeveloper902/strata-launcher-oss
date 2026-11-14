@@ -24,8 +24,10 @@ The PR title becomes the squash commit subject, so write it the same way.
 
 ## Local check (run before pushing)
 ```
-./gradlew assembleDebug testDebugUnitTest lintDebug ktlintCheck checkPermissions checkDependencies checkModuleGraph checkEntitlements checkLicences assembleDebugAndroidTest :build-logic:convention:test
+./gradlew assembleDebug testDebugUnitTest lintDebug ktlintCheck checkPermissions checkDependencies checkModuleGraph checkEntitlements checkLicences assembleDebugAndroidTest :build-logic:convention:test :app:checkReleaseApk :benchmark:assembleBenchmark
 ```
+`:app:checkReleaseApk` builds the release APK (R8) and checks it (T-CI-07: size per ABI, no debuggable flag, no
+pseudo-locales, no test code). Device budgets and the v1 release checklist: `docs/release/RELEASE_GATE.md`.
 If you changed requirement or test IDs, also run `python3 tools/trace/build.py`.
 New libraries must pass `checkDependencies` (the allow-list), Dependabot PRs included.
 
@@ -56,7 +58,7 @@ private Free-plan repository the rules below are a convention, backed by CI and 
 - Enable the local guard once per clone: `git config core.hooksPath tools/git-hooks`.
   `tools/git-hooks/pre-push` then refuses direct pushes to `main`.
 - Merge a pull request only when every CI check is green.
-- `.github/rulesets/main.json` records the intended rules (PR required, the 8 CI checks
+- `.github/rulesets/main.json` records the intended rules (PR required, the 9 CI checks
   required, squash-only, linear history, no force-push or deletion). It is not enforced now;
   import it (Settings -> Rules -> Rulesets -> Import) if the repository becomes public or the
   plan is upgraded. Its required checks must match the job names in

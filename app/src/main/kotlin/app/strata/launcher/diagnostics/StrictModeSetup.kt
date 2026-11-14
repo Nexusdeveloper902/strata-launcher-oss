@@ -70,6 +70,14 @@ object StrictModeSetup {
 
     internal fun resetReportedForTest() = synchronized(reported) { reported.clear() }
 
+    /**
+     * The config of the policies actually installed in this process, null before [install] succeeded (or if it
+     * failed). The T-REL-02 campaign test reads it to prove the run has thread-policy death on.
+     */
+    @Volatile
+    var installed: StrictModeConfig? = null
+        private set
+
     /** Never throws: a broken diagnostics hook must not stop the app from starting. */
     fun install(
         config: StrictModeConfig,
@@ -114,6 +122,7 @@ object StrictModeSetup {
             vm.penaltyListener(listenerExecutor) { v -> report("vm", v, logger) }
         }
         StrictMode.setVmPolicy(vm.build())
+        installed = config
     }
 
     /** Mirrors each distinct violation (by type + top app/framework frame) once into the local log. */
