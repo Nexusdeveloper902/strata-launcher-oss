@@ -13,7 +13,8 @@ import org.junit.runner.RunWith
  * Generates the app's Baseline Profile (ARCHITECTURE §15 profileinstaller, NFR-PERF-01, T-PERF-12) on a device:
  * cold start to the home screen, open the A–Z list, fling it, scrub the index, open search and type.
  * Needs API 33+ (or a rooted device) and the `benchmark` build of `:app` (not debuggable, not obfuscated).
- * Not part of any CI run. Steps and where the output goes: docs/perf/optimization-pass-1.md §6.
+ * CI runs it nightly on a managed emulator and uploads the profile as an artifact (.github/workflows/nightly.yml);
+ * a profile from a device is equally valid. Steps and where the output goes: docs/release/RELEASE_GATE.md.
  */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
@@ -24,7 +25,7 @@ class BaselineProfileGenerator {
     fun generate() =
         rule.collect(packageName = TARGET, includeInStartupProfile = true) {
             pressHome()
-            startActivityAndWait()
+            homeReady()
             device.findObject(By.res(ALL_APPS))?.click()
             if (device.wait(Until.hasObject(By.res(LIST)), TIMEOUT_MS)) {
                 val list =

@@ -23,6 +23,13 @@ class AndroidBenchmarkConventionPlugin : Plugin<Project> {
                     targetCompatibility = StrataBuild.JAVA_VERSION
                 }
                 targetProjectPath = ":app"
+                // CI correctness run of the Macrobenchmarks (dry run, no budgets): `api34BenchmarkAndroidTest`.
+                // Same device definition as the :app smoke device, so both share the cached system image.
+                testOptions.managedDevices.localDevices.create("api34") {
+                    device = "Pixel 6"
+                    apiLevel = 34
+                    systemImageSource = "google"
+                }
                 buildTypes {
                     // Release-like build of :app (see its `benchmark` build type); this one signs with debug keys.
                     create("benchmark") {
@@ -41,6 +48,7 @@ class AndroidBenchmarkConventionPlugin : Plugin<Project> {
             dependencies.add("implementation", libs.lib("androidx-test-ext-junit"))
             dependencies.add("implementation", libs.lib("androidx-test-uiautomator"))
             dependencies.add("implementation", libs.lib("androidx-benchmark-macro-junit4"))
+            dependencies.add("implementation", libs.lib("androidx-benchmark-traceprocessor"))
             registerModuleGraphGate(isAndroid = true)
         }
 }

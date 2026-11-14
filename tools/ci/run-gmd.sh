@@ -2,10 +2,16 @@
 # Runs one Gradle Managed Device smoke task. Retries ONCE, and only when the log shows an infrastructure
 # failure (emulator did not boot, adb/device lost, install transport error). A failing test is never retried
 # (IMPLEMENTATION_ROADMAP M0 risk: "Orchestrator with retries for infra failures only").
-# Usage: tools/ci/run-gmd.sh api34DebugAndroidTest
+# Usage: tools/ci/run-gmd.sh api34DebugAndroidTest [extra Gradle arguments...]
+#        tools/ci/run-gmd.sh :benchmark:api34BenchmarkAndroidTest -P...   (a task path is used as given)
 set -uo pipefail
 
-task="${1:?usage: run-gmd.sh <gradle managed-device task, e.g. api34DebugAndroidTest>}"
+task="${1:?usage: run-gmd.sh <gradle managed-device task, e.g. api34DebugAndroidTest> [gradle args...]}"
+shift
+case "$task" in
+  :*) task_path="$task" ;;
+  *) task_path=":app:${task}" ;;
+esac
 log="$(mktemp)"
 infra_pattern='Unable to start Android emulator|Unable to find device serial|Failed to start emulator|emulator.*(timed out|did not boot|crash)|Timed out waiting for .*(device|emulator|boot)|device offline|device .* not found|adb server|INSTALL_FAILED_(INSUFFICIENT_STORAGE|USER_RESTRICTED)|Unable to connect to adb|System image .*(download|unzip)|Connection reset|Read timed out|Failed to install the following SDK components|Archive is not a ZIP archive|Error reading Zip content'
 
@@ -39,10 +45,11 @@ dump_emulator_diagnostics() {
 attempt=1
 while true; do
   echo "::group::GMD ${task} attempt ${attempt}"
-  ./gradlew ":app:${task}" --no-daemon --stacktrace \
+  ./gradlew "${task_path}" --no-daemon --stacktrace \
     -Pstrata.strictModeDeath=true \
     -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
     -Pandroid.experimental.testOptions.managedDevices.emulator.showKernelLogging=true \
+    "$@" \
     2>&1 | tee "$log"
   status=${PIPESTATUS[0]}
   echo "::endgroup::"

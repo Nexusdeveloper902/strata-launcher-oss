@@ -3,19 +3,24 @@ package app.strata.launcher.benchmark
 import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.MacrobenchmarkScope
+import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.TraceSectionMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import app.strata.launcher.testing.fixtures.perf.PerfBudgets
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestName
 import org.junit.runner.RunWith
 
 /**
- * M5 theme macrobenchmarks on RD-1 (report only until M9). Run with `./gradlew :benchmark:connectedBenchmarkAndroidTest`
+ * Theme macrobenchmarks on RD-1; the budgets are checked on a physical device only ([BudgetGate]). Run with `./gradlew :benchmark:connectedBenchmarkAndroidTest`
  * against the `benchmark` build type (`app.strata.launcher.benchmark`). Never run in this repo's container.
  *
  * - T-THEME-48 (NFR-THEME-08): editor open; toggle discrete controls (preview light/dark), then drag the accent hue
@@ -28,15 +33,12 @@ class ThemeBenchmark {
     @get:Rule
     val rule = MacrobenchmarkRule()
 
+    @get:Rule
+    val test = TestName()
+
     private fun MacrobenchmarkScope.openLibrary() {
-        pressHome()
-        startActivityAndWait()
-        device.wait(Until.hasObject(By.res(PILL_MENU)), TIMEOUT_MS)
-        checkNotNull(device.findObject(By.res(PILL_MENU))) { "home menu button not found" }.click()
-        val themes =
-            device.wait(Until.findObject(By.res(MENU_THEMES)), TIMEOUT_MS) ?: device.findObject(By.text("Themes"))
-        checkNotNull(themes) { "Themes menu item not found" }.click()
-        device.wait(Until.hasObject(By.res(LIBRARY)), TIMEOUT_MS)
+        homeReady()
+        device.openThemeLibraryFromHome()
     }
 
     private fun MacrobenchmarkScope.openEditor() {
@@ -114,7 +116,60 @@ class ThemeBenchmark {
             row.click()
             device.waitForIdle()
         }
+        BudgetGate.check(
+            javaClass,
+            test.methodName,
+            BudgetGate.maxAtMost("${APPLY_SECTION}FirstMs", PerfBudgets.THEME_APPLY_MS, "T-THEME-53"),
+        )
     }
+
+    /**
+     * T-THEME-44 on the device (NFR-THEME-02, M9 "theme parse ≤ 5 ms typical"): with a built-in file theme (Paper,
+     * < 8 KiB) active, cold starts parse it at boot; every `strata.themeParse` slice is reported and the median must
+     * stay ≤ 5 ms. The 256 KiB (≤ 30 ms) case has no device fixture yet; core:theme PerformanceTest covers it on the JVM.
+     * `strata.themeBoot` and `strata.themeResolve` are reported for the "≤ 150 ms added to cold start" check.
+     */
+    @OptIn(ExperimentalMetricApi::class)
+    @Test
+    fun tTheme44_parseOnColdStart() {
+        try {
+            parseOnColdStart()
+        } finally {
+            // Leave the default theme for the other benchmarks (TEST_PLAN §0 "default theme").
+            UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).applyTheme(STRATA_DEFAULT)
+        }
+        BudgetGate.check(
+            javaClass,
+            test.methodName,
+            BudgetGate.medianAtMost(
+                SliceDurationsMetric.name(PARSE_SECTION),
+                PerfBudgets.THEME_PARSE_TYPICAL_MS,
+                "T-THEME-44",
+            ),
+        )
+    }
+
+    @OptIn(ExperimentalMetricApi::class)
+    private fun parseOnColdStart() =
+        rule.measureRepeated(
+            packageName = TARGET,
+            metrics =
+                listOf(
+                    SliceDurationsMetric(PARSE_SECTION),
+                    TraceSectionMetric("strata.themeBoot", TraceSectionMetric.Mode.First),
+                    TraceSectionMetric("strata.themeResolve", TraceSectionMetric.Mode.First),
+                ),
+            iterations = 5,
+            startupMode = StartupMode.COLD,
+            setupBlock = {
+                openLibrary()
+                device.findOrFail("theme_row_$PAPER").click()
+                device.waitForIdle()
+            },
+        ) {
+            startHome()
+            device.findOrFail(Strata.ALL_APPS)
+        }
 
     private companion object {
         const val TARGET = "app.strata.launcher.benchmark"
@@ -128,6 +183,7 @@ class ThemeBenchmark {
         const val ACCENT_SWATCH = "editor_swatch_colors_light_accent"
         const val ACCENT_HUE = "editor_slider_colors_light_accent_hue"
         const val APPLY_SECTION = "strata.themeApply"
+        const val PARSE_SECTION = "strata.themeParse"
         const val PAPER = "c5017d5b-b2b0-48ff-83ed-33f77fd14754"
         const val STRATA_DEFAULT = "a413ab93-de91-4614-8c5c-cfbe6d79231b"
         const val DRAG_STEPS = 500

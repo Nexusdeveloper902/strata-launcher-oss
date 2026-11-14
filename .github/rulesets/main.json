@@ -37,7 +37,8 @@
           { "context": "Static gates (permissions, dependencies, module graph, entitlements)" },
           { "context": "GMD smoke (API 26)" },
           { "context": "GMD smoke (API 34)" },
-          { "context": "GMD smoke (API 36)" }
+          { "context": "GMD smoke (API 36)" },
+          { "context": "Macrobenchmark correctness (GMD API 34)" }
         ]
       }
     }
