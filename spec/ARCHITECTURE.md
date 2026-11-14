@@ -488,7 +488,9 @@ ImageBitmap → L1 (+ L2 async write)
   drawable**, computed at build time and exposed as a generated constant (no manual step), so any change to the
   index or to a glyph's artwork invalidates L1/L2 after an app update.
 - **Checks:** T-THEME-55 validates the index (no duplicate packages, every id has a drawable, every drawable is a
-  single-colour vector). No settings field (section 4.2 unchanged) and no permission: the coverage tool is read-only.
+  single-colour vector). An optional private overlay (`platform/icons/glyphs-private/`: an `index.txt` merged after the
+  public index, plus drawables) holds the per-app glyphs; it never reaches the public mirror, and the checks and the
+  bundle version cover both sets (CONTRIBUTING "Public mirror and CI"). No settings field (section 4.2 unchanged) and no permission: the coverage tool is read-only.
 
 ---
 

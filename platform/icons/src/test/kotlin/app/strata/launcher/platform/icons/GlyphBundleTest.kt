@@ -61,7 +61,11 @@ class GlyphBundleTest {
         assertThat(GlyphIndex.parse("").size).isEqualTo(0)
     }
 
-    /** Production index: parses cleanly, no duplicate packages, every id has a single-colour vector drawable. */
+    /**
+     * Production index as packaged (the public index plus the private overlay when `glyphs-private/` exists): parses
+     * cleanly, no duplicate packages, every id has a single-colour vector drawable in exactly one of the two sets,
+     * and every overlay package reaches the packaged index.
+     */
     @Test
     fun tTheme55_productionIndex() {
         val text =
@@ -74,14 +78,26 @@ class GlyphBundleTest {
         val lines = text.lines().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }
         assertThat(index.size).isEqualTo(lines.size) // no duplicate was dropped
         assertThat(GlyphBundle.DRAWABLES.keys).containsAtLeastElementsIn(index.glyphIds)
-        val dir = File(System.getProperty("user.dir"), "src/main/res/drawable-nodpi")
+        val module = File(System.getProperty("user.dir"))
+        val publicDir = File(module, "src/main/res/drawable-nodpi")
+        val privateRoot = File(module, "glyphs-private")
+        val privateDir = File(privateRoot, "res/drawable-nodpi")
         for (id in index.glyphIds) {
-            val xml = File(dir, "glyph_$id.xml").readText()
+            val found = listOf(publicDir, privateDir).map { File(it, "glyph_$id.xml") }.filter { it.isFile }
+            assertThat(found).hasSize(1) // present, and not defined in both sets
+            val xml = found.single().readText()
             assertThat(xml).contains("<vector")
             val fills = Regex("android:fillColor=\"([^\"]*)\"").findAll(xml).map { it.groupValues[1] }.toSet()
             assertThat(fills).hasSize(1)
             assertThat(xml).doesNotContain("strokeColor")
         }
+        val overlay = File(privateRoot, "index.txt")
+        if (overlay.isFile) {
+            val private = GlyphIndex.parse(overlay.readText())
+            assertThat(private.problems).isEmpty()
+            for (pkg in private.packages) assertThat(index.glyphFor(pkg)).isEqualTo(private.glyphFor(pkg))
+        }
+        assertThat(index.glyphFor("app.strata.launcher")).isEqualTo("strata")
         assertThat(GlyphBundle.VERSION).matches("[0-9a-f]{16}")
     }
 
