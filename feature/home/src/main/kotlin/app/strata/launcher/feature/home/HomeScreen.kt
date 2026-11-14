@@ -86,6 +86,8 @@ import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeBannerKind
 import app.strata.launcher.core.ui.AlphabetIndex
 import app.strata.launcher.core.ui.Button
+import app.strata.launcher.core.ui.IndexBubble
+import app.strata.launcher.core.ui.IndexBubbleHost
 import app.strata.launcher.core.ui.IndexExclusion
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
@@ -264,6 +266,7 @@ fun HomeRoute(
             else -> IndexExclusion.FULL
         }
     val actions = rememberAppActions(state.favoriteKeys, onAction)
+    val indexBubble = remember { IndexBubbleHost() }
     // INTERACTION_SPEC §5: Tab opens the list while nothing on home has focus; once arrow keys moved focus into home
     // (favourites, pill, clock), Tab moves focus like anywhere else (FR-A11Y-04).
     var childFocused by remember { mutableStateOf(false) }
@@ -310,6 +313,7 @@ fun HomeRoute(
                 timeTicks = timeTicks,
                 widgetSlot = widgetSlot,
                 indexExclusion = if (listShown || state.layer == HomeLayer.FAV_EDIT) IndexExclusion.NONE else exclusion,
+                indexBubble = indexBubble,
             )
             val list = state.list
             if (listShown && list != null) {
@@ -347,6 +351,8 @@ fun HomeRoute(
                 FavoritesEditScreen(state = state, onAction = onAction)
             }
         }
+        // Above the list: a scrub that started on the home index keeps its bubble while the list covers home.
+        IndexBubble(indexBubble)
         if (search != null) searchLayer(search)
         HomeModals(state = state, onAction = onAction)
         overlay()
@@ -467,6 +473,7 @@ fun HomeScreen(
     timeTicks: Flow<Unit> = flowOf(Unit),
     indexExclusion: IndexExclusion = IndexExclusion.NONE,
     widgetSlot: HomeWidgetSlot? = null,
+    indexBubble: IndexBubbleHost? = null,
 ) {
     val theme = Strata.theme
     val rootActions = homeRootActions(state, onAction)
@@ -573,7 +580,10 @@ fun HomeScreen(
                 letters = list.index,
                 atEnd = atEnd,
                 dots = theme.alphabetIndex.glyphs == IndexGlyphs.DOTS,
-                showBubble = false,
+                // J-03 step 2: the bubble shows for a scrub that starts on home too. Its first touch opens the list
+                // over this (then hidden) layer, so the bubble is drawn by the route above the list ([indexBubble]).
+                showBubble = theme.alphabetIndex.showBubble,
+                bubbleHost = indexBubble,
                 exclusion = indexExclusion,
                 onSelect = { letter, first -> onAction(HomeAction.HomeIndexScrub(letter, first)) },
                 modifier =

@@ -119,6 +119,38 @@ With Strata Default, then Graphite and Paper, in One UI light and dark mode: ope
 disclosures, the widget picker (home menu → Widgets), long-press an app → Rename, and scrub the index. Every text must
 be clearly readable; no black text on a dark page.
 
-## 3. "Sometimes it shows the alphabet enlarged … sometimes it just scrolls"
+## 3. "Sometimes it shows the alphabet enlarged … sometimes it just scrolls" (index bubble)
 
-See the section below (index bubble).
+### Root cause
+Two indices exist (VISUAL_SPEC §9.3, THEME_SYSTEM `alphabetIndex.visibility`, default `always`): home's and the list's.
+A scrub that starts on the **home** index opens the list at the touched letter (J-03 step 1) and the gesture goes on
+on the home index, which keeps the pointer while the list jumps letter by letter. The home index was composed with
+`showBubble = false`, and once the list is open the whole home layer is drawn at alpha 0 under it, so no bubble could
+appear: the list "just scrolls". A scrub that starts on the list's own index showed the bubble. Which one the owner got
+depended on whether the list was already open when the finger went down, hence "sometimes". J-03 step 2 asks for the
+bubble on every scrub.
+
+Checked and not the cause here, but hardened: the pointer handler was keyed on `letters`, `trackTop` and
+`trackHeight`, so a relayout during a scrub (insets, an equal-but-new index list) would restart it and drop the rest
+of the gesture, and `active = false` was not in a `finally`, so a cancelled gesture could leave a stuck bubble. The
+handler is now keyed on nothing and reads the current geometry and letters (`rememberUpdatedState`), and `active` is
+reset in `finally`. Not causes: no long-press or slop gate (the down shows the bubble), no letter-change gate, no
+animation on the bubble (reduced motion draws the same), gesture exclusion covers the strip (unchanged).
+
+### Fix
+- `:core:ui` `IndexBubbleHost` + `IndexBubble`: an `AlphabetIndex` given a host writes its letter, finger position and
+  root position there instead of drawing the bubble itself; `IndexBubble(host)` draws it from a layer on top.
+- `HomeRoute` owns one host, passes it to home's index (now `showBubble = theme.alphabetIndex.showBubble`) and draws
+  `IndexBubble` above the list layer. The list's index draws its own bubble as before.
+
+### Tests (T-LIST-02 bubble half, J-03; reduced motion as T-A11Y-12)
+`feature/home/src/test/.../IndexBubbleTest` (Robolectric Compose): home index press-and-hold, fast drag, animations
+off, and two scrubs in a row; list index press-and-hold, fast drag, drag starting on the current letter, drag right
+after a fling, animations off. Each asserts the bubble is displayed at touch-down and while dragging, and gone after
+release. **On `main`: the 4 home-index cases fail** (no bubble at touch-down); all 9 pass with the fix. T-PERF-04
+(scrub jank) is unaffected in kind: the finger position is still read in the layout phase only.
+
+### Manual check on the A56
+Strata Default (index visible on home). On home, put a finger on the index and drag: the list opens and the large
+letter follows the finger. Release: it disappears. Repeat from inside the list, after a fling, and with "Remove
+animations" on.
