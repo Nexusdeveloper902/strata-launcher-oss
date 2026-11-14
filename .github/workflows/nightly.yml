@@ -1,0 +1,204 @@
+name: Nightly
+
+# M9 nightly matrix (ARCHITECTURE 14.3, TEST_PLAN T-COMPAT-01/02, T-REL-01, T-PERF-12). Not a merge gate: it runs on
+# main every night and on demand (Actions -> Nightly -> Run workflow), and its results feed the v1 release gate
+# (docs/release/RELEASE_GATE.md). Scheduled runs only happen on the default branch of the public mirror.
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g
+  # The P0 journey suite of T-COMPAT-01 (T-HOME-01, T-SEARCH-01, T-APPS-02, T-FAV-02, onboarding) plus the M9
+  # reliability and compatibility classes.
+  P0_CLASSES: >-
+    app.strata.launcher.HomeSmokeTest,app.strata.launcher.home.HomeDeviceTest,app.strata.launcher.catalog.ListDeviceTest,app.strata.launcher.search.SearchDeviceTest,app.strata.launcher.onboarding.OnboardingDeviceTest,app.strata.launcher.home.DefaultHomeDeviceTest,app.strata.launcher.rel.OptionalAccessDeniedDeviceTest,app.strata.launcher.rel.NoNetworkDeviceTest,app.strata.launcher.compat.InsetsDeviceTest,app.strata.launcher.compat.WindowSizesDeviceTest
+
+jobs:
+  compat-matrix:
+    name: T-COMPAT-01 API ${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 29, 31, 33, 35]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/share/powershell /usr/local/.ghcup /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/android/sdk/ndk \
+            /usr/local/graalvm /usr/local/share/chromium /usr/lib/google-cloud-sdk /usr/lib/jvm/temurin-8-jdk-amd64
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: P0 journeys on the managed device
+        run: >-
+          tools/ci/run-gmd.sh api${{ matrix.api }}DebugAndroidTest
+          "-Pandroid.testInstrumentationRunnerArguments.class=${{ env.P0_CLASSES }}"
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-compat-api${{ matrix.api }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  nav-modes:
+    name: T-COMPAT-02 API ${{ matrix.api }} ${{ matrix.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 34, 36]
+        mode: [gestural, threebutton]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/share/powershell /usr/local/.ghcup /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/android/sdk/ndk \
+            /usr/local/graalvm /usr/local/share/chromium /usr/lib/google-cloud-sdk /usr/lib/jvm/temurin-8-jdk-amd64
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Gesture and Back tests in ${{ matrix.mode }} navigation
+        run: >-
+          tools/ci/run-gmd.sh api${{ matrix.api }}DebugAndroidTest
+          -Pandroid.testInstrumentationRunnerArguments.class=app.strata.launcher.home.HomeDeviceTest,app.strata.launcher.search.SearchDeviceTest
+          -Pandroid.testInstrumentationRunnerArguments.strata.navMode=${{ matrix.mode }}
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-nav-api${{ matrix.api }}-${{ matrix.mode }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  monkey:
+    # T-REL-01 on API 34 (the TEST_PLAN environment) against the release-like benchmark build: 70 000 events, ~1 h.
+    name: T-REL-01 monkey (GMD API 34, 70 000 events)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/share/powershell /usr/local/.ghcup /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/android/sdk/ndk \
+            /usr/local/graalvm /usr/local/share/chromium /usr/lib/google-cloud-sdk /usr/lib/jvm/temurin-8-jdk-amd64
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Monkey
+        run: >-
+          tools/ci/run-gmd.sh :benchmark:api34BenchmarkAndroidTest
+          -Pandroid.testInstrumentationRunnerArguments.class=app.strata.launcher.benchmark.MonkeyTest
+          -Pandroid.testInstrumentationRunnerArguments.strata.monkeyEvents=70000
+          -Pandroid.testInstrumentationRunnerArguments.strata.monkeyThrottle=50
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-monkey
+          path: |
+            benchmark/build/reports/androidTests/
+            benchmark/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  baseline-profile:
+    # Collects the app's Baseline Profile on an emulator (profiles record which code runs, not how fast, so an emulator
+    # profile is valid). The owner reviews the artifact and commits it as app/src/main/baseline-prof.txt.
+    name: Baseline Profile (GMD API 34)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/share/powershell /usr/local/.ghcup /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/android/sdk/ndk \
+            /usr/local/graalvm /usr/local/share/chromium /usr/lib/google-cloud-sdk /usr/lib/jvm/temurin-8-jdk-amd64
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.1.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Generate
+        run: >-
+          tools/ci/run-gmd.sh :benchmark:api34BenchmarkAndroidTest
+          -Pandroid.testInstrumentationRunnerArguments.class=app.strata.launcher.benchmark.BaselineProfileGenerator
+          -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR,LOW-BATTERY
+      - name: Upload the profile
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: baseline-profile
+          path: |
+            benchmark/build/outputs/**/*-baseline-prof.txt
+            benchmark/build/outputs/**/*-startup-prof.txt
+          if-no-files-found: warn
+          retention-days: 30
