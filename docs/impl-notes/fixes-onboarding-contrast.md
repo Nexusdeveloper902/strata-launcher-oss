@@ -252,3 +252,26 @@ updated, marked Proposed).
 7. **Timeouts:** a shared `DEVICE_TIMEOUT_MS` in `DeviceState.kt`; the onboarding device test waits on the settings
    flow (`first { … }` under `withTimeoutOrNull`) instead of spinning on `waitForIdleSync`, and `HomeDeviceTest` uses
    `UiDevice.wait(Until.hasObject / Until.gone)` with it.
+
+## 7. Mirror CI on 355f93a
+
+- **GMD API 34/36, `HomeDeviceTest.searchClosesWithBackFromTheIndexEdge`:** the test itself was wrong. Line 308 waited
+  for the search layer through UiAutomator (`By.res("search_layer")`), which never matched (logcat: 15 s of
+  "Searching for node with selector … search_layer"); the layer is not exposed as a resource id there. The
+  review-requested switch from the Compose wait to `UiDevice.wait` introduced it. It now waits on the Compose tree
+  (`waitUntil(DEVICE_TIMEOUT_MS)`), which is the real state. The CI images run three-button navigation, so the
+  right-edge half would have been skipped by its `assume`: the test now switches the device to gesture navigation for
+  its run with `switchNavMode("gestural")` (the `DeviceStateRule` overlay support, now public) and restores the
+  previous overlays in `finally`; when the gestural overlay is missing it is skipped with a message, never passed
+  without the swipe.
+- **Macrobenchmark `StartupBenchmark.tPerf02_warmReturn`:** "No RT frame slice associated with UI thread frame slice
+  after launching slice". Trace analysis (perfetto trace processor) of this run and of main's run 43599000906:
+  - branch: `launching:` starts at 443 320.78 ms; the warm-return frame `Choreographer#doFrame 73071` started 3.3 ms
+    *earlier* (443 317.50 ms) and was drawn by RenderThread (`DrawFrames 73071`, 28.8 ms). The first frame after the
+    slice start is 73087, a no-op frame (17 µs `draw`, nothing invalidated), which has no RenderThread slice;
+  - main: `launching:` at 439 193.45 ms, frame 69995 started 6.2 ms *after* it and was drawn (`DrawFrames 69995`).
+  Both runs draw exactly one real frame on warm return, with the same shape (a long traversal, 89 ms here, 112 ms on
+  main); only which side of the system's `launching:` slice the frame starts on differs, by a few ms. The metric then
+  picks the following idle frame. This is a timing race of the metric in a one-iteration dry run on a loaded emulator,
+  not a change in what the user sees: no frame is lost, and the branch's home window does not take the new
+  window-background path (it shows the wallpaper). Not changed; the re-run on this push shows whether it repeats.

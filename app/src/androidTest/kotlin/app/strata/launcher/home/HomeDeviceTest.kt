@@ -49,6 +49,7 @@ import app.strata.launcher.focusReport
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.shell
+import app.strata.launcher.switchNavMode
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -297,23 +298,33 @@ class HomeDeviceTest {
 
     /**
      * Owner report (A56): search closed only with the back gesture from the left. With search open the index is covered,
-     * so no exclusion may remain on its edge, and a swipe from the right edge (gesture navigation; run with
-     * `strata.navMode=gestural`) closes search. The exclusion half runs in any navigation mode.
+     * so no exclusion may remain on its edge, and a swipe from the right edge closes search. The test switches the
+     * device to gesture navigation for its run (restored afterwards); without the gestural overlay it is skipped
+     * visibly, never passed without the swipe.
      */
     @Test
     fun searchClosesWithBackFromTheIndexEdge() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-        awaitHomeIndex()
-        compose.onNodeWithTag(HomeTestTags.PILL).performClick()
-        assertThat(device.wait(Until.hasObject(By.res(SearchTestTags.LAYER)), DEVICE_TIMEOUT_MS)).isTrue()
-        compose.waitForIdle()
-        assertThat(exclusionRects()).isEmpty()
-        // navigation_mode 2 = gestural: only then is an edge swipe a back gesture.
-        assumeTrue(shell("settings get secure navigation_mode").trim() == "2")
-        val w = device.displayWidth
-        val h = device.displayHeight
-        device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
-        assertThat(device.wait(Until.gone(By.res(SearchTestTags.LAYER)), DEVICE_TIMEOUT_MS)).isTrue()
+        val restoreNav = runCatching { switchNavMode("gestural") }
+        assumeTrue("gesture navigation is not available: ${restoreNav.exceptionOrNull()}", restoreNav.isSuccess)
+        try {
+            assumeTrue(
+                "navigation_mode is not gestural",
+                shell("settings get secure navigation_mode").trim() == GESTURAL_NAV_MODE,
+            )
+            awaitHomeIndex()
+            compose.onNodeWithTag(HomeTestTags.PILL).performClick()
+            compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) > 0 }
+            compose.waitForIdle()
+            assertThat(exclusionRects()).isEmpty()
+            val w = device.displayWidth
+            val h = device.displayHeight
+            // From the very edge inward, at the index's height: the system back gesture.
+            device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
+            compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) == 0 }
+        } finally {
+            restoreNav.getOrNull()?.invoke()
+        }
     }
 
     /** T-GEST-07: "Keep back gesture on index side" limits the exclusion to 200 dp + 16 dp around the touch. */
@@ -525,6 +536,9 @@ class HomeDeviceTest {
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
         const val EDGE_SWIPE_STEPS = 10
+
+        /** `settings get secure navigation_mode`: 0 three-button, 1 two-button, 2 gestural. */
+        const val GESTURAL_NAV_MODE = "2"
     }
 }
 

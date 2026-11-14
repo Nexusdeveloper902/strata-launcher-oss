@@ -223,6 +223,14 @@ class DeviceStateRule : TestRule {
  */
 private fun applyNavMode(): (() -> Unit)? {
     val wanted = InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
+    return switchNavMode(wanted)
+}
+
+/**
+ * Switches the navigation mode to [wanted] (`gestural` or `threebutton`, API 29+) for one test; returns how to restore
+ * the overlays enabled before, or null when nothing changed. Fails when the overlay is not active afterwards.
+ */
+fun switchNavMode(wanted: String): (() -> Unit)? {
     if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return null
     val overlay =
         NAV_OVERLAYS[wanted] ?: throw IllegalArgumentException("strata.navMode=$wanted: use ${NAV_OVERLAYS.keys}")
