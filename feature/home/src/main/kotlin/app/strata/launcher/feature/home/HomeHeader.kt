@@ -64,10 +64,12 @@ data class ClockText(
     val periodFirst: Boolean = false,
     /** The whole time as the locale writes it; the spoken text. */
     val full: String = "",
-) {
-    /** Hours, minutes and seconds joined with the locale separator. */
-    val time: String get() = listOfNotNull(hours, minutes, seconds).joinToString(separator)
-}
+    /**
+     * The time without the day period, with the locale's own literals between and around the fields (fr-CA
+     * `21 h 05 min 07 s`, bg `21:05:07 ч.`).
+     */
+    val time: String = listOfNotNull(hours, minutes, seconds).joinToString(separator),
+)
 
 object ClockFormat {
     fun pattern(
@@ -87,8 +89,39 @@ object ClockFormat {
         showSeconds: Boolean,
         locale: Locale,
         timeZone: TimeZone = TimeZone.getDefault(),
+    ): ClockText = format(millis, use24h, showSeconds, locale, timeZone, pattern(use24h, showSeconds, locale))
+
+    /**
+     * [pattern] as the clock shows it. A pattern the platform's formatter rejects falls back to `HH:mm` / `h:mm a`
+     * (plus seconds), so a bad locale pattern can never throw on every tick.
+     */
+    internal fun format(
+        millis: Long,
+        use24h: Boolean,
+        showSeconds: Boolean,
+        locale: Locale,
+        timeZone: TimeZone,
+        pattern: String,
+    ): ClockText =
+        try {
+            render(millis, use24h, showSeconds, locale, timeZone, pattern)
+        } catch (e: RuntimeException) {
+            render(millis, use24h, showSeconds, locale, timeZone, fallback(use24h, showSeconds))
+        }
+
+    private fun fallback(
+        use24h: Boolean,
+        showSeconds: Boolean,
+    ) = (if (use24h) "HH:mm" else "h:mm") + (if (showSeconds) ":ss" else "") + if (use24h) "" else " a"
+
+    private fun render(
+        millis: Long,
+        use24h: Boolean,
+        showSeconds: Boolean,
+        locale: Locale,
+        timeZone: TimeZone,
+        pattern: String,
     ): ClockText {
-        val pattern = pattern(use24h, showSeconds, locale)
         val tokens = tokens(pattern)
         val date = Date(millis)
 
@@ -107,6 +140,16 @@ object ClockFormat {
             } else {
                 ":"
             }
+        // The time is every token but the day period and the whitespace that joins it to the time.
+        val timeTokens =
+            tokens.filterIndexed { i, t ->
+                when {
+                    i == periodIdx -> false
+                    !t.field && t.text.isBlank() && (i == periodIdx - 1 || i == periodIdx + 1) -> false
+                    else -> true
+                }
+            }
+        val time = timeTokens.joinToString("") { t -> if (t.field) field(t).orEmpty() else t.text }.trim()
         return ClockText(
             hours = field(tokens.getOrNull(hourIdx)) ?: "",
             minutes = field(tokens.getOrNull(minuteIdx)) ?: "",
@@ -115,6 +158,7 @@ object ClockFormat {
             separator = separator,
             periodFirst = !use24h && periodIdx in 0 until hourIdx,
             full = SimpleDateFormat(pattern, locale).apply { this.timeZone = timeZone }.format(date),
+            time = time,
         )
     }
 

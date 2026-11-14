@@ -109,6 +109,53 @@ class ClockLocaleTest {
         assertThat(h12.full).isEqualTo(expectedFull("ar", "hm"))
     }
 
+    /** Literals between and around the fields stay: fr-CA writes "21 h 05 min 07 s", bg "21:05:07 ч.". */
+    @Test
+    fun literalsBetweenFieldsStay_frCaAndBgWithSeconds() {
+        for (tag in listOf("fr-CA", "bg")) {
+            val c = clock(tag, use24h = true, seconds = true)
+            assertThat(c.full).isEqualTo(expectedFull(tag, "Hms"))
+            // 24 h has no day period, so the shown time is exactly the locale's text.
+            assertThat(c.time).isEqualTo(c.full)
+            assertThat(c.time).contains("07")
+        }
+        assertThat(clock("fr-CA", use24h = true, seconds = true).time).contains("h")
+    }
+
+    /** The day period and its joining space are not part of the time; other literals are. */
+    @Test
+    fun periodIsNotPartOfTheTime() {
+        assertThat(clock("en-US", use24h = false).time).isEqualTo("9:05")
+        assertThat(clock("ja", use24h = false).time).isEqualTo("9:05")
+    }
+
+    /** A pattern the formatter rejects falls back to HH:mm / h:mm a instead of throwing on every tick. */
+    @Test
+    fun rejectedPatternFallsBack() {
+        val us = Locale.US
+        val h24 =
+            ClockFormat.format(
+                t,
+                use24h = true,
+                showSeconds = false,
+                locale = us,
+                timeZone = utc,
+                pattern = "HH:mm jjj",
+            )
+        assertThat(h24.time).isEqualTo("21:05")
+        val h12 =
+            ClockFormat.format(
+                t,
+                use24h = false,
+                showSeconds = true,
+                locale = us,
+                timeZone = utc,
+                pattern = "h:mm:ss jjj a",
+            )
+        assertThat(h12.time).isEqualTo("9:05:07")
+        assertThat(h12.period).isEqualTo("PM")
+    }
+
     /** The clock (shown and spoken, one [ClockText]) follows the system 12/24 h setting unless the theme overrides it. */
     private fun spokenWith(
         system: String,
