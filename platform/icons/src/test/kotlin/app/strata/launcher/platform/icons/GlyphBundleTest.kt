@@ -144,6 +144,25 @@ class GlyphBundleTest {
         assertThat(provider(lookup("bbbb")).cacheKey(req)).isNotEqualTo(provider(lookup("aaaa")).cacheKey(req))
     }
 
+    /** D-020: the layer check on real drawables; empty and full-bleed layers fall back to the glyph. */
+    @Test
+    fun tTheme54_monochromeLayerCheckOnDrawables() {
+        val transparent = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+        val fullBleed = android.graphics.drawable.ColorDrawable(Color.BLACK)
+        val glyph = requireNotNull(app.getDrawable(R.drawable.glyph_strata))
+        assertThat(MonochromeLayers.isUsable(transparent)).isFalse()
+        assertThat(MonochromeLayers.isUsable(fullBleed)).isFalse()
+        assertThat(MonochromeLayers.isUsable(glyph)).isTrue()
+    }
+
+    /** D-020: the precedence change invalidates every cached bitmap: the key starts with the pipeline version. */
+    @Test
+    fun cacheKeyCarriesThePipelineVersion() {
+        val req = IconRequest(AppKey("com.example.mail/.Main", serial), 1L, 96, 420)
+        assertThat(AndroidIconProvider.baseKey(req)).startsWith(AndroidIconProvider.PIPELINE_VERSION + "|")
+        assertThat(AndroidIconProvider.PIPELINE_VERSION).isEqualTo("v3")
+    }
+
     /** Override and pack beat the glyph in the pipeline as well (T-THEME-54 through the provider). */
     @Test
     fun overrideAndPackBeatTheGlyph() {

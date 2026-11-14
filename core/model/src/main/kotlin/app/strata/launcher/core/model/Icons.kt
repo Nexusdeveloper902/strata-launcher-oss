@@ -51,10 +51,11 @@ data class IconRequest(
 )
 
 /**
- * Where an icon comes from (THEME_SYSTEM §4.6 precedence, ARCHITECTURE §9.1): [PLAIN] is the app's normal system icon,
+ * Where an icon comes from, in THEME_SYSTEM §4.6 precedence order (D-020; the coverage tool counts in this order;
+ * ARCHITECTURE §9.1): [PLAIN] is the app's normal system icon,
  * untinted ("System icon (untinted)" in the M8 coverage tool).
  */
-enum class IconSource { OVERRIDE, PACK, GLYPH, PLATFORM_MONOCHROME, DESATURATED, PLAIN }
+enum class IconSource { OVERRIDE, PACK, PLATFORM_MONOCHROME, GLYPH, DESATURATED, PLAIN }
 
 /**
  * One row of the icon coverage tool (FR-SET-07, ARCHITECTURE §9.1): the [source] the render pipeline uses for the
