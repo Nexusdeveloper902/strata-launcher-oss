@@ -72,16 +72,19 @@ class ListBenchmark {
 
     /**
      * T-PERF-10: install the "Zz Test" fixture ×10; from the `strata.onPackageAdded` trace to the first
-     * `strata.rowComposed` after it ≤ 1 s. Needs the fixture APK pushed to [FIXTURE_APK] (docs/impl-notes/M1.md).
+     * `strata.rowComposed` after it ≤ 1 s. Needs the `:fixtures:zz` APK pushed to [FIXTURE_APK] (docs/release/RELEASE_GATE.md §3.6).
      */
     @OptIn(ExperimentalMetricApi::class)
     @Test
     fun tPerf10_changePropagation() {
         val shell = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        assumeTrue(
-            "push the Zz fixture APK to $FIXTURE_APK",
-            shell.executeShellCommand("ls $FIXTURE_APK").trim() == FIXTURE_APK,
-        )
+        val present = shell.executeShellCommand("ls $FIXTURE_APK").trim() == FIXTURE_APK
+        // Emulator (CI): no fixture pushed, nothing to measure. On a device a missing fixture is a failed precondition.
+        assumeTrue("no Zz fixture on this emulator", present || BudgetGate.enforced)
+        check(present) {
+            "T-PERF-10 needs the Zz fixture: ./gradlew :fixtures:zz:assembleDebug, then adb push " +
+                "fixtures/zz/build/outputs/apk/debug/zz-debug.apk $FIXTURE_APK"
+        }
         rule.measureRepeated(
             packageName = Strata.TARGET,
             metrics = listOf(SliceGapMetric("strata.onPackageAdded", "strata.rowComposed", PROPAGATION)),

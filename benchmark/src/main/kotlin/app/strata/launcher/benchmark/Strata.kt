@@ -52,6 +52,9 @@ internal fun MacrobenchmarkScope.startHome() = startActivityAndWait(Strata.homeI
 
 /** Launches home, completes first-run onboarding when it shows, and waits until "All apps" is on screen. */
 internal fun MacrobenchmarkScope.homeReady() {
+    // Another home comes to front first, so the Home intent below is a real launch, not a re-delivery to a resumed
+    // instance (with Strata as default home this lands on it, which is fine too).
+    pressHome()
     startHome()
     device.passOnboardingAndWaitForHome()
 }

@@ -61,7 +61,7 @@ class SearchBenchmark {
 
     /**
      * T-PERF-06: `CONTACTS2000` on the device (tools/perf/contacts2000.sh) and contact search switched on in the
-     * benchmark app (Settings -> Search -> Contacts, permission granted). 5 queries ×20; contact results ≤ 50 ms p95
+     * benchmark app (Settings -> Search -> Contacts in search, permission granted). 5 queries ×20; contact results ≤ 50 ms p95
      * and app ranking still within T-PERF-05 (apps are not delayed by contacts).
      */
     @Test
@@ -87,7 +87,7 @@ class SearchBenchmark {
                 field.text = "a"
                 check(device.wait(Until.hasObject(By.res(Strata.CONTACTS_HEADER)), Strata.TIMEOUT_MS) == true) {
                     "T-PERF-06: no contact results. Switch contact search on in the benchmark app (its Settings -> " +
-                        "Search -> Contacts, allow the permission) first"
+                        "Search -> Contacts in search, allow the permission) first"
                 }
             },
         ) {
