@@ -32,6 +32,7 @@ import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import app.strata.launcher.DEVICE_TIMEOUT_MS
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
 import app.strata.launcher.awaitWindowFocus
@@ -304,7 +305,7 @@ class HomeDeviceTest {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
         awaitHomeIndex()
         compose.onNodeWithTag(HomeTestTags.PILL).performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag(SearchTestTags.LAYER).fetchSemanticsNodes().isNotEmpty() }
+        assertThat(device.wait(Until.hasObject(By.res(SearchTestTags.LAYER)), DEVICE_TIMEOUT_MS)).isTrue()
         compose.waitForIdle()
         assertThat(exclusionRects()).isEmpty()
         // navigation_mode 2 = gestural: only then is an edge swipe a back gesture.
@@ -312,7 +313,7 @@ class HomeDeviceTest {
         val w = device.displayWidth
         val h = device.displayHeight
         device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag(SearchTestTags.LAYER).fetchSemanticsNodes().isEmpty() }
+        assertThat(device.wait(Until.gone(By.res(SearchTestTags.LAYER)), DEVICE_TIMEOUT_MS)).isTrue()
     }
 
     /** T-GEST-07: "Keep back gesture on index side" limits the exclusion to 200 dp + 16 dp around the touch. */

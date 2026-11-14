@@ -13,6 +13,7 @@ import app.strata.launcher.core.platformapi.apps.AppListSource
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
 import app.strata.launcher.core.platformapi.system.RoleController
+import app.strata.launcher.core.ui.AppPickerLogic
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
@@ -215,7 +216,10 @@ class OnboardingViewModel(
             }
         if (stored != null) {
             val current = progressOf(local.value.step, local.value.requested)
-            val adopt = if (initial) !movedBeforeLoad else stored.ordinal > current.ordinal
+            // Load without a saved step (new host, process death): the store is all there is. Otherwise (same process,
+            // or a resume) only progress made elsewhere is taken; a step the user went back to is stored by that Back.
+            val adopt =
+                if (initial && savedStep == null) !movedBeforeLoad else stored.ordinal > current.ordinal
             if (adopt && stored != current) {
                 val step = stepOf(stored)
                 val requested = stored == OnboardingProgress.ROLE_REQUESTED
@@ -243,12 +247,23 @@ class OnboardingViewModel(
             null
         }
 
-    /** Stores the current step (and whether a system screen was opened from it) for the other host and a relaunch. */
-    private fun persist() {
+    /**
+     * Stores the current step. Monotonic: a write never lowers the stored progress (another host, or a write still in
+     * flight, may be further on) except for an explicit Back ([back]).
+     */
+    private fun persist(back: Boolean = false) {
         val progress = progressOf(local.value.step, local.value.requested)
         viewModelScope.launch {
             try {
-                settings.update { it.copy(onboardingProgress = progress) }
+                settings.update { s ->
+                    if (back ||
+                        progress.ordinal > s.onboardingProgress.ordinal
+                    ) {
+                        s.copy(onboardingProgress = progress)
+                    } else {
+                        s
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -279,10 +294,13 @@ class OnboardingViewModel(
                 OnboardingStep.SET_DEFAULT -> OnboardingStep.FAVORITES
                 OnboardingStep.DONE -> OnboardingStep.SET_DEFAULT
             }
-        go(previous)
+        go(previous, back = true)
     }
 
-    private fun go(step: OnboardingStep) {
+    private fun go(
+        step: OnboardingStep,
+        back: Boolean = false,
+    ) {
         if (!local.value.loaded) movedBeforeLoad = true
         // Leaving the set-default step backwards, or entering it again, starts without an opened system screen; Done
         // keeps the mark so Back from Done does not bounce.
@@ -290,7 +308,7 @@ class OnboardingViewModel(
         local.update { it.copy(step = step, requested = requested) }
         handle[KEY_STEP] = step.name
         handle[KEY_REQUESTED] = requested
-        persist()
+        persist(back)
         if (step == OnboardingStep.SET_DEFAULT) setDefault.refresh()
     }
 
@@ -400,10 +418,7 @@ class OnboardingViewModel(
         internal fun filter(
             apps: List<VisibleApp>,
             query: String,
-        ): List<VisibleApp> {
-            val q = query.trim()
-            return if (q.isEmpty()) apps else apps.filter { it.displayLabel.contains(q, ignoreCase = true) }
-        }
+        ): List<VisibleApp> = AppPickerLogic.filter(apps, query)
 
         private fun encode(key: AppKey) = "${key.userSerial}|${key.component}"
 

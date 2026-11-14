@@ -6,6 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.BackEventCompat
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -16,6 +18,7 @@ import app.strata.launcher.a11y.KeyboardFixture
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
+import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -45,8 +48,8 @@ class BackFromEitherEdgeTest {
         compose.waitForIdle()
     }
 
-    private fun start() {
-        KeyboardFixture.graph().install()
+    private fun start(onboarded: Boolean = true) {
+        KeyboardFixture.graph(onboarded).install()
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         activity =
             Robolectric.buildActivity(HomeActivity::class.java, KeyboardFixture.homeIntent(context)).setup().get()
@@ -122,6 +125,32 @@ class BackFromEitherEdgeTest {
         idle()
         compose.onNodeWithTag(SheetTestTags.SHEET).assertExists()
         assertWithMessage("exclusion rects while a sheet covers the list index").that(exclusionRects()).isEmpty()
+    }
+
+    /** Review of PR #32: onboarding is home's first layer and covers the index. */
+    @Test
+    fun onboardingOverHome_noExclusion() {
+        start(onboarded = false)
+        compose.onNodeWithTag(OnboardingTestTags.ROOT).assertExists()
+        assertWithMessage("exclusion rects while onboarding covers home").that(exclusionRects()).isEmpty()
+    }
+
+    /** Review of PR #32: the "Jump to letter" grid (FR-A11Y-02) covers the list index. */
+    @Test
+    fun letterGrid_noExclusion() {
+        start()
+        compose.onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
+        idle()
+        val jump =
+            compose
+                .onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions) and hasScrollToIndexAction())
+                .fetchSemanticsNode()
+                .config[SemanticsActions.CustomActions]
+                .first { it.label == "Jump to letter…" }
+        compose.runOnIdle { jump.action() }
+        idle()
+        compose.onNodeWithTag(SheetTestTags.LETTER_GRID).assertExists()
+        assertWithMessage("exclusion rects while the letter grid is open").that(exclusionRects()).isEmpty()
     }
 
     @Test

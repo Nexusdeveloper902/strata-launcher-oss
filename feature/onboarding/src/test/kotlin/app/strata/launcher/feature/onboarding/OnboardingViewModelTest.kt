@@ -193,6 +193,31 @@ class OnboardingViewModelTest {
         assertThat(vm.state.value.setDefault.held).isTrue()
     }
 
+    /**
+     * Review of PR #32: the saved state says a role screen was opened, the store is behind (its write was lost). The
+     * saved step wins, and with the role held the flow moves on to Done; the store is never lowered.
+     */
+    @Test
+    fun savedRoleRequested_storeBehind_keepsSavedStep() {
+        settings.set(settings.value.copy(onboardingProgress = OnboardingProgress.FAVORITES))
+        role.defaultHome = true
+        val handle = SavedStateHandle(mapOf("onboarding_step" to "SET_DEFAULT", "onboarding_role_requested" to true))
+        val vm = viewModel(handle)
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.DONE)
+        assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.DONE)
+    }
+
+    /** Persist is monotonic: a forward step never lowers a store another host moved on; Back does. */
+    @Test
+    fun persistNeverLowersExceptBack() {
+        val vm = viewModel()
+        settings.set(settings.value.copy(onboardingProgress = OnboardingProgress.ROLE_REQUESTED))
+        vm.onAction(OnboardingAction.Continue) // Welcome → Favourites, stale relative to the store
+        assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.ROLE_REQUESTED)
+        vm.onAction(OnboardingAction.Back)
+        assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.WELCOME)
+    }
+
     /** Resume adopts progress another host made, never an older one. */
     @Test
     fun resumeAdoptsProgressFromTheOtherHost() {

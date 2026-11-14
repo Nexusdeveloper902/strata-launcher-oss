@@ -17,6 +17,7 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import app.strata.launcher.DEVICE_TIMEOUT_MS
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
 import app.strata.launcher.core.model.OnboardingProgress
@@ -30,6 +31,7 @@ import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -78,8 +80,14 @@ class OnboardingDeviceTest {
                     onboardingProgress = OnboardingProgress.WELCOME,
                 )
             }
-            restoreRoleHolder?.let { holder ->
-                shell("cmd role add-role-holder --user $userId android.app.role.HOME $holder")
+            if (roleChanged) {
+                val holder = restoreRoleHolder
+                if (holder != null) {
+                    shell("cmd role add-role-holder --user $userId android.app.role.HOME $holder")
+                } else {
+                    // No holder before the test: take the role away from Strata again.
+                    shell("cmd role remove-role-holder --user $userId android.app.role.HOME ${context.packageName}")
+                }
             }
             Unit
         }
@@ -87,14 +95,16 @@ class OnboardingDeviceTest {
     /** Numeric user of this test (never `current`). */
     private val userId = android.os.Process.myUid() / 100_000
 
-    /** The HOME role holder before a test that changes it; put back in [restore]. */
+    /** The HOME role holder before a test that changes it (null: none); put back in [restore]. */
     private var restoreRoleHolder: String? = null
 
-    private fun progress(): OnboardingProgress =
+    /** This test changed the HOME role holder. */
+    private var roleChanged = false
+
+    /** Waits on the settings store itself until [predicate] holds (or [DEVICE_TIMEOUT_MS]); true when it did. */
+    private fun awaitSettings(predicate: (app.strata.launcher.core.model.Settings) -> Boolean): Boolean =
         runBlocking {
-            graph.settingsRepository.settings
-                .first()
-                .onboardingProgress
+            withTimeoutOrNull(DEVICE_TIMEOUT_MS) { graph.settingsRepository.settings.first(predicate) } != null
         }
 
     private fun tag(t: String): BySelector = By.res(t)
@@ -285,6 +295,7 @@ class OnboardingDeviceTest {
                 .lineSequence()
                 .map(String::trim)
                 .firstOrNull { it.isNotEmpty() && !it.contains(' ') }
+        roleChanged = true
         releaseHomeRole()
         assumeTrue(!graph.roleController.isDefaultHome())
         startFromLauncherIcon()
@@ -293,20 +304,14 @@ class OnboardingDeviceTest {
         assertThat(waitFor(OnboardingTestTags.SET_DEFAULT)).isTrue()
         clickFresh(OnboardingTestTags.SET_DEFAULT)
         // Real state: the flow stored that a system screen is open.
-        val end = android.os.SystemClock.uptimeMillis() + 10_000
-        while (progress() != OnboardingProgress.ROLE_REQUESTED && android.os.SystemClock.uptimeMillis() < end) {
-            instrumentation.waitForIdleSync()
-        }
-        assertThat(progress()).isEqualTo(OnboardingProgress.ROLE_REQUESTED)
+        assertThat(awaitSettings { it.onboardingProgress == OnboardingProgress.ROLE_REQUESTED }).isTrue()
         shell("cmd role add-role-holder --user $userId android.app.role.HOME ${context.packageName}")
         assertThat(graph.roleController.isDefaultHome()).isTrue()
         device.pressHome()
-        assertThat(waitFor(OnboardingTestTags.DONE, 15_000)).isTrue()
+        assertThat(waitFor(OnboardingTestTags.DONE, DEVICE_TIMEOUT_MS)).isTrue()
         assertThat(device.hasObject(tag(OnboardingTestTags.WELCOME))).isFalse()
         click(OnboardingTestTags.CONTINUE)
-        val done = android.os.SystemClock.uptimeMillis() + 10_000
-        while (!onboardingDone() && android.os.SystemClock.uptimeMillis() < done) instrumentation.waitForIdleSync()
-        assertThat(onboardingDone()).isTrue()
+        assertThat(awaitSettings { it.onboardingDone }).isTrue()
     }
 
     /** T-ONBOARD-03 (manual): accept the role dialog → RESULT_OK and held → Done → home. */

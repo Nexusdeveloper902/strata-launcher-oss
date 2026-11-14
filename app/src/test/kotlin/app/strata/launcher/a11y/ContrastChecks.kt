@@ -14,6 +14,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.isSpecified
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -38,8 +39,7 @@ data class ContrastFailure(
  * is the background, the pixel farthest from it in contrast is the text. A pixel that is not opaque (home draws over
  * the wallpaper, which a test has none of) is composited over black and over white and the worse ratio counts: the
  * theme's "AA on any wallpaper" rule (THEME_SYSTEM §7.3). Minimum 4.5:1, or 3:1 for large text (≥ 24 sp, or ≥ 18.66 sp
- * bold). Skipped: disabled controls (WCAG exempts inactive components), texts with no pixel that differs from the
- * background (not drawn: off screen or zero alpha), and texts outside [scope] when it is given.
+ * bold). Skipped: disabled controls (WCAG exempts inactive components), texts whose line boxes are entirely off screen or clipped, and texts outside [scope] when it is given.
  */
 fun ComposeTestRule.contrastFailures(scope: Set<String> = emptySet()): List<ContrastFailure> {
     waitForIdle()
@@ -99,7 +99,7 @@ private fun composeOwners(view: View): List<ViewRootForTest> {
     return (0 until view.childCount).flatMap { composeOwners(view.getChildAt(it)) }
 }
 
-private class Sample(
+internal class Sample(
     val ratio: Double,
     val fg: Int,
     val bg: Int,
@@ -119,40 +119,74 @@ private class Shot(
         val clip = n.boundsInWindow
         val counts = HashMap<Int, Int>()
         val region = ArrayList<Int>()
-        for (line in 0 until layout.lineCount) {
-            val l = (origin.x + layout.getLineLeft(line)).roundToInt()
-            val r = (origin.x + layout.getLineRight(line)).roundToInt()
-            val t = (origin.y + layout.getLineTop(line)).roundToInt()
-            val b = (origin.y + layout.getLineBottom(line)).roundToInt()
-            val x0 = max(max(min(l, r), clip.left.roundToInt()), 0)
-            val x1 = min(min(max(l, r), clip.right.roundToInt()), width)
-            val y0 = max(max(t, clip.top.roundToInt()), 0)
-            val y1 = min(min(b, clip.bottom.roundToInt()), height)
-            for (y in y0 until y1) {
-                for (x in x0 until x1) {
+
+        fun add(
+            x0: Int,
+            y0: Int,
+            x1: Int,
+            y1: Int,
+        ) {
+            for (y in max(y0, 0) until min(y1, height)) {
+                for (x in max(x0, 0) until min(x1, width)) {
                     val p = pixels[y * width + x]
                     region += p
                     counts[p] = (counts[p] ?: 0) + 1
                 }
             }
         }
-        if (region.isEmpty()) return null
-        val bg = counts.maxBy { it.value }.key
-        var best = 1.0
-        var fg = bg
-        for (p in region) {
-            if (p == bg) continue
-            val r = worstRatio(p, bg)
-            if (r > best) {
-                best = r
-                fg = p
-            }
+        var lineArea = 0
+        var visibleLineArea = 0
+        for (line in 0 until layout.lineCount) {
+            val l = (origin.x + layout.getLineLeft(line)).roundToInt()
+            val r = (origin.x + layout.getLineRight(line)).roundToInt()
+            val t = (origin.y + layout.getLineTop(line)).roundToInt()
+            val b = (origin.y + layout.getLineBottom(line)).roundToInt()
+            val x0 = max(min(l, r), clip.left.roundToInt())
+            val x1 = min(max(l, r), clip.right.roundToInt())
+            val y0 = max(t, clip.top.roundToInt())
+            val y1 = min(b, clip.bottom.roundToInt())
+            lineArea += (max(l, r) - min(l, r)) * (b - t)
+            if (x1 > x0 && y1 > y0) visibleLineArea += (x1 - x0) * (y1 - y0)
+            add(x0, y0, x1, y1)
         }
-        // Nothing but the background: the text is not drawn here (another layer covers it, or it is transparent).
-        if (fg == bg) return null
-        return Sample(best, fg, bg)
+        // A centred text laid out wider than its node (the index letters) puts its line box mostly outside the node;
+        // the node's own bounds hold the glyphs then.
+        if (lineArea > 0 && visibleLineArea * 2 < lineArea) {
+            region.clear()
+            counts.clear()
+            add(clip.left.roundToInt(), clip.top.roundToInt(), clip.right.roundToInt(), clip.bottom.roundToInt())
+        }
+        // Off screen or clipped away entirely: nothing of this text is drawn in this window.
+        if (region.isEmpty()) return null
+        return contrastOf(region, counts)
     }
 }
+
+/**
+ * Background = the most frequent colour of the sampled box. Text = weighted by pixel count: of the pixels that differ
+ * from the background, ranked by contrast, the one at the top 5 % (at least the 3rd): the glyph core, while a few
+ * stray pixels of an icon edge or a divider in the box cannot stand in for dim text. A box with nothing but the
+ * background colour is text drawn in the background colour: a 1:1 failure, not a skip.
+ */
+internal fun contrastOf(
+    region: List<Int>,
+    counts: Map<Int, Int> = region.groupingBy { it }.eachCount(),
+): Sample {
+    val bg = counts.maxBy { it.value }.key
+    val others = counts.filterKeys { it != bg }
+    val total = others.values.sum()
+    if (total == 0) return Sample(1.0, bg, bg)
+    val rank = max(MIN_RANK, ceil(total * TOP_SHARE).toInt())
+    var seen = 0
+    for ((colour, count) in others.entries.sortedByDescending { worstRatio(it.key, bg) }) {
+        seen += count
+        if (seen >= rank || seen == total) return Sample(worstRatio(colour, bg), colour, bg)
+    }
+    return Sample(1.0, bg, bg)
+}
+
+private const val MIN_RANK = 3
+private const val TOP_SHARE = 0.05
 
 /** The ratio of two drawn pixels; translucent ones over a black and a white wallpaper, the worse of the two. */
 internal fun worstRatio(
