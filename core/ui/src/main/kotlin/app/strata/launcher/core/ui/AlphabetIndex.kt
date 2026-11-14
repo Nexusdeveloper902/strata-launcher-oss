@@ -237,14 +237,10 @@ fun AlphabetIndex(
                     },
         )
 
-        // The glyph never outgrows its 14–28 dp row (VISUAL_SPEC §9.3), whatever the font scale: at large text sizes
-        // the letter grid ("Jump to letter…") is the readable alternative (NFR-A11Y-02).
+        // Growth from a large font scale stops at the 14–28 dp row (VISUAL_SPEC §9.3); the theme's own size is kept. At
+        // large text sizes the letter grid ("Jump to letter…") is the readable alternative (NFR-A11Y-02).
         val indexStyle =
-            remember(type.index, pitch, density) {
-                val fit = with(density) { (pitch * INDEX_FILL).toSp() }
-                val size = if (type.index.fontSize.value > fit.value) fit else type.index.fontSize
-                type.index.copy(fontSize = size, lineHeight = size)
-            }
+            remember(type.index, pitch, density) { type.index.capFontScaleGrowth(density, pitch * INDEX_FILL) }
         val trackWidth = if (active) ACTIVE_WIDTH else VISUAL_WIDTH
         Column(
             modifier =
