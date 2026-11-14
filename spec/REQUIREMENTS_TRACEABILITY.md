@@ -207,7 +207,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | NFR-PERF-02 | P0 | Smooth list fling and index scrub | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-03, T-PERF-04, T-PERF-11 | M1, M9 |
 | NFR-PERF-03 | P0 | Search results recomputed within 8 ms median | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §8 | PRODUCT_SPEC §5 | T-PERF-05, T-PERF-06 | M2, M7, M9 |
 | NFR-PERF-04 | P0 | Memory ceiling and bounded icon cache | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §9 | PRODUCT_SPEC §5 | T-PERF-07, T-PERF-08 | M3, M9 |
-| NFR-PERF-05 | P0 | No periodic jobs, alarms or wakelocks | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-09 | M9 |
+| NFR-PERF-05 | P0 | No periodic jobs, alarms or wakelocks | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-09, T-PERF-13, T-PERF-14 | M9 |
 | NFR-PERF-06 | P1 | Package changes within 1 s; theme apply within 300 ms | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-10, T-LIST-08, T-THEME-53 | M9 |
 | NFR-PERF-07 | P1 | Release APK at most 12 MB per ABI | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-CI-07 | M9 |
 
@@ -281,7 +281,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
 - Requirements with at least one test: 145; without: 11.
 - Requirements with a roadmap milestone: 152; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 256; §22 rows: 144.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 258; §22 rows: 144.
 
 ### P0/P1 requirements lacking tests
 - None.

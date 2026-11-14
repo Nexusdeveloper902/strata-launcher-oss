@@ -314,6 +314,8 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-PERF-10 | Change propagation | list open | Install/remove the fixture ×10 with timestamps from the `onPackageAdded` trace to the row-composed trace | ≤ 1 s each | M | NFR-PERF-06, FR-LIST-04 |
 | T-PERF-11 | 120 Hz frame timing | RD-2 at 120 Hz | Run T-PERF-03/04 | Janky frames ≤ 1 % / ≤ 3 % against the 8.3 ms budget | M | NFR-PERF-02 |
 | T-PERF-12 | Baseline Profile effect | with and without the profile | T-PERF-01 both ways | The profile improves the median (recorded). The gate is T-PERF-01 | M | NFR-PERF-01 |
+| T-PERF-13 | Idle home cost | default theme (`wallpaper.show` false), minutes clock, a few apps | Settle home at rest, then the list; run the clock 59 s with no input; send one minute tick; stop and restart the activity; switch to a theme that lets the wallpaper through and back | No recomposition and no pending frame between ticks (one recomposition per tick); stopped: no clock receiver and the widget host not listening; `FLAG_SHOW_WALLPAPER` only while the wallpaper can be seen (opaque backdrop: flag cleared, opaque window background) | R | NFR-PERF-05 |
+| T-PERF-14 | Event bursts | badges on, listener connected; icon pack registry started; lock service config | 100 updates of alerting notifications in one burst; 50 package broadcasts in one burst; read the lock service's accessibility config | Badge counts published at most twice, nothing logged; at most 2 pack discoveries; the lock service subscribes to no event type, reads no window content and asks for no flags beyond the default | U + R | NFR-PERF-05 |
 
 ## 17. PRIV
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -492,7 +494,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | NFR-PERF-02 | T-PERF-03, T-PERF-04, T-PERF-11 |
 | NFR-PERF-03 | T-PERF-05, T-PERF-06 |
 | NFR-PERF-04 | T-PERF-07, T-PERF-08 |
-| NFR-PERF-05 | T-PERF-09 |
+| NFR-PERF-05 | T-PERF-09, T-PERF-13, T-PERF-14 |
 | NFR-PERF-06 | T-PERF-10, T-LIST-08, T-THEME-53 |
 | NFR-PERF-07 | T-CI-07 |
 | NFR-A11Y-01 | T-A11Y-08, T-A11Y-07 |
