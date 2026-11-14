@@ -1,10 +1,12 @@
 package app.strata.launcher.theme
 
+import android.graphics.drawable.ColorDrawable
 import android.os.SystemClock
 import android.view.Choreographer
 import android.view.View
 import android.view.ViewTreeObserver
 import android.view.Window
+import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -124,17 +126,26 @@ class ThemeHost(
     }
 }
 
-/** Light status/navigation bar icons on dark backdrops and vice versa, from `E(W)` (VISUAL_SPEC §6). */
+/**
+ * Light status/navigation bar icons on dark backdrops and vice versa, from `E(W)` (VISUAL_SPEC §6); the window
+ * background of non-wallpaper windows follows the theme.
+ */
 @Composable
 private fun SystemBarTint(
     window: Window,
     theme: ResolvedTheme,
 ) {
     val light = backdropIsLight(theme)
+    val background = theme.colors.background
     SideEffect {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.isAppearanceLightStatusBars = light
         controller.isAppearanceLightNavigationBars = light
+        // Windows that do not show the wallpaper: the window background is the theme's, not the platform's light or
+        // dark default, so nothing the content leaves unpainted (resize, IME, transitions) shows the wrong colour.
+        if (window.attributes.flags and WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER == 0) {
+            window.setBackgroundDrawable(ColorDrawable(background or OPAQUE))
+        }
     }
 }
 
@@ -146,6 +157,8 @@ internal fun backdropIsLight(theme: ResolvedTheme): Boolean {
     val bright = Wcag.luminance(Contrast.effectiveBackground(theme.colors, spec, RgbF.WHITE))
     return (dark + bright) / 2 > MID_LUMINANCE
 }
+
+private const val OPAQUE = 0xFF000000.toInt()
 
 /** Luminance where black and white text have equal contrast. */
 private const val MID_LUMINANCE = 0.179

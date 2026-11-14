@@ -269,8 +269,12 @@ fun AlphabetIndex(
                 val color =
                     when {
                         isCurrent -> colors.accent
+
                         letter.isEmpty && !folded -> colors.textSecondary.copy(alpha = EMPTY_ALPHA)
-                        else -> colors.textSecondary.copy(alpha = IDLE_ALPHA)
+
+                        // Full `textSecondary`: index letters are small text held to 4.5:1 (THEME_SYSTEM §7.1 P2); a
+                        // 70 % alpha dropped every built-in preset below it.
+                        else -> colors.textSecondary
                     }
                 val glyph = if (dots || (folded && s % 2 == 1)) stringResource(R.string.index_fold) else letter.label
                 // Semantics live on the full-width overlay below (NFR-A11Y-03: the 48 dp strip is the target).
@@ -391,6 +395,5 @@ private val ACTIVE_WIDTH = 32.dp
 private val BUBBLE_SIZE = 64.dp
 private val BUBBLE_GAP = 24.dp
 private const val ACTIVE_TRACK_ALPHA = 0.9f
-private const val IDLE_ALPHA = 0.7f
 private const val EMPTY_ALPHA = 0.35f
 private const val ACTIVE_SCALE = 1.3f
