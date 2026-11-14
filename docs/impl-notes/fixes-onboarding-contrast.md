@@ -1,6 +1,6 @@
-# Fixes from the owner's Galaxy A56 pass: onboarding restart, dark text on dark backgrounds, index bubble
+# Fixes from the owner's Galaxy A56 pass: onboarding, contrast, index bubble, back from the right edge
 
-Branch `fix-onboarding-contrast` (from `main` a1c7f47). Three owner reports, each root-caused, fixed at the cause and
+Branch `fix-onboarding-contrast` (from `main` a1c7f47). Four owner reports, each root-caused, fixed at the cause and
 covered by a test that fails on `main`. Implemented from `spec/` only. Everything not fixed by `spec/` is `Proposed`.
 A fourth report (notification dots) was withdrawn by the owner ("the dots now work"); nothing was changed for it.
 
@@ -154,3 +154,32 @@ release. **On `main`: the 4 home-index cases fail** (no bubble at touch-down); a
 Strata Default (index visible on home). On home, put a finger on the index and drag: the list opens and the large
 letter follows the finger. Release: it disappears. Repeat from inside the list, after a fling, and with "Remove
 animations" on.
+
+## 4. "You can only close [search] with the gesture on the left side"
+
+### Root cause
+The alphabet index on the right edge registers a system gesture exclusion (INTERACTION_SPEC §4.2, T-GEST-06) so a
+scrub is not taken for back. `HomeRoute` turned it off for the home index only while the list was shown, and for the
+list index only while search was open. Opening search **from home** (the pill) left the home index's exclusion on, and
+a sheet or dialog over the list left the list index's on. The system then gives a right-edge swipe inside the excluded
+strip to the app as touches, which the search layer does not treat as back: only the left edge closed search. The back
+handlers themselves are edge-agnostic (`PredictiveBackHandler` in search and sheets reads no `swipeEdge`), and no
+search pointer input eats edge swipes.
+
+### Fix
+`HomeRoute`: one rule for both indices: exclusion only while the index is touchable, i.e. home is resumed, no search
+layer and no modal (sheet, dialog, menu). Otherwise `NONE`. The bubble work of §3 adds no exclusion.
+
+### Tests (T-GEST-06, INTERACTION_SPEC §4.2)
+- `app/src/test/.../home/BackFromEitherEdgeTest` (Robolectric, real `HomeActivity`): exclusion rects present on home
+  at rest; empty with search opened from home, with search opened from the list, and with a sheet over the list; a
+  predictive back from `EDGE_RIGHT` and from `EDGE_LEFT` (`BackEventCompat` through the activity's dispatcher) closes
+  search, after which the exclusion is back. **On `main`: "search from home" and "sheet over list" fail** (the rect
+  `1089,0–1233,2601` stays); the back-dispatch cases pass on `main` too (they guard the handlers, which were fine).
+- Device: `HomeDeviceTest.searchClosesWithBackFromTheIndexEdge`: no exclusion with search open (any mode); with
+  gesture navigation (`navigation_mode` = 2, e.g. `-Pandroid.testInstrumentationRunnerArguments.strata.navMode=gestural`)
+  a swipe from the right edge closes search.
+
+### Manual check on the A56
+Gesture navigation on. On home, tap the search pill, then swipe back from the right edge at the height of the index:
+search closes. Same from the list's search field, and with an app's sheet open over the list (the sheet closes).

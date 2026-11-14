@@ -259,9 +259,12 @@ fun HomeRoute(
             .currentStateAsState()
             .value
             .isAtLeast(Lifecycle.State.RESUMED)
+    // System gesture exclusion only for an index the user can touch now: never under search, a sheet or a dialog,
+    // where the back gesture from that edge must reach the system (owner report: search closed only from the left).
+    val indexTouchable = resumed && search == null && noModal
     val exclusion =
         when {
-            !resumed -> IndexExclusion.NONE
+            !indexTouchable -> IndexExclusion.NONE
             state.settings.keepBackGestureOnIndexSide -> IndexExclusion.AROUND_TOUCH
             else -> IndexExclusion.FULL
         }
@@ -332,7 +335,7 @@ fun HomeRoute(
                     jump = state.listJump,
                     onJumpConsumed = { onAction(HomeAction.JumpConsumed(it.seq)) },
                     onJumpToLetterMenu = { letterGrid = true },
-                    indexExclusion = if (search == null) exclusion else IndexExclusion.NONE,
+                    indexExclusion = exclusion,
                     work = state.work,
                     onWorkPaused = { onAction(HomeAction.SetWorkPaused(it)) },
                     privateSpace = state.privateSpace,

@@ -294,6 +294,27 @@ class HomeDeviceTest {
         device.pressBack()
     }
 
+    /**
+     * Owner report (A56): search closed only with the back gesture from the left. With search open the index is covered,
+     * so no exclusion may remain on its edge, and a swipe from the right edge (gesture navigation; run with
+     * `strata.navMode=gestural`) closes search. The exclusion half runs in any navigation mode.
+     */
+    @Test
+    fun searchClosesWithBackFromTheIndexEdge() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+        awaitHomeIndex()
+        compose.onNodeWithTag(HomeTestTags.PILL).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(SearchTestTags.LAYER).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        assertThat(exclusionRects()).isEmpty()
+        // navigation_mode 2 = gestural: only then is an edge swipe a back gesture.
+        assumeTrue(shell("settings get secure navigation_mode").trim() == "2")
+        val w = device.displayWidth
+        val h = device.displayHeight
+        device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(SearchTestTags.LAYER).fetchSemanticsNodes().isEmpty() }
+    }
+
     /** T-GEST-07: "Keep back gesture on index side" limits the exclusion to 200 dp + 16 dp around the touch. */
     @Test
     fun tGest07_keepBackOption() {
@@ -502,6 +523,7 @@ class HomeDeviceTest {
         const val TAG = "HomeDeviceTest"
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
+        const val EDGE_SWIPE_STEPS = 10
     }
 }
 
