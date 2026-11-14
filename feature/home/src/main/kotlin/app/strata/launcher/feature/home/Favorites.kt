@@ -1,5 +1,6 @@
 package app.strata.launcher.feature.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -61,8 +64,13 @@ import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.FavoritesRepository
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.ui.AppIcon
+import app.strata.launcher.core.ui.AppPicker
+import app.strata.launcher.core.ui.AppPickerTags
+import app.strata.launcher.core.ui.AppPickerTexts
+import app.strata.launcher.core.ui.Button
 import app.strata.launcher.core.ui.IconRequestKey
 import app.strata.launcher.core.ui.NotificationBadge
+import app.strata.launcher.core.ui.OutlinedButton
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.WorkBadge
@@ -77,14 +85,22 @@ object FavEditTestTags {
     const val SCREEN = "fav_edit"
     const val DONE = "fav_edit_done"
     const val ANNOUNCEMENT = "fav_edit_announcement"
+    const val ADD_APPS = "fav_edit_add_apps"
+    const val PICKER = "fav_picker"
+    const val PICKER_SEARCH = "fav_picker_search"
+    const val PICKER_LIST = "fav_picker_list"
+    const val PICKER_COUNT = "fav_picker_count"
+    const val PICKER_LIMIT = "fav_picker_limit"
+    const val PICKER_CONFIRM = "fav_picker_confirm"
+    const val PICKER_CANCEL = "fav_picker_cancel"
+
+    fun pick(key: AppKey) = "fav_picker_pick_${key.component}_${key.userSerial}"
 
     fun row(app: VisibleApp) = "fav_edit_row_${app.key.component}_${app.key.userSerial}"
 
     fun handle(app: VisibleApp) = "fav_edit_handle_${app.key.component}_${app.key.userSerial}"
 
     fun remove(app: VisibleApp) = "fav_edit_remove_${app.key.component}_${app.key.userSerial}"
-
-    fun add(app: VisibleApp) = "fav_edit_add_${app.key.component}_${app.key.userSerial}"
 }
 
 /** `type.favorite` (VISUAL_SPEC §3): the list label × `favorites.textScale`. */
@@ -267,9 +283,10 @@ internal fun appActions(
 }
 
 /**
- * S-FAVEDIT (FR-FAV-02, J-07): favourites with drag handles (drag starts on the handle at once, or anywhere on the
- * row after a long-press) and remove buttons; a11y actions Move up / Move down / Move to top / Remove with a polite
- * live-region announcement; then the other apps with "Add" (the picker for an empty home). Done or Back saves.
+ * S-FAVEDIT (FR-FAV-02, J-07), the one place to manage favourites: rows with drag handles (drag starts on the handle
+ * at once, or anywhere on the row after a long-press) and a remove button each (removal shows at once, with Undo); a11y
+ * actions Move up / Move down / Move to top / Remove with a polite live-region announcement; "Add apps" opens the
+ * picker ([FavoritesPicker]). Done or Back saves.
  */
 @Composable
 fun FavoritesEditScreen(
@@ -277,16 +294,13 @@ fun FavoritesEditScreen(
     onAction: (HomeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val theme = Strata.theme
+    val picker = state.favPicker
+    if (picker != null) {
+        FavoritesPicker(picker, onAction, modifier)
+        return
+    }
     val colors = Strata.colors
     val order = state.favEdit
-    val inEdit = order.map { it.key }.toSet()
-    val others =
-        state.list
-            ?.sections
-            ?.flatMap { it.apps }
-            ?.filterNot { it.key in inEdit }
-            .orEmpty()
     var dragging by remember { mutableStateOf<AppKey?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var rowHeight by remember { mutableIntStateOf(1) }
@@ -422,50 +436,126 @@ fun FavoritesEditScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    TextButton(
+                    RemoveButton(
+                        description = stringResource(R.string.fav_remove_named, app.displayLabel),
                         onClick = { onAction(HomeAction.RemoveFromEdit(app.key)) },
                         modifier = Modifier.testTag(FavEditTestTags.remove(app)),
-                    ) { Text(text = remove) }
+                    )
                 }
             }
-            item(key = "add_header") {
-                Text(
-                    text =
-                        if (order.size < FavoritesRepository.MAX) {
-                            stringResource(R.string.fav_add_apps)
-                        } else {
-                            pluralStringResource(R.plurals.fav_cap, FavoritesRepository.MAX, FavoritesRepository.MAX)
-                        },
-                    style = Strata.typography.section,
-                    color = colors.textSecondary,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp)
-                            .semantics { heading() },
-                )
-            }
-            if (order.size < FavoritesRepository.MAX) {
-                items(others, key = { "o:" + it.key.component + ":" + it.key.userSerial }) { app ->
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .focusRing()
-                                .clickable(role = Role.Button) { onAction(HomeAction.AddInEdit(app.key)) }
-                                .padding(horizontal = theme.list.horizontalPaddingDp.dp)
-                                .testTag(FavEditTestTags.add(app)),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
+            item(key = "add_apps") {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    if (order.size >= FavoritesRepository.MAX) {
                         Text(
-                            text = stringResource(R.string.fav_add_app, app.displayLabel),
-                            style = Strata.typography.label,
-                            color = colors.textPrimary,
+                            text =
+                                pluralStringResource(
+                                    R.plurals.fav_cap,
+                                    FavoritesRepository.MAX,
+                                    FavoritesRepository.MAX,
+                                ),
+                            style = Strata.typography.caption,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(bottom = 8.dp),
                         )
                     }
+                    OutlinedButton(
+                        onClick = { onAction(HomeAction.OpenFavPicker) },
+                        modifier = Modifier.testTag(FavEditTestTags.ADD_APPS),
+                    ) { Text(text = stringResource(R.string.fav_add_apps)) }
                 }
             }
+        }
+    }
+}
+
+/**
+ * "Add apps" (FR-FAV-01/02): the shared checklist ([AppPicker]) over the visible apps (hidden apps and private space
+ * left out), current favourites checked, the cap of 12 with the onboarding explanation. Confirm applies (new ones
+ * appended); Cancel or Back leaves the favourites as they were.
+ */
+@Composable
+private fun FavoritesPicker(
+    picker: FavPickerUi,
+    onAction: (HomeAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BackHandler { onAction(HomeAction.FavPickerCancel) }
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Strata.colors.background)
+                .safeDrawingPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag(FavEditTestTags.PICKER),
+    ) {
+        Text(
+            text = stringResource(R.string.fav_picker_title),
+            style = MaterialTheme.typography.titleLarge,
+            color = Strata.colors.textPrimary,
+            modifier = Modifier.semantics { heading() },
+        )
+        AppPicker(
+            apps = picker.apps,
+            query = picker.query,
+            picked = picker.picked,
+            limitReached = picker.limitReached,
+            texts =
+                AppPickerTexts(
+                    count = stringResource(R.string.fav_picker_count, picker.picked.size, FavoritesRepository.MAX),
+                    limit = stringResource(R.string.fav_picker_limit, FavoritesRepository.MAX),
+                    search = stringResource(R.string.fav_picker_search),
+                ),
+            tags = PICKER_TAGS,
+            onQuery = { onAction(HomeAction.FavPickerQuery(it)) },
+            onToggle = { onAction(HomeAction.FavPickerToggle(it)) },
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(
+                onClick = { onAction(HomeAction.FavPickerCancel) },
+                modifier = Modifier.testTag(FavEditTestTags.PICKER_CANCEL),
+            ) { Text(text = stringResource(R.string.cancel)) }
+            Button(
+                onClick = { onAction(HomeAction.FavPickerConfirm) },
+                modifier = Modifier.padding(start = 8.dp).testTag(FavEditTestTags.PICKER_CONFIRM),
+            ) { Text(text = stringResource(R.string.done)) }
+        }
+    }
+}
+
+private val PICKER_TAGS =
+    AppPickerTags(
+        search = FavEditTestTags.PICKER_SEARCH,
+        list = FavEditTestTags.PICKER_LIST,
+        count = FavEditTestTags.PICKER_COUNT,
+        limit = FavEditTestTags.PICKER_LIMIT,
+        row = FavEditTestTags::pick,
+    )
+
+/** The row's remove control: a 48 dp target with an × and the name "Remove <label> from favourites". */
+@Composable
+private fun RemoveButton(
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val color = Strata.colors.textPrimary
+    Box(
+        modifier =
+            modifier
+                .size(48.dp)
+                .focusRing(CircleShape)
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.size(16.dp)) {
+            val stroke = 2.dp.toPx()
+            drawLine(color, Offset.Zero, Offset(size.width, size.height), stroke, StrokeCap.Round)
+            drawLine(color, Offset(size.width, 0f), Offset(0f, size.height), stroke, StrokeCap.Round)
         }
     }
 }

@@ -278,6 +278,7 @@ the default on read and on restore.
 | 21 | `list_sort_by_usage` | bool | false | v1.x | FR-LIST-05 | yes | yes |
 | 22 | `swipe_down_action` | enum `SwipeDownAction` | `NONE` | `NONE`, `NOTIFICATIONS`; v1.x | FR-GEST-04 | yes | yes |
 | 23 | `lock_gesture_enabled` | bool | false | v1.x, `full` flavour only | FR-GEST-03 | yes | yes |
+| 24 | `onboarding_progress` | enum `OnboardingProgress` | `WELCOME` | `WELCOME`, `FAVORITES`, `SET_DEFAULT`, `ROLE_REQUESTED`, `DONE` (Proposed: the first-run step, shared by both hosts of D-008 and kept across a process kill; `ROLE_REQUESTED` = a set-default system screen was opened, so a held role moves the flow to Done) | FR-ONBOARD-01, J-01 | no | yes |
 
 Not settings (owned elsewhere): theme pointers and LKG (`theme_index.pb`, THEME_SYSTEM §11.2);
 widget `replace_clock` and height (`widget_placement`); favourites, hidden, renames, icon
@@ -291,6 +292,7 @@ option java_package = "app.strata.launcher.core.data.settings";
 enum BadgeStyle { BADGE_STYLE_DOT = 0; BADGE_STYLE_COUNT = 1; }
 enum AppearanceOverride { APPEARANCE_FOLLOW_THEME = 0; APPEARANCE_SYSTEM = 1; APPEARANCE_LIGHT = 2; APPEARANCE_DARK = 3; }
 enum SwipeDownAction { SWIPE_DOWN_NONE = 0; SWIPE_DOWN_NOTIFICATIONS = 1; }
+enum OnboardingProgress { ONBOARDING_WELCOME = 0; ONBOARDING_FAVORITES = 1; ONBOARDING_SET_DEFAULT = 2; ONBOARDING_ROLE_REQUESTED = 3; ONBOARDING_DONE = 4; }
 message Settings {
   optional int32 catalogue_version = 1;
   optional string install_id = 2;
@@ -315,6 +317,7 @@ message Settings {
   optional bool list_sort_by_usage = 21;
   optional SwipeDownAction swipe_down_action = 22;
   optional bool lock_gesture_enabled = 23;
+  optional OnboardingProgress onboarding_progress = 24;
 }
 ```
 The Kotlin `Settings` model in `:core:model` mirrors this table with the defaults applied;

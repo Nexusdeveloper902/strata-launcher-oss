@@ -86,6 +86,8 @@ import app.strata.launcher.core.theme.store.ThemeBanner
 import app.strata.launcher.core.theme.store.ThemeBannerKind
 import app.strata.launcher.core.ui.AlphabetIndex
 import app.strata.launcher.core.ui.Button
+import app.strata.launcher.core.ui.IndexBubble
+import app.strata.launcher.core.ui.IndexBubbleHost
 import app.strata.launcher.core.ui.IndexExclusion
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
@@ -147,6 +149,8 @@ fun HomeRoute(
     widgetSlot: HomeWidgetSlot? = null,
     /** Drawn above everything else (the widget menu sheet), supplied by `:app`. */
     overlay: @Composable () -> Unit = {},
+    /** [overlay] currently shows a modal (the widget menu): the index is covered. */
+    overlayModal: Boolean = false,
 ) {
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -198,6 +202,20 @@ fun HomeRoute(
                             )
                         if (result == SnackbarResult.ActionPerformed) {
                             currentOnAction(HomeAction.SetHidden(effect.key, hidden = false))
+                        }
+                    }
+                }
+
+                is HomeEffect.FavoriteRemoved -> {
+                    launch {
+                        val result =
+                            snackbar.showTimed(
+                                resources.getString(R.string.fav_removed, effect.label),
+                                resources.getString(R.string.undo),
+                                UNDO_MS,
+                            )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            currentOnAction(HomeAction.UndoRemoveFromEdit(effect.key, effect.index))
                         }
                     }
                 }
@@ -257,13 +275,19 @@ fun HomeRoute(
             .currentStateAsState()
             .value
             .isAtLeast(Lifecycle.State.RESUMED)
+    // System gesture exclusion only for an index the user can touch now: never under search, a sheet or a dialog,
+    // where the back gesture from that edge must reach the system (owner report: search closed only from the left).
+    // Also not under onboarding (home's first layer), the letter grid or an overlay sheet (review of PR #32).
+    val indexTouchable =
+        resumed && search == null && noModal && !state.showOnboarding && !letterGrid && !overlayModal
     val exclusion =
         when {
-            !resumed -> IndexExclusion.NONE
+            !indexTouchable -> IndexExclusion.NONE
             state.settings.keepBackGestureOnIndexSide -> IndexExclusion.AROUND_TOUCH
             else -> IndexExclusion.FULL
         }
     val actions = rememberAppActions(state.favoriteKeys, onAction)
+    val indexBubble = remember { IndexBubbleHost() }
     // INTERACTION_SPEC §5: Tab opens the list while nothing on home has focus; once arrow keys moved focus into home
     // (favourites, pill, clock), Tab moves focus like anywhere else (FR-A11Y-04).
     var childFocused by remember { mutableStateOf(false) }
@@ -310,6 +334,7 @@ fun HomeRoute(
                 timeTicks = timeTicks,
                 widgetSlot = widgetSlot,
                 indexExclusion = if (listShown || state.layer == HomeLayer.FAV_EDIT) IndexExclusion.NONE else exclusion,
+                indexBubble = indexBubble,
             )
             val list = state.list
             if (listShown && list != null) {
@@ -328,7 +353,7 @@ fun HomeRoute(
                     jump = state.listJump,
                     onJumpConsumed = { onAction(HomeAction.JumpConsumed(it.seq)) },
                     onJumpToLetterMenu = { letterGrid = true },
-                    indexExclusion = if (search == null) exclusion else IndexExclusion.NONE,
+                    indexExclusion = exclusion,
                     work = state.work,
                     onWorkPaused = { onAction(HomeAction.SetWorkPaused(it)) },
                     privateSpace = state.privateSpace,
@@ -347,6 +372,8 @@ fun HomeRoute(
                 FavoritesEditScreen(state = state, onAction = onAction)
             }
         }
+        // Above the list: a scrub that started on the home index keeps its bubble while the list covers home.
+        IndexBubble(indexBubble)
         if (search != null) searchLayer(search)
         HomeModals(state = state, onAction = onAction)
         overlay()
@@ -447,7 +474,7 @@ private val WIDGET_GAP = 12.dp
 /** INTERACTION_SPEC §7 "HOME → SEARCH": home content fades to 0.3 α. */
 private const val UNDER_SEARCH_ALPHA = 0.3f
 
-/** J-05: the hide undo snackbar stays 5 s. */
+/** J-05: the hide undo snackbar stays 5 s (also removal in Edit favourites). */
 private const val UNDO_MS = 5_000L
 
 /**
@@ -467,6 +494,7 @@ fun HomeScreen(
     timeTicks: Flow<Unit> = flowOf(Unit),
     indexExclusion: IndexExclusion = IndexExclusion.NONE,
     widgetSlot: HomeWidgetSlot? = null,
+    indexBubble: IndexBubbleHost? = null,
 ) {
     val theme = Strata.theme
     val rootActions = homeRootActions(state, onAction)
@@ -573,7 +601,10 @@ fun HomeScreen(
                 letters = list.index,
                 atEnd = atEnd,
                 dots = theme.alphabetIndex.glyphs == IndexGlyphs.DOTS,
-                showBubble = false,
+                // J-03 step 2: the bubble shows for a scrub that starts on home too. Its first touch opens the list
+                // over this (then hidden) layer, so the bubble is drawn by the route above the list ([indexBubble]).
+                showBubble = theme.alphabetIndex.showBubble,
+                bubbleHost = indexBubble,
                 exclusion = indexExclusion,
                 onSelect = { letter, first -> onAction(HomeAction.HomeIndexScrub(letter, first)) },
                 modifier =
@@ -680,7 +711,7 @@ private fun FavoritesBlock(
         if (favorites.isEmpty() && state.list != null) {
             // INTERACTION_SPEC §8 "No favourites".
             TextButton(
-                onClick = { onAction(HomeAction.EditFavorites) },
+                onClick = { onAction(HomeAction.AddFavoritesFromHome) },
                 modifier = Modifier.padding(horizontal = 8.dp).testTag(HomeTestTags.ADD_FAVORITES),
             ) {
                 Text(text = stringResource(R.string.add_favorites), style = Strata.typography.label)

@@ -223,26 +223,19 @@ class HomeScreenTest {
         compose.onNodeWithTag(AppListTestTags.header("M")).assertIsDisplayed()
     }
 
-    /** INTERACTION_SPEC §8: no favourites → "Add favourites" opens FAVEDIT with the app picker. */
+    /** INTERACTION_SPEC §8: no favourites → "Add favourites" opens the picker; Done saves and returns home. */
     @Test
     fun emptyFavouritesOfferPicker() {
         val h = harness(favorites = 0)
         h.setContent(compose)
         compose.onNodeWithTag(HomeTestTags.ADD_FAVORITES).performClick()
         assertThat(h.state.layer).isEqualTo(HomeLayer.FAV_EDIT)
-        compose
-            .onNodeWithTag(
-                FavEditTestTags.add(
-                    h.state.list!!
-                        .sections
-                        .first()
-                        .apps
-                        .first(),
-                ),
-            ).performClick()
-        compose.onNodeWithTag(FavEditTestTags.DONE).performClick()
+        compose.onNodeWithTag(FavEditTestTags.PICKER).assertExists()
+        compose.onNodeWithTag(FavEditTestTags.pick(apps.first().key)).performClick()
+        compose.onNodeWithTag(FavEditTestTags.PICKER_CONFIRM).performClick()
         compose.waitForIdle()
         assertThat(h.favoritesRepo.state.value).containsExactly(apps.first().key)
+        assertThat(h.state.layer).isEqualTo(HomeLayer.REST)
     }
 
     /** FR-GEST-03: double-tap on empty home locks when on and enabled; when the service is off, a hint once. */

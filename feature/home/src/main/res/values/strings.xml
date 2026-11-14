@@ -91,7 +91,6 @@
     <string name="fav_replace">Replace…</string>
     <string name="fav_replace_title">Replace which favourite?</string>
     <string name="fav_add_apps">Add apps</string>
-    <string name="fav_add_app">Add %1$s</string>
     <string name="fav_move_up">Move up</string>
     <string name="fav_move_down">Move down</string>
     <string name="fav_move_top">Move to top</string>
@@ -120,4 +119,10 @@
     <string name="profile_not_default">Only the default home app can do this. Set Strata as default first.</string>
     <string name="profile_unsupported">Turn work apps on or off in your phone\'s settings.</string>
     <string name="profile_failed">That didn\'t work. Try again.</string>
+    <string name="fav_remove_named">Remove %1$s from favourites</string>
+    <string name="fav_removed">%1$s removed from favourites</string>
+    <string name="fav_picker_title">Choose favourites</string>
+    <string name="fav_picker_count">Chosen: %1$d of %2$d</string>
+    <string name="fav_picker_limit">That\'s the limit: %1$d. Uncheck one to choose another.</string>
+    <string name="fav_picker_search">Search apps</string>
 </resources>

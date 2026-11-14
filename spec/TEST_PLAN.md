@@ -121,6 +121,10 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-FAV-03 | Accessible reorder | TalkBack semantics | Custom actions on C: "Move to top", on A: "Move down" | Order follows. Announcement via live region | C | FR-FAV-02, FR-A11Y-01 |
 | T-FAV-04 | Overflow scroll at 200 % | font scale 2.0, 12 favourites, compact phone | Scroll the favourites block | All 12 reachable. None clipped. Swipe-up started inside the block scrolls it until its end, then opens search | C + S | FR-FAV-03, NFR-A11Y-02 |
 | T-FAV-05 | No scroll when it fits | font 1.0, 5 favourites | Attempt a scroll inside the block | Block does not scroll. Swipe-up opens search | C | FR-FAV-03, FR-GEST-01 |
+| T-FAV-06 | Remove in Edit favourites | A, B, C | Edit favourites → remove B (row control) → Undo; then remove A → Done | B is gone at once, the snackbar offers Undo, Undo puts B back in place; after Done the stored set is B, C. The control is named "Remove A from favourites" and is ≥ 48 dp | C | FR-FAV-02, NFR-A11Y-01, NFR-A11Y-03 |
+| T-FAV-07 | Add apps picker | A, B favourites; one app hidden | Edit favourites → Add apps → search "mu" → check Music → Done; uncheck A → Done; check E → Cancel; Done | Current favourites are checked; the search filters; the hidden app is not offered; Music is appended; A leaves; Cancel changes nothing | C | FR-FAV-01, FR-FAV-02 |
+| T-FAV-08 | Picker cap | 11 favourites | Check two more apps in the picker | The 12th is checked; the 13th is refused with the limit text; nothing added silently | C | FR-FAV-01 |
+| T-FAV-09 | Settings entry | onboarded | Settings → Home → Favourites | Home opens in Edit favourites with the current favourites (also before home's list has loaded) and "Add apps" | R | FR-FAV-02, FR-SET-01 |
 
 ## 7. GEST
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -404,8 +408,8 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-APPS-09 | T-APPS-14, T-APPS-07, T-LIFE-08 |
 | FR-APPS-10 | T-APPS-15, T-APPS-16, T-SEARCH-08, T-LIFE-09 |
 | FR-APPS-11 | T-APPS-17 |
-| FR-FAV-01 | T-FAV-01, T-ONBOARD-02 |
-| FR-FAV-02 | T-FAV-02, T-FAV-03 |
+| FR-FAV-01 | T-FAV-01, T-FAV-07, T-FAV-08, T-ONBOARD-02 |
+| FR-FAV-02 | T-FAV-02, T-FAV-03, T-FAV-06, T-FAV-07, T-FAV-09 |
 | FR-FAV-03 | T-FAV-04, T-FAV-05 |
 | FR-GEST-01 | T-GEST-01, T-GEST-02, T-SEARCH-01, T-FAV-05 |
 | FR-GEST-02 | T-GEST-03, T-APPS-05 |
@@ -419,7 +423,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-WIDGET-02 | T-WIDGET-02, T-WIDGET-03, T-WIDGET-04, T-WIDGET-05 |
 | FR-WIDGET-03 | T-WIDGET-06, T-WIDGET-07 |
 | FR-WIDGET-04 | T-WIDGET-08, T-WIDGET-09, T-WIDGET-10, T-WIDGET-11 |
-| FR-SET-01 | T-SET-01, T-SET-02 |
+| FR-SET-01 | T-SET-01, T-SET-02, T-FAV-09 |
 | FR-SET-02 | T-SET-03 |
 | FR-SET-03 | T-SET-04, T-SEC-04 |
 | FR-SET-04 | T-SET-05 |

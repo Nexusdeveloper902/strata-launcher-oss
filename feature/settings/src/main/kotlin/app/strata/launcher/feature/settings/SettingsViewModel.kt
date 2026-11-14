@@ -212,6 +212,9 @@ sealed interface SettingsAction {
     /** FR-SET-01 Themes group: the theme library ([SettingsEffect.OpenThemes]). */
     data object OpenThemes : SettingsAction
 
+    /** Home group "Favourites" (FR-FAV-02): Edit favourites on home ([SettingsEffect.EditFavorites]). */
+    data object EditFavorites : SettingsAction
+
     /**
      * FR-SET-03 rows. Each goes through the same disclosure as its feature switch while the access is not given
      * (prominent disclosure before any system grant); once given, it opens the system page where it is withdrawn.
@@ -259,6 +262,9 @@ sealed interface SettingsEffect {
 
     /** Open the theme library (FR-THEME-27) in the host. */
     data object OpenThemes : SettingsEffect
+
+    /** Open home in Edit favourites (FR-FAV-02) in the host. */
+    data object EditFavorites : SettingsEffect
 }
 
 /**
@@ -489,6 +495,10 @@ class SettingsViewModel(
 
             SettingsAction.OpenThemes -> {
                 effectChannel.trySend(SettingsEffect.OpenThemes)
+            }
+
+            SettingsAction.EditFavorites -> {
+                effectChannel.trySend(SettingsEffect.EditFavorites)
             }
 
             SettingsAction.ManageBadgeAccess -> {

@@ -67,7 +67,6 @@
     <string name="fav_replace">Ersetzen…</string>
     <string name="fav_replace_title">Welchen Favoriten ersetzen?</string>
     <string name="fav_add_apps">Apps hinzufügen</string>
-    <string name="fav_add_app">%1$s hinzufügen</string>
     <string name="fav_move_up">Nach oben</string>
     <string name="fav_move_down">Nach unten</string>
     <string name="fav_move_top">Ganz nach oben</string>
@@ -93,4 +92,10 @@
     <string name="profile_not_default">Das kann nur die Standard-Start-App. Lege Strata zuerst als Standard fest.</string>
     <string name="profile_unsupported">Schalte Arbeits-Apps in den Einstellungen deines Telefons ein oder aus.</string>
     <string name="profile_failed">Das hat nicht geklappt. Versuche es noch einmal.</string>
+    <string name="fav_remove_named">%1$s aus den Favoriten entfernen</string>
+    <string name="fav_removed">%1$s aus den Favoriten entfernt</string>
+    <string name="fav_picker_title">Favoriten auswählen</string>
+    <string name="fav_picker_count">Ausgewählt: %1$d von %2$d</string>
+    <string name="fav_picker_limit">Mehr geht nicht: %1$d. Entferne erst einen Haken, um eine andere App zu wählen.</string>
+    <string name="fav_picker_search">Apps suchen</string>
 </resources>

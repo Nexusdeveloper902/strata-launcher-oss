@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -16,6 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -26,8 +30,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -147,6 +154,8 @@ object IndexMath {
  * the touch-down and false for each later letter change (the caller ticks haptics on changes).
  * Empty letters are dimmed (35 % α), not focusable, and snap to the next section.
  * [atEnd]: the index sits on the end edge (touch area extends toward the start) or on the start edge.
+ * [bubbleHost]: when set, the bubble is drawn by [IndexBubble] in a layer above, not inside the index. Home's index
+ * needs this: its first touch opens the list over it and hides the home layer, while the scrub goes on.
  */
 @Composable
 fun AlphabetIndex(
@@ -157,6 +166,7 @@ fun AlphabetIndex(
     dots: Boolean = false,
     showBubble: Boolean = true,
     exclusion: IndexExclusion = IndexExclusion.NONE,
+    bubbleHost: IndexBubbleHost? = null,
 ) {
     val colors = Strata.colors
     val type = Strata.typography
@@ -167,6 +177,9 @@ fun AlphabetIndex(
     var fingerY by remember { mutableFloatStateOf(0f) }
     var lastTouchY by remember { mutableStateOf<Float?>(null) }
     val indexDescription = stringResource(R.string.index_description)
+    // A relayout during a scrub (insets, the list opening over home) must not restart the gesture: the pointer
+    // handler is keyed on nothing and reads the current geometry and letters.
+    val currentLetters by rememberUpdatedState(letters)
 
     BoxWithConstraints(
         modifier =
@@ -174,7 +187,13 @@ fun AlphabetIndex(
                 .width(TOUCH_WIDTH)
                 .fillMaxHeight()
                 .testTag(AlphabetIndexTestTags.INDEX)
-                .indexExclusion(
+                .then(
+                    if (bubbleHost != null) {
+                        Modifier.onGloballyPositioned { bubbleHost.anchor = it.positionInRoot() }
+                    } else {
+                        Modifier
+                    },
+                ).indexExclusion(
                     exclusion,
                     // Read only where it matters: a read here recomposes the whole index on every pointer move of a
                     // scrub, and FULL / NONE ignore it (docs/perf/optimization-pass-1.md C-4).
@@ -198,23 +217,24 @@ fun AlphabetIndex(
         val pitch: Dp = with(density) { pitchPx.toDp() }
         val trackHeight: Dp = with(density) { trackHeightPx.toDp() }
         val trackTop: Dp = with(density) { trackTopPx.toDp() }
+        val track by rememberUpdatedState(trackTopPx to trackHeightPx)
 
         Box(
             modifier =
                 Modifier
                     .matchParentSize()
-                    .pointerInput(letters, trackTopPx, trackHeightPx) {
+                    .pointerInput(Unit) {
                         fun handle(
                             y: Float,
                             first: Boolean,
                         ) {
                             fingerY = y
                             lastTouchY = y
+                            bubbleHost?.fingerY = y
+                            val letters = currentLetters
+                            val (top, height) = track
                             val target =
-                                IndexMath.resolve(
-                                    letters,
-                                    IndexMath.letterAt(y, trackTopPx, trackHeightPx, letters.size),
-                                )
+                                IndexMath.resolve(letters, IndexMath.letterAt(y, top, height, letters.size))
                             if (target < 0) return
                             if (first || target != current) {
                                 current = target
@@ -224,15 +244,19 @@ fun AlphabetIndex(
                         awaitEachGesture {
                             val down = awaitFirstDown()
                             active = true
-                            down.consume()
-                            handle(down.position.y, first = true)
-                            while (true) {
-                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                                if (!change.pressed) break
-                                change.consume()
-                                handle(change.position.y, first = false)
+                            try {
+                                down.consume()
+                                handle(down.position.y, first = true)
+                                while (true) {
+                                    val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) break
+                                    change.consume()
+                                    handle(change.position.y, first = false)
+                                }
+                            } finally {
+                                // Release, cancel, or the index leaving the screen mid-gesture: never a stuck bubble.
+                                active = false
                             }
-                            active = false
                         }
                     },
         )
@@ -269,8 +293,12 @@ fun AlphabetIndex(
                 val color =
                     when {
                         isCurrent -> colors.accent
+
                         letter.isEmpty && !folded -> colors.textSecondary.copy(alpha = EMPTY_ALPHA)
-                        else -> colors.textSecondary.copy(alpha = IDLE_ALPHA)
+
+                        // Full `textSecondary`: index letters are small text held to 4.5:1 (THEME_SYSTEM §7.1 P2); a
+                        // 70 % alpha dropped every built-in preset below it.
+                        else -> colors.textSecondary
                     }
                 val glyph = if (dots || (folded && s % 2 == 1)) stringResource(R.string.index_fold) else letter.label
                 // Semantics live on the full-width overlay below (NFR-A11Y-03: the 48 dp strip is the target).
@@ -336,30 +364,84 @@ fun AlphabetIndex(
             }
         }
 
-        if (active && showBubble && current in letters.indices) {
-            val bubbleX =
-                if (atEnd) {
-                    TOUCH_WIDTH - ACTIVE_WIDTH - BUBBLE_GAP - BUBBLE_SIZE
-                } else {
-                    ACTIVE_WIDTH +
-                        BUBBLE_GAP
-                }
-            Box(
-                modifier =
-                    Modifier
-                        // The finger position is read in the layout phase only, so a drag within one letter moves
-                        // the bubble without recomposing the index (C-4).
-                        .offset {
-                            IntOffset(bubbleX.roundToPx(), (fingerY - (BUBBLE_SIZE / 2).toPx()).roundToInt())
-                        }.size(BUBBLE_SIZE)
-                        .background(colors.surface, RoundedCornerShape(12.dp))
-                        .testTag(AlphabetIndexTestTags.BUBBLE)
-                        .semantics { hideFromAccessibility() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(text = letters[current].label, style = type.bubble, color = colors.textPrimary, maxLines = 1)
+        val bubbleLabel = if (active && showBubble && current in letters.indices) letters[current].label else null
+        if (bubbleHost != null) {
+            SideEffect {
+                bubbleHost.atEnd = atEnd
+                bubbleHost.label = bubbleLabel
             }
+            DisposableEffect(bubbleHost) { onDispose { bubbleHost.label = null } }
+        } else if (bubbleLabel != null) {
+            BubbleTile(
+                label = bubbleLabel,
+                // The finger position is read in the layout phase only, so a drag within one letter moves the bubble
+                // without recomposing the index (C-4).
+                modifier =
+                    Modifier.offset {
+                        IntOffset(bubbleX(atEnd).roundToPx(), (fingerY - (BUBBLE_SIZE / 2).toPx()).roundToInt())
+                    },
+            )
         }
+    }
+}
+
+/** Where the bubble sits relative to the index's start: 24 dp inward of the active track (VISUAL_SPEC §9.3). */
+private fun bubbleX(atEnd: Boolean): Dp =
+    if (atEnd) TOUCH_WIDTH - ACTIVE_WIDTH - BUBBLE_GAP - BUBBLE_SIZE else ACTIVE_WIDTH + BUBBLE_GAP
+
+@Composable
+private fun BubbleTile(
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .size(BUBBLE_SIZE)
+                .background(Strata.colors.surface, RoundedCornerShape(12.dp))
+                .testTag(AlphabetIndexTestTags.BUBBLE)
+                .semantics { hideFromAccessibility() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, style = Strata.typography.bubble, color = Strata.colors.textPrimary, maxLines = 1)
+    }
+}
+
+/**
+ * The bubble of an [AlphabetIndex] whose own layer may be hidden during the scrub (home's index: its first touch opens
+ * the list over home). The index writes its letter, finger and position here; [IndexBubble] draws it from a layer on
+ * top. Positions are in root coordinates.
+ */
+@Stable
+class IndexBubbleHost {
+    internal var label by mutableStateOf<String?>(null)
+    internal var anchor by mutableStateOf(Offset.Zero)
+    internal var fingerY by mutableFloatStateOf(0f)
+    internal var atEnd by mutableStateOf(true)
+
+    /** A scrub with a bubble is in progress. */
+    val shown: Boolean get() = label != null
+}
+
+/** Draws [host]'s bubble while its index is scrubbed; place it in a full-screen layer above the index's layer. */
+@Composable
+fun IndexBubble(
+    host: IndexBubbleHost,
+    modifier: Modifier = Modifier,
+) {
+    val label = host.label ?: return
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    Box(modifier = modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+        BubbleTile(
+            label = label,
+            modifier =
+                Modifier.offset {
+                    IntOffset(
+                        (host.anchor.x - origin.x + bubbleX(host.atEnd).toPx()).roundToInt(),
+                        (host.anchor.y - origin.y + host.fingerY - (BUBBLE_SIZE / 2).toPx()).roundToInt(),
+                    )
+                },
+        )
     }
 }
 
@@ -391,6 +473,5 @@ private val ACTIVE_WIDTH = 32.dp
 private val BUBBLE_SIZE = 64.dp
 private val BUBBLE_GAP = 24.dp
 private const val ACTIVE_TRACK_ALPHA = 0.9f
-private const val IDLE_ALPHA = 0.7f
 private const val EMPTY_ALPHA = 0.35f
 private const val ACTIVE_SCALE = 1.3f

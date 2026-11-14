@@ -173,7 +173,8 @@ spacing `favorites.spacingDp`, alignment `favorites.alignment`. Badges sit after
 The "All apps ›" row ends the block.
 ### 9.3 Alphabet index
 - Idle: a column of letters (or dots, `glyphs=dots`) in `type.index`, `textSecondary` at
-  70 % α, vertically centred in the available height, letter pitch = available height / letter
+  full opacity (index letters are small text held to 4.5:1, THEME_SYSTEM §7.1 P2; a 70 % α
+  dropped the built-in presets below it, Proposed fix), vertically centred in the available height, letter pitch = available height / letter
   count, clamped to 14–28 dp. If there are too many buckets for 14 dp, middle letters fold
   into "•" separators.
 - Active (touch down): the column widens to 32 dp on a `surface` rounded track

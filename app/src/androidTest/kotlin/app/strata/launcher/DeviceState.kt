@@ -28,6 +28,9 @@ import java.io.File
 /** Shared device-state helpers for the HomeActivity device tests (search, home). */
 private const val TAG = "DeviceState"
 
+/** Longest wait for one state change in a device test (a role grant, a layer, a stored value); waits end on the state. */
+const val DEVICE_TIMEOUT_MS = 15_000L
+
 /** The focused window is a crash dialog ("Application Error: <package>"). */
 private val CRASH_DIALOG_FOCUS = Regex("mCurrentFocus=Window\\{[^}]*Application Error: ")
 
