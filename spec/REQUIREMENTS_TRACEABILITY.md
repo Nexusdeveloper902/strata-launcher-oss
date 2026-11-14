@@ -73,8 +73,8 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-FAV-01 | P0 | Up to 12 favourites, added or removed from sheet | Corroborated (capability); Proposed (cap) | PUB-007, APK-026, APK-027 | :feature:home, :core:data (area); cited ARCH §4 | PRODUCT_SPEC §4.5 | T-FAV-01, T-ONBOARD-02 | M3 [spec Rel: v1] |
-| FR-FAV-02 | P0 | Reorder favourites by drag handles or accessibility actions | Inferred | PUB-007 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-02, T-FAV-03 | M3 [spec Rel: v1] |
+| FR-FAV-01 | P0 | Up to 12 favourites, added or removed from sheet | Corroborated (capability); Proposed (cap; picker in Edit favourites, owner request) | PUB-007, APK-026, APK-027 | :feature:home, :core:data (area); cited ARCH §4 | PRODUCT_SPEC §4.5 | T-FAV-01, T-FAV-07, T-FAV-08, T-ONBOARD-02 | M3 [spec Rel: v1] |
+| FR-FAV-02 | P0 | Reorder favourites by drag handles or accessibility actions | Inferred (reorder); Proposed (remove with Undo, Add apps, Settings entry; owner request) | PUB-007 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-02, T-FAV-03, T-FAV-06, T-FAV-07, T-FAV-09 | M3 [spec Rel: v1] |
 | FR-FAV-03 | P0 | Favourites block scrolls only when content overflows | Proposed | — | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-04, T-FAV-05 | M3 [spec Rel: v1] |
 | FR-FAV-04 | P2 | Favourite groups that expand to several apps | Corroborated | PUB-004, APK-032 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 — NONE (placeholder: “defined when scheduled”) | NONE | NONE [spec Rel: later] |
 
@@ -114,7 +114,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-SET-01 | P0 | Settings entry points and top-level groups | Corroborated (entry points); Proposed (groups) | APK-012, PUB-012 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-01, T-SET-02 | M8 [spec Rel: v1] |
+| FR-SET-01 | P0 | Settings entry points and top-level groups | Corroborated (entry points); Proposed (groups) | APK-012, PUB-012 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-01, T-SET-02, T-FAV-09 | M8 [spec Rel: v1] |
 | FR-SET-02 | P0 | Default-home row and guided Strata uninstall | Corroborated | PUB-049, APK-033 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-03 | M6 [spec Rel: v1] |
 | FR-SET-03 | P0 | Privacy and permissions screen showing optional-access states | Inferred (entry); Proposed | APK-012, P-4 | :feature:settings, :core:data (area); cited ARCH §13 | PRODUCT_SPEC §4.9 | T-SET-04, T-SEC-04 | M8 [spec Rel: v1] |
 | FR-SET-04 | P1 | Per-app language through localeConfig | Inferred | APK-016, DOC-069 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-05 | M8 [spec Rel: v1] |
@@ -215,9 +215,9 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| NFR-A11Y-01 | P0 | TalkBack-complete on every screen | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :core:ui, :feature:* (area); not cited in ARCH | PRODUCT_SPEC §5 | T-A11Y-08, T-A11Y-07 | M8 |
+| NFR-A11Y-01 | P0 | TalkBack-complete on every screen | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :core:ui, :feature:* (area); not cited in ARCH | PRODUCT_SPEC §5 | T-A11Y-08, T-A11Y-07, T-FAV-06^ | M8 |
 | NFR-A11Y-02 | P0 | No clipping at 200% font and largest display | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :core:ui, :feature:* (area); not cited in ARCH | PRODUCT_SPEC §5 | T-A11Y-09, T-FAV-04 | M8 |
-| NFR-A11Y-03 | P0 | Touch targets at least 48 dp | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :core:ui, :feature:* (area); not cited in ARCH | PRODUCT_SPEC §5 | T-A11Y-10 | M8 |
+| NFR-A11Y-03 | P0 | Touch targets at least 48 dp | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :core:ui, :feature:* (area); not cited in ARCH | PRODUCT_SPEC §5 | T-A11Y-10, T-FAV-06^ | M8 |
 | NFR-A11Y-04 | P0 | Contrast per THEME_SYSTEM section 7; focus ring 3:1 | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :core:ui, :feature:* (area); not cited in ARCH | PRODUCT_SPEC §5 | T-A11Y-11, T-CI-06 | M4, M8 |
 | NFR-A11Y-05 | P0 | Reduced-motion setting honoured | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :core:ui, :feature:* (area); not cited in ARCH | PRODUCT_SPEC §5 | T-A11Y-12 | M8 |
 
@@ -281,15 +281,15 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
 - Requirements with at least one test: 145; without: 11.
 - Requirements with a roadmap milestone: 152; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 256; §22 rows: 144.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 260; §22 rows: 144.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
 - Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
-- §22-only pairs (~): none. Covers-only pairs (^): FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-PRIV-01/T-SET-09.
-- §22/Covers disagreements in total: 0 §22-only pairs, 4 Covers-only pairs (suffixes in the matrix).
+- §22-only pairs (~): none. Covers-only pairs (^): FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PRIV-01/T-SET-09.
+- §22/Covers disagreements in total: 0 §22-only pairs, 6 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria

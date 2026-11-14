@@ -2,11 +2,13 @@ package app.strata.launcher.core.data.settings
 
 import app.strata.launcher.core.model.AppearanceSetting
 import app.strata.launcher.core.model.BadgeStyle
+import app.strata.launcher.core.model.OnboardingProgress
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.SwipeDownAction
 import java.util.UUID
 import app.strata.launcher.core.data.settings.AppearanceOverride as ProtoAppearance
 import app.strata.launcher.core.data.settings.BadgeStyle as ProtoBadgeStyle
+import app.strata.launcher.core.data.settings.OnboardingProgress as ProtoOnboarding
 import app.strata.launcher.core.data.settings.Settings as ProtoSettings
 import app.strata.launcher.core.data.settings.SwipeDownAction as ProtoSwipeDown
 
@@ -61,6 +63,8 @@ internal object SettingsMapper {
             listSortByUsage = if (p.hasListSortByUsage()) p.listSortByUsage else d.listSortByUsage,
             swipeDownAction = if (p.hasSwipeDownAction()) swipeDown(p.swipeDownAction) else d.swipeDownAction,
             lockGestureEnabled = if (p.hasLockGestureEnabled()) p.lockGestureEnabled else d.lockGestureEnabled,
+            onboardingProgress =
+                if (p.hasOnboardingProgress()) onboarding(p.onboardingProgress) else d.onboardingProgress,
         )
     }
 
@@ -102,6 +106,7 @@ internal object SettingsMapper {
         if (old.listSortByUsage != new.listSortByUsage) b.listSortByUsage = new.listSortByUsage
         if (old.swipeDownAction != new.swipeDownAction) b.swipeDownAction = proto(new.swipeDownAction)
         if (old.lockGestureEnabled != new.lockGestureEnabled) b.lockGestureEnabled = new.lockGestureEnabled
+        if (old.onboardingProgress != new.onboardingProgress) b.onboardingProgress = proto(new.onboardingProgress)
         return b.build()
     }
 
@@ -129,6 +134,24 @@ internal object SettingsMapper {
         when (p) {
             ProtoSwipeDown.SWIPE_DOWN_NOTIFICATIONS -> SwipeDownAction.NOTIFICATIONS
             else -> SwipeDownAction.NONE
+        }
+
+    private fun onboarding(p: ProtoOnboarding): OnboardingProgress =
+        when (p) {
+            ProtoOnboarding.ONBOARDING_FAVORITES -> OnboardingProgress.FAVORITES
+            ProtoOnboarding.ONBOARDING_SET_DEFAULT -> OnboardingProgress.SET_DEFAULT
+            ProtoOnboarding.ONBOARDING_ROLE_REQUESTED -> OnboardingProgress.ROLE_REQUESTED
+            ProtoOnboarding.ONBOARDING_DONE -> OnboardingProgress.DONE
+            else -> OnboardingProgress.WELCOME
+        }
+
+    private fun proto(v: OnboardingProgress): ProtoOnboarding =
+        when (v) {
+            OnboardingProgress.WELCOME -> ProtoOnboarding.ONBOARDING_WELCOME
+            OnboardingProgress.FAVORITES -> ProtoOnboarding.ONBOARDING_FAVORITES
+            OnboardingProgress.SET_DEFAULT -> ProtoOnboarding.ONBOARDING_SET_DEFAULT
+            OnboardingProgress.ROLE_REQUESTED -> ProtoOnboarding.ONBOARDING_ROLE_REQUESTED
+            OnboardingProgress.DONE -> ProtoOnboarding.ONBOARDING_DONE
         }
 
     private fun proto(v: BadgeStyle): ProtoBadgeStyle =

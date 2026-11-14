@@ -235,4 +235,6 @@
     </plurals>
     <string name="backup_theme_excluded">Not restored (damaged theme): %1$s</string>
     <string name="backup_theme_needs_update">Needs app update: %1$s</string>
+    <string name="settings_favorites">Favourites</string>
+    <string name="settings_favorites_summary">Add, remove and reorder the apps on home</string>
 </resources>

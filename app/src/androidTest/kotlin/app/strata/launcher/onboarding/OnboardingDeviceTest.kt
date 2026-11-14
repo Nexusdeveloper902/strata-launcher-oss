@@ -17,8 +17,10 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import app.strata.launcher.DEVICE_TIMEOUT_MS
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.core.model.OnboardingProgress
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.onboarding.OnboardingStep
 import app.strata.launcher.feature.onboarding.OnboardingTestTags
@@ -29,6 +31,7 @@ import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -58,13 +61,50 @@ class OnboardingDeviceTest {
     @Before
     fun firstRun() =
         runBlocking {
-            graph.settingsRepository.update { it.copy(onboardingDone = false, defaultHomeBannerDismissedUntil = 0L) }
+            graph.settingsRepository.update {
+                it.copy(
+                    onboardingDone = false,
+                    defaultHomeBannerDismissedUntil = 0L,
+                    onboardingProgress = OnboardingProgress.WELCOME,
+                )
+            }
         }
 
     @After
     fun restore() =
         runBlocking {
-            graph.settingsRepository.update { it.copy(onboardingDone = true, defaultHomeBannerDismissedUntil = 0L) }
+            graph.settingsRepository.update {
+                it.copy(
+                    onboardingDone = true,
+                    defaultHomeBannerDismissedUntil = 0L,
+                    onboardingProgress = OnboardingProgress.WELCOME,
+                )
+            }
+            if (roleChanged) {
+                val holder = restoreRoleHolder
+                if (holder != null) {
+                    shell("cmd role add-role-holder --user $userId android.app.role.HOME $holder")
+                } else {
+                    // No holder before the test: take the role away from Strata again.
+                    shell("cmd role remove-role-holder --user $userId android.app.role.HOME ${context.packageName}")
+                }
+            }
+            Unit
+        }
+
+    /** Numeric user of this test (never `current`). */
+    private val userId = android.os.Process.myUid() / 100_000
+
+    /** The HOME role holder before a test that changes it (null: none); put back in [restore]. */
+    private var restoreRoleHolder: String? = null
+
+    /** This test changed the HOME role holder. */
+    private var roleChanged = false
+
+    /** Waits on the settings store itself until [predicate] holds (or [DEVICE_TIMEOUT_MS]); true when it did. */
+    private fun awaitSettings(predicate: (app.strata.launcher.core.model.Settings) -> Boolean): Boolean =
+        runBlocking {
+            withTimeoutOrNull(DEVICE_TIMEOUT_MS) { graph.settingsRepository.settings.first(predicate) } != null
         }
 
     private fun tag(t: String): BySelector = By.res(t)
@@ -241,6 +281,39 @@ class OnboardingDeviceTest {
         assertThat(waitFor(HomeTestTags.ROOT)).isTrue()
     }
 
+    /**
+     * Owner report (Galaxy A56), T-ONBOARD-03 automated half: the role is granted while the flow waits on the role
+     * screen, and Home then starts HomeActivity (a new host, no saved state). The flow continues at Done instead of
+     * starting again at Welcome. The grant is made with `cmd role` while the system screen is open, so no human is
+     * needed; the previous holder is restored in [restore].
+     */
+    @Test
+    fun roleGrantedDuringSetDefault_homeContinuesAtDone() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+        restoreRoleHolder =
+            shell("cmd role get-role-holders --user $userId android.app.role.HOME")
+                .lineSequence()
+                .map(String::trim)
+                .firstOrNull { it.isNotEmpty() && !it.contains(' ') }
+        roleChanged = true
+        releaseHomeRole()
+        assumeTrue(!graph.roleController.isDefaultHome())
+        startFromLauncherIcon()
+        click(OnboardingTestTags.CONTINUE)
+        click(OnboardingTestTags.SKIP)
+        assertThat(waitFor(OnboardingTestTags.SET_DEFAULT)).isTrue()
+        clickFresh(OnboardingTestTags.SET_DEFAULT)
+        // Real state: the flow stored that a system screen is open.
+        assertThat(awaitSettings { it.onboardingProgress == OnboardingProgress.ROLE_REQUESTED }).isTrue()
+        shell("cmd role add-role-holder --user $userId android.app.role.HOME ${context.packageName}")
+        assertThat(graph.roleController.isDefaultHome()).isTrue()
+        device.pressHome()
+        assertThat(waitFor(OnboardingTestTags.DONE, DEVICE_TIMEOUT_MS)).isTrue()
+        assertThat(device.hasObject(tag(OnboardingTestTags.WELCOME))).isFalse()
+        click(OnboardingTestTags.CONTINUE)
+        assertThat(awaitSettings { it.onboardingDone }).isTrue()
+    }
+
     /** T-ONBOARD-03 (manual): accept the role dialog → RESULT_OK and held → Done → home. */
     @Test
     fun tOnboard03_roleGranted_manual() {
@@ -311,7 +384,7 @@ class OnboardingDeviceTest {
                 .firstOrNull { it != context.packageName && it != "com.android.settings" }
         assumeTrue(other != null)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            shell("cmd role add-role-holder android.app.role.HOME $other")
+            shell("cmd role add-role-holder --user $userId android.app.role.HOME $other")
         } else {
             context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }

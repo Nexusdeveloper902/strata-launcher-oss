@@ -222,4 +222,6 @@
     </plurals>
     <string name="backup_theme_excluded">Nicht wiederhergestellt (beschädigtes Design): %1$s</string>
     <string name="backup_theme_needs_update">App-Update nötig: %1$s</string>
+    <string name="settings_favorites">Favoriten</string>
+    <string name="settings_favorites_summary">Apps auf dem Startbildschirm hinzufügen, entfernen und sortieren</string>
 </resources>
