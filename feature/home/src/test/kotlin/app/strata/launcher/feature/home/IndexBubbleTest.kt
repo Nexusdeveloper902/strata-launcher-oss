@@ -42,7 +42,13 @@ class IndexBubbleTest {
     }
 
     private fun home(animations: Boolean = true): HomeHarness =
-        HomeHarness(AppFixtures.APPS120).also { it.setContent(compose, theme(animations)) }
+        HomeHarness(
+            AppFixtures.APPS120,
+            favorites =
+                AppFixtures.APPS120.take(3).map {
+                    it.key
+                },
+        ).also { it.setContent(compose, theme(animations)) }
 
     private fun bubble() = compose.onNodeWithTag(AlphabetIndexTestTags.BUBBLE, useUnmergedTree = true)
 
@@ -175,6 +181,55 @@ class IndexBubbleTest {
         h.vm.onAction(HomeAction.CloseList)
         compose.waitForIdle()
         scrub(onHome = true, { it.center }, "home index second scrub")
+    }
+
+    /**
+     * Owner detail: from the favourites on home into All apps, then straight onto the index. The list opens from the
+     * favourites' "All apps ›" row; the scrub starts on the next frame, before anything settles, with the home layer
+     * (hidden, still composed) under it. Swipe up on home opens search, not the list (INTERACTION_SPEC §4.2), so the
+     * row and the home index are the touch paths into the list.
+     */
+    @Test
+    fun favouritesToAllApps_scrubOnTheNextFrame() {
+        home()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(HomeTestTags.ALL_APPS).performTouchInput {
+            down(center)
+            up()
+        }
+        compose.mainClock.advanceTimeByFrame()
+        // Where the list index is once the list is up; the finger lands there right away.
+        val b = indexBounds(onHome = false)
+        compose.onRoot().performTouchInput { down(top(b)) }
+        compose.mainClock.advanceTimeByFrame()
+        assertShownNow("favourites → All apps, touch down on the next frame")
+        compose.onRoot().performTouchInput { repeat(8) { moveBy(Offset(0f, b.height / 16f)) } }
+        compose.mainClock.advanceTimeByFrame()
+        assertShownNow("favourites → All apps, dragging")
+        compose.onRoot().performTouchInput { up() }
+        compose.mainClock.autoAdvance = true
+        assertHidden()
+    }
+
+    /** The same after a favourite was touched and the favourites block scrolled (home holds the last pointer). */
+    @Test
+    fun favouritesTouched_thenAllApps_thenScrub() {
+        home()
+        compose.onNodeWithTag(HomeTestTags.FAVORITES).performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -20f))
+            up()
+        }
+        openList()
+        scrub(onHome = false, ::top, "favourites touched, All apps, scrub")
+    }
+
+    private fun assertShownNow(step: String) {
+        try {
+            bubble().assertIsDisplayed()
+        } catch (e: AssertionError) {
+            throw AssertionError("no letter bubble during: $step", e)
+        }
     }
 
     private companion object {

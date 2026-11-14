@@ -147,7 +147,16 @@ animation on the bubble (reduced motion draws the same), gesture exclusion cover
 `feature/home/src/test/.../IndexBubbleTest` (Robolectric Compose): home index press-and-hold, fast drag, animations
 off, and two scrubs in a row; list index press-and-hold, fast drag, drag starting on the current letter, drag right
 after a fling, animations off. Each asserts the bubble is displayed at touch-down and while dragging, and gone after
-release. **On `main`: the 4 home-index cases fail** (no bubble at touch-down); all 9 pass with the fix. T-PERF-04
+release. **On `main`: the 4 home-index cases fail** (no bubble at touch-down); all pass with the fix.
+
+Owner detail, "from the favourite apps on home into All apps": two more cases with favourites on home,
+`favouritesToAllApps_scrubOnTheNextFrame` (tap "All apps ›", finger down on the list index on the very next frame, clock
+paused, drag) and `favouritesTouched_thenAllApps_thenScrub`. Both pass on `main` as well as with the fix: once the list
+is open its own index takes the touch and draws its bubble, and the list has no open animation that could delay it
+(swipe up on home opens search, not the list, INTERACTION_SPEC §4.2). The failing transition is the one where the finger
+goes down on the index *while still on home* (the index sits beside the favourites with the default `always`): that
+scrub opens the list and is the case the fix covers. If the owner still sees a missing bubble after starting inside
+the open list, that is a device-only difference the JVM tests do not reproduce; the manual check below covers it. T-PERF-04
 (scrub jank) is unaffected in kind: the finger position is still read in the layout phase only.
 
 ### Manual check on the A56
