@@ -31,6 +31,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             addAndroidTestDependencies()
             addInstrumentedTestDependencies()
             registerPermissionGate()
+            registerReleaseApkGate()
             registerModuleGraphGate(isAndroid = true)
             registerDependencyGate("releaseRuntimeClasspath")
         }
