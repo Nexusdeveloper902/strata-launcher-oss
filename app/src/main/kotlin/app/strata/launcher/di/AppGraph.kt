@@ -111,6 +111,9 @@ interface AppGraph {
     /** Re-reads platform theme inputs (dynamic scheme, animator scale) after a configuration change or `onStart`. */
     fun refreshThemeInputs() = Unit
 
+    /** Home reported fully drawn: deferred start-up housekeeping may run (ARCHITECTURE §10 step 3). */
+    fun firstFrameDrawn() = Unit
+
     /** Lets view-bound services (haptics) use the home window; null detaches. */
     fun attachWindow(view: View?) = Unit
 }
