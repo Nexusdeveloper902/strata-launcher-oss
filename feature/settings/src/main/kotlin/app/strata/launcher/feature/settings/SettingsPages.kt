@@ -41,6 +41,7 @@ import app.strata.launcher.core.ui.iconStyleOf
 /** Test tags of the M8 pages. */
 object SettingsPageTags {
     const val THEMES = "settings_themes"
+    const val FAVORITES = "settings_favorites"
     const val ICONS_ROW = "settings_icons"
     const val ICONS_PAGE = "settings_icons_page"
     const val ICONS_LOADING = "settings_icons_loading"

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.widget.FrameLayout
 import android.widget.RemoteViews
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,6 +85,8 @@ fun WidgetPickerScreen(
         modifier =
             modifier
                 .fillMaxSize()
+                // The window background is the platform's light or dark default, not the Strata theme's.
+                .background(colors.background)
                 .semantics { testTagsAsResourceId = true }
                 .testTag(WidgetTestTags.PICKER),
     ) {

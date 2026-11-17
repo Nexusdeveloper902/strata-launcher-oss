@@ -2,7 +2,10 @@ package app.strata.launcher.core.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -14,6 +17,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -22,7 +26,6 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.model.LabelCase
-import app.strata.launcher.core.theme.model.Variant
 import app.strata.launcher.core.theme.resolve.ResolvedAnimation
 import app.strata.launcher.core.theme.resolve.ResolvedTheme
 import app.strata.launcher.core.theme.store.ThemePair
@@ -71,8 +74,10 @@ object Strata {
 }
 
 /**
- * `ResolvedTheme` → CompositionLocals (ARCHITECTURE §2 `:core:ui`). Material components (snackbars,
- * buttons in stubs) get a colour scheme mapped from the same roles, so nothing is hard-coded.
+ * `ResolvedTheme` → CompositionLocals (ARCHITECTURE §2 `:core:ui`). Material components (dialogs, menus, text fields,
+ * snackbars, switches, sliders) get a colour scheme mapped from the same roles ([schemeOf]), so nothing is
+ * hard-coded, and `LocalContentColor` starts as `textPrimary`: a `Text` without a colour outside a Material `Surface`
+ * reads the theme, not Compose's default black (owner report: dark text on dark backgrounds).
  */
 @Composable
 fun StrataTheme(
@@ -89,11 +94,17 @@ private fun ProvideStrataTheme(
     content: @Composable () -> Unit,
 ) {
     val typography = remember(theme.typography, theme.alphabetIndex) { typographyOf(theme) }
-    val scheme = remember(colors, theme.variant) { schemeOf(colors, dark = theme.variant != Variant.LIGHT) }
+    val scheme = remember(colors) { schemeOf(colors) }
+    val selection =
+        remember(
+            colors,
+        ) { TextSelectionColors(handleColor = colors.accent, backgroundColor = colors.accent.copy(0.4f)) }
     CompositionLocalProvider(
         LocalResolvedTheme provides theme,
         LocalStrataColors provides colors,
         LocalStrataTypography provides typography,
+        LocalContentColor provides colors.textPrimary,
+        LocalTextSelectionColors provides selection,
     ) {
         MaterialTheme(colorScheme = scheme, content = content)
     }
@@ -223,32 +234,85 @@ internal fun typographyOf(theme: ResolvedTheme): StrataTypography {
     )
 }
 
-private fun schemeOf(
-    c: StrataColors,
-    dark: Boolean,
-): ColorScheme {
+/**
+ * Every Material 3 colour role from the Strata roles, so each Material container gets a content colour whose contrast
+ * THEME_SYSTEM §7.1 guarantees: containers are `background`, `surface` or `highlight` with `textPrimary` on them (P1,
+ * P4, P7) and `textSecondary` as the variant text (P5); filled controls are `accent` with `onAccent` (P8). Nothing is
+ * left to Material's baseline palette, whose light or dark containers (dialogs, menus, sheets, text fields) do not
+ * match a Strata palette. Light or dark (for the few roles Strata has no role for) follows the palette's own
+ * luminance, not the variant name, because a user theme can put any palette in either variant.
+ */
+internal fun schemeOf(c: StrataColors): ColorScheme {
+    val dark = c.background.luminance() < MID_LUMINANCE
     val base = if (dark) darkColorScheme() else lightColorScheme()
+    val error = errorFor(base.error, c)
     return base.copy(
         primary = c.accent,
         onPrimary = c.onAccent,
+        primaryContainer = c.accent,
+        onPrimaryContainer = c.onAccent,
+        inversePrimary = c.surface,
         secondary = c.accent,
         onSecondary = c.onAccent,
+        secondaryContainer = c.highlight,
+        onSecondaryContainer = c.textPrimary,
+        tertiary = c.accent,
+        onTertiary = c.onAccent,
+        tertiaryContainer = c.accent,
+        onTertiaryContainer = c.onAccent,
         background = c.background,
         onBackground = c.textPrimary,
         surface = c.surface,
         onSurface = c.textPrimary,
-        surfaceVariant = c.highlight,
+        surfaceVariant = c.surface,
         onSurfaceVariant = c.textSecondary,
+        // No tonal elevation tint: an elevated surface stays `surface`, whose contrast is checked.
+        surfaceTint = c.surface,
         inverseSurface = c.textPrimary,
         inverseOnSurface = c.surface,
-        inversePrimary = c.accent,
-        secondaryContainer = c.surface,
-        onSecondaryContainer = c.textPrimary,
-        outline = c.divider,
+        error = error,
+        onError = if (error.luminance() < MID_LUMINANCE) Color.White else Color.Black,
+        errorContainer = c.surface,
+        onErrorContainer = error,
+        // Field borders and other component outlines need 3:1 (WCAG 1.4.11); `divider` is decorative.
+        outline = c.textSecondary,
         outlineVariant = c.divider,
         scrim = c.scrim,
+        surfaceBright = c.surface,
+        surfaceDim = c.surface,
+        surfaceContainerLowest = c.surface,
+        surfaceContainerLow = c.surface,
+        surfaceContainer = c.surface,
+        surfaceContainerHigh = c.surface,
+        surfaceContainerHighest = c.surface,
     )
 }
+
+/**
+ * Strata has no error role: Material's error colour for the palette's lightness when it reads as text on both
+ * `background` and `surface` (4.5:1), else `textPrimary` (always readable there; the message says what is wrong).
+ */
+private fun errorFor(
+    material: Color,
+    c: StrataColors,
+): Color =
+    if (contrast(material, c.background) >= TEXT_CONTRAST && contrast(material, c.surface) >= TEXT_CONTRAST) {
+        material
+    } else {
+        c.textPrimary
+    }
+
+private fun contrast(
+    a: Color,
+    b: Color,
+): Double {
+    val la = a.luminance().toDouble()
+    val lb = b.luminance().toDouble()
+    return (maxOf(la, lb) + 0.05) / (minOf(la, lb) + 0.05)
+}
+
+private const val MID_LUMINANCE = 0.179f
+private const val TEXT_CONTRAST = 4.5
 
 /** Theme switch cross-fade (THEME_SYSTEM §12 step 1), before the animation scale. */
 const val SWITCH_FADE_MS = 300

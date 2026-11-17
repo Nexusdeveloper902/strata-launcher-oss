@@ -103,9 +103,12 @@ letter moves the row to its new section, and the list keeps the renamed row in v
 "Reset name" appears when a custom name exists.
 
 **J-07 Reorder favourites** (FR-FAV-02; Inferred PUB-007)
-Long-press a favourite → S-SHEET → "Edit favourites" (or S-HMENU) → S-FAVEDIT: rows with drag
-handles and remove buttons. Drag starts on the handle immediately, or anywhere on the row
-after a long-press. Done/back saves. A11y: actions "Move up / down / to top / Remove".
+Long-press a favourite → S-SHEET → "Edit favourites" (or S-HMENU, or Settings → Home →
+Favourites) → S-FAVEDIT: rows with drag handles and remove buttons (removal at once, 5 s Undo
+snackbar). Drag starts on the handle immediately, or anywhere on the row after a long-press.
+"Add apps" opens the favourites checklist (search, current favourites checked, cap 12; Done
+appends, Cancel or Back discards). Done/back saves. A11y: actions "Move up / down / to top /
+Remove". (Proposed, owner request.)
 
 **J-08 Apply / import / export a theme** (FR-THEME-21…27; THEME_SYSTEM §10)
 - Apply: S-HMENU → Themes → library → tap card → preview → "Apply" → cross-fade (≤ 300 ms,

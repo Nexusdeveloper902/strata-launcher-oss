@@ -41,6 +41,7 @@ import app.strata.launcher.feature.settings.SettingsPage
 import app.strata.launcher.feature.settings.SettingsRoute
 import app.strata.launcher.feature.settings.SettingsViewModel
 import app.strata.launcher.home.HomeActivity
+import app.strata.launcher.home.HomeIntents
 import app.strata.launcher.onboarding.SystemScreenLauncher
 import app.strata.launcher.theme.ThemeHost
 import app.strata.launcher.theme.ThemesActivity
@@ -321,6 +322,15 @@ class SettingsActivity : ComponentActivity() {
 
             SettingsEffect.OpenThemes -> {
                 startActivity(Intent(this, ThemesActivity::class.java))
+            }
+
+            SettingsEffect.EditFavorites -> {
+                // Explicit intent to our own home with an action only (no extras, ARCHITECTURE §13).
+                startActivity(
+                    Intent(HomeIntents.ACTION_EDIT_FAVORITES)
+                        .setClass(this, HomeActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
             }
 
             SettingsEffect.RequestContacts -> {
