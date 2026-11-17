@@ -35,8 +35,64 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Assemble
         run: ./gradlew assembleDebug assembleDebugAndroidTest :app:assembleBenchmark :benchmark:assemble --stacktrace
-      - name: Release build smoke (T-CI-07, debug-signed; R8, size per ABI, not debuggable, no test code)
-        run: ./gradlew :app:checkReleaseApk -Pstrata.release.debugSigned=true --stacktrace
+      # T-CI-07 (R8, size per ABI, not debuggable, no test code) on the release APK, which is also uploaded for the
+      # owner's phone. Signed with the stable release key only on a push to main or a manual run, and only when all
+      # four secrets exist; pull_request runs never see the secrets (the expressions below yield '' for them). Without
+      # the key it is a debug-signed TEST build, uploaded under a name that says so: a different key cannot update an
+      # installed release. CONTRIBUTING.md "Release APK from CI", docs/release/RELEASE_GATE.md §3.11.
+      - name: Release APK (T-CI-07)
+        id: release
+        env:
+          KEYSTORE_BASE64: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_KEYSTORE_BASE64 || '' }}
+          STORE_PASSWORD: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_STORE_PASSWORD || '' }}
+          KEY_ALIAS: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_KEY_ALIAS || '' }}
+          KEY_PASSWORD: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_KEY_PASSWORD || '' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            # Outside the workspace, deleted when the step ends however it ends. Never printed.
+            keystore="$RUNNER_TEMP/strata-release.jks"
+            trap 'rm -f "$keystore"' EXIT
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$keystore"
+            # No configuration cache: it would store the signing values read from the environment.
+            STRATA_RELEASE_STORE_FILE="$keystore" STRATA_RELEASE_STORE_PASSWORD="$STORE_PASSWORD" \
+              STRATA_RELEASE_KEY_ALIAS="$KEY_ALIAS" STRATA_RELEASE_KEY_PASSWORD="$KEY_PASSWORD" \
+              ./gradlew :app:checkReleaseApk --no-configuration-cache --stacktrace
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+          else
+            ./gradlew :app:checkReleaseApk -Pstrata.release.debugSigned=true --stacktrace
+            echo "kind=test" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Verify the release APK signature
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/release/app-release.apk
+          certs="$("$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs "$apk")"
+          sha256="$(printf '%s\n' "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          [ -n "$sha256" ] || { echo "::error::no signer certificate in $apk"; exit 1; }
+          mkdir -p dist
+          if [ "${{ steps.release.outputs.kind }}" = release ]; then
+            name=strata-release-apk; file="dist/strata-release-${GITHUB_SHA::7}.apk"
+            note="Signed with the release key. Installs over an earlier release APK when this SHA-256 matches."
+          else
+            name=strata-release-apk-unsigned-test; file="dist/strata-release-TEST-not-for-install-${GITHUB_SHA::7}.apk"
+            note="NOT signed with the release key (debug key of this runner): a test build that cannot update an installed release."
+          fi
+          cp "$apk" "$file"
+          echo "ARTIFACT_NAME=$name" >> "$GITHUB_ENV"
+          {
+            echo "### Release APK"
+            echo "- Artifact: \`$name\` ($(basename "$file"))"
+            echo "- Signer certificate SHA-256: \`$sha256\`"
+            echo "- $note"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload release APK report
         if: always()
         uses: actions/upload-artifact@v7

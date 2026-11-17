@@ -63,6 +63,39 @@ where Actions minutes are free.
 - Flaky tests, the re-run rule and how failures are classified: `docs/ci/RELIABILITY.md`.
 - This repository stays the source of truth.
 
+## Release APK from CI (for the owner's phone)
+The debug APK (`strata-debug-apk`) carries debug-only overhead: StrictMode `detectAll` with CloseGuard, no R8, debug
+logging. For daily use, install the **release** APK. The `build` job of every CI run builds it, checks it
+(`checkReleaseApk`, T-CI-07), verifies its signature (`apksigner verify --print-certs`) and writes the signer's
+certificate SHA-256 into the run's summary.
+
+| Run | Signed with | Artifact |
+|---|---|---|
+| push to `main`, manual run (`workflow_dispatch`), with the four secrets set | the stable release key | `strata-release-apk` |
+| pull request, or no secrets yet | the runner's throw-away debug key | `strata-release-apk-unsigned-test` (file `strata-release-TEST-not-for-install-….apk`) |
+
+Each runner creates a new debug key, so two CI runs never share a signature (checked: main runs 43652228837 and
+43599000906 have different certificates). Only `strata-release-apk` can update an installed copy. The secrets are read
+only on push and manual runs, never on `pull_request`, and are never printed. The keystore is decoded to the runner's
+temp directory (outside the workspace) and deleted when the step ends.
+
+One-time setup, on your computer, never inside the repository:
+1. Create the key (the same as `docs/release/RELEASE_GATE.md` §3.11; reuse that key if you already have one):
+   `keytool -genkeypair -v -keystore ~/keys/strata-release.jks -alias strata -keyalg RSA -keysize 4096 -validity 10000`
+2. Base64 it into one line: `base64 -w 0 ~/keys/strata-release.jks > ~/keys/strata-release.b64` (Linux) or
+   `base64 -i ~/keys/strata-release.jks -o ~/keys/strata-release.b64` (macOS).
+3. On `Nexusdeveloper902/strata-launcher-oss`: Settings → Secrets and variables → Actions → New repository secret,
+   four times: `STRATA_RELEASE_KEYSTORE_BASE64` (the contents of the `.b64` file), `STRATA_RELEASE_STORE_PASSWORD`,
+   `STRATA_RELEASE_KEY_ALIAS` (`strata`), `STRATA_RELEASE_KEY_PASSWORD`. Then delete the `.b64` file. Back up the
+   `.jks` and its passwords: a lost key means no more in-place updates.
+4. Run CI on `main` (`gh workflow run ci.yml -R Nexusdeveloper902/strata-launcher-oss --ref main`), download
+   `strata-release-apk`, and note the certificate SHA-256 from the run summary.
+
+Switching the phone from the debug APK to the release APK takes **one uninstall**, because the signatures differ.
+Back up first in Strata (Settings → Backup and restore → Export), uninstall, install the release APK, then restore the backup
+(Settings → Backup and restore → Restore from file). Every later `strata-release-apk` from `main` installs over it in place, as long as the
+summary shows the same certificate SHA-256.
+
 ## Clean room
 Follow `AGENTS.md`. Implement from `spec/` only. Never open `research/APK_ANALYSIS.md` or
 `research/PUBLIC_BEHAVIOR.md` while writing code, and never copy code, strings, artwork or
