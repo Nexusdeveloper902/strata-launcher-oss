@@ -1,9 +1,11 @@
 package app.strata.launcher.benchmark
 
 import android.content.Intent
+import android.os.SystemClock
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -78,6 +80,27 @@ internal fun UiDevice.findOrFail(res: String): UiObject2 =
         ?: error("'$res' not on screen after ${Strata.TIMEOUT_MS} ms (is the benchmark build of :app installed?)")
 
 internal fun UiDevice.waitOrFail(res: String): UiObject2 = findOrFail(res)
+
+/**
+ * Finds [res] and runs [action] on it, finding it again when the node goes stale between the lookup and the action.
+ * A scroll, fling or index scrub recomposes the list, so a node found before can be gone by the click (Baseline
+ * Profile, run 43994307244: StaleObjectException clicking the list's search field right after the index scrub).
+ * Not a retry of the journey: the same step on the same screen, bounded by [Strata.TIMEOUT_MS]; a missing node still
+ * fails through [findOrFail].
+ */
+internal fun <T> UiDevice.onFresh(
+    res: String,
+    action: (UiObject2) -> T,
+): T {
+    val end = SystemClock.uptimeMillis() + Strata.TIMEOUT_MS
+    while (true) {
+        try {
+            return action(findOrFail(res))
+        } catch (e: StaleObjectException) {
+            if (SystemClock.uptimeMillis() >= end) throw e
+        }
+    }
+}
 
 /**
  * Completes the first-run flow if it is showing (fresh benchmark install): Welcome -> Continue, Skip favourites,
