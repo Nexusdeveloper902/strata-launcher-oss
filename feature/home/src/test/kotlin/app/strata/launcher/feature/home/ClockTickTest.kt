@@ -32,6 +32,7 @@ class ClockTickTest {
 
     private val owner = Owner().apply { registry.currentState = Lifecycle.State.RESUMED }
     private val ticks = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+    private val tickFlow = ticks.onStart { emit(Unit) }
     private var reads = 0
 
     /** Wall time that follows the test clock, from 0.5 s into a minute; each call is one time read (one tick). */
@@ -47,7 +48,7 @@ class ClockTickTest {
         compose.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
                 StrataTheme(theme) {
-                    HomeHeader(ticks = ticks.onStart { emit(Unit) }, onClock = {}, onDate = {}, now = now)
+                    HomeHeader(ticks = tickFlow, onClock = {}, onDate = {}, now = now)
                 }
             }
         }
