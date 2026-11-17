@@ -23,6 +23,7 @@ import app.strata.launcher.testing.fakes.RecordingLogger
 import app.strata.launcher.testing.fixtures.AppFixtures
 import app.strata.launcher.testing.fixtures.AppFixtures.app
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -297,8 +298,9 @@ class AppCatalogRepositoryTest {
 
     /**
      * T-LIST-13 (FB-009): a removal that arrives while a full pass is loading (the reconcile `onStart` asks for when home
-     * comes back from the uninstall dialog) is published within 1 s (NFR-PERF-06), not after the whole load; and the
-     * load, read before the removal, does not bring the app back.
+     * comes back from the uninstall dialog) is published while that load is still running, not after it (NFR-PERF-06
+     * wants ≤ 1 s; here the load is held open by a gate, so "before the gate opens" is the check, not a wall clock).
+     * The load, read before the removal, does not bring the app back when it commits.
      */
     @Test
     fun tList13_removalDuringFullPassIsPublishedAtOnce() {
@@ -308,25 +310,25 @@ class AppCatalogRepositoryTest {
         repo.requestReconcile()
         await(repo) { !it.fromSnapshot && it.entries.size == 120 }
         val victim = AppFixtures.APPS120.first()
+        // Installed while home was stopped (no callback): only the full pass sees it, which marks its commit.
+        val marker = app("Zz Marker", pkg = "fixture.zzmarker")
+        source.silentlySet(AppFixtures.APPS120 + marker)
+        val gate = CompletableDeferred<Unit>()
         source.loadAllSnapshotsAtStart = true
-        source.loadDelayMs = 3_000
+        source.loadAllGate = gate
+        val entered = source.loadAllEntered.value
         repo.requestReconcile()
-        // Let the full pass start and read the installed set (victim included).
-        Thread.sleep(200)
-        val started = System.nanoTime()
+        runBlocking { withTimeout(10_000) { source.loadAllEntered.first { it > entered } } }
+
         source.uninstall(victim.packageName)
         val remaining = AppFixtures.APPS120.filterNot { it.packageName == victim.packageName }.map { it.key }
         val gone = await(repo) { c -> c.entries.none { it.key == victim.key } }
-        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertThat(gate.isCompleted).isFalse()
         assertThat(gone.entries.map { it.key }).containsExactlyElementsIn(remaining)
-        assertThat(elapsedMs).isLessThan(1_000)
-        // After the full pass has committed, the victim is still gone.
-        runBlocking { withTimeout(10_000) { while (source.loadAllCalls < 2) delay(10) } }
-        Thread.sleep(3_300)
-        assertThat(
-            repo.catalog.value.entries
-                .map { it.key },
-        ).containsExactlyElementsIn(remaining)
+
+        gate.complete(Unit)
+        val committed = await(repo) { c -> c.entries.any { it.key == marker.key } }
+        assertThat(committed.entries.map { it.key }).containsExactlyElementsIn(remaining + marker.key)
     }
 
     /** T-LIST-14 (FB-009): a burst of 1 and of 20 removals is reconciled per package; nothing reloads the whole catalog. */

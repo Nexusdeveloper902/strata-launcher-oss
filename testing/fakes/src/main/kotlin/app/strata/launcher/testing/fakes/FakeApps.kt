@@ -21,11 +21,13 @@ import app.strata.launcher.core.platformapi.apps.Profile
 import app.strata.launcher.core.platformapi.apps.ProfileSource
 import app.strata.launcher.core.platformapi.apps.QuietModeResult
 import app.strata.launcher.core.platformapi.apps.ShortcutSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * In-memory `LauncherApps`. [apps] is the installed set; [emit] simulates callbacks. [loadDelayMs]
@@ -37,8 +39,19 @@ class FakeAppCatalogSource(
 ) : AppCatalogSource {
     @Volatile var apps: List<AppEntry> = apps
 
+    @Volatile
     var loadAllCalls: Int = 0
         private set
+
+    /**
+     * When set, [loadAll] reads the installed set and then suspends on this gate until it completes: a full listing
+     * in progress, ended by the test. [loadAllEntered] counts the loads that reached the gate (or ran without one).
+     */
+    @Volatile
+    var loadAllGate: CompletableDeferred<Unit>? = null
+
+    /** Loads that have read the installed set (they wait at [loadAllGate] if one is set). */
+    val loadAllEntered: MutableStateFlow<Int> = MutableStateFlow(0)
 
     /** Packages read with [loadPackage], in call order. */
     val loadPackageCalls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
@@ -56,6 +69,8 @@ class FakeAppCatalogSource(
     override suspend fun loadAll(): CatalogLoad {
         loadAllCalls++
         val atStart = apps
+        loadAllEntered.update { it + 1 }
+        loadAllGate?.await()
         if (loadDelayMs > 0) delay(loadDelayMs)
         val current = if (loadAllSnapshotsAtStart) atStart else apps
         return CatalogLoad(current, current.mapTo(HashSet()) { it.key.userSerial } + MAIN_SERIAL)

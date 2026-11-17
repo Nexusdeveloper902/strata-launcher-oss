@@ -35,6 +35,9 @@ import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowLauncherApps
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /** LauncherApps over a fixed app set; records any call made on the main thread, and can make the full listing slow. */
 @Implements(LauncherApps::class)
@@ -47,8 +50,10 @@ class WatchedLauncherApps : ShadowLauncherApps() {
         watch("getActivityList($packageName)")
         val all = apps.values.toList()
         if (packageName != null) return all.filter { it.componentName.packageName == packageName }
-        // As on a phone with a few hundred apps: listing and loading every label takes a while.
-        if (slowFullListMs > 0) Thread.sleep(slowFullListMs)
+        // A full listing in progress (on a phone, every app and label): it read the installed set and is held open until
+        // the test opens the gate. Never on the main thread (that call is recorded above instead).
+        fullListEntered.incrementAndGet()
+        if (Looper.myLooper() != Looper.getMainLooper()) fullListGate?.await(GATE_TIMEOUT_S, TimeUnit.SECONDS)
         return all
     }
 
@@ -62,7 +67,13 @@ class WatchedLauncherApps : ShadowLauncherApps() {
         val mainThreadCalls = CopyOnWriteArrayList<String>()
         val apps = ConcurrentHashMap<String, LauncherActivityInfo>()
 
-        @Volatile var slowFullListMs = 0L
+        /** Holds full listings open while set (released by the test, or after [GATE_TIMEOUT_S] as a safety net). */
+        @Volatile var fullListGate: CountDownLatch? = null
+
+        /** Full listings that have read the installed set. */
+        val fullListEntered = AtomicInteger(0)
+
+        private const val GATE_TIMEOUT_S = 30L
 
         private fun watch(what: String) {
             if (Looper.myLooper() == Looper.getMainLooper()) mainThreadCalls += what
@@ -74,8 +85,9 @@ class WatchedLauncherApps : ShadowLauncherApps() {
  * FB-009: uninstalling apps must not freeze home. Runs HomeActivity on the real graph (catalog, Room, list pipeline,
  * icons) with the list open (Robolectric, level C).
  * T-LIST-14: a burst of 1 and of 20 removals makes no LauncherApps call on the main thread and the rows leave the list.
- * T-LIST-13: with a slow full listing, a removal right after home returns from the uninstall dialog (`onStart` asks
- * for a full reconcile, ANDROID_PLATFORM §3.1) leaves the list within 1 s (NFR-PERF-06), not after the full load.
+ * T-LIST-13: a removal right after home returns from the uninstall dialog (`onStart` asks for a full reconcile,
+ * ANDROID_PLATFORM §3.1) leaves the list while that full listing is still held open (NFR-PERF-06: ≤ 1 s, not after
+ * the full load); once it completes, the app stays gone.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(shadows = [WatchedLauncherApps::class])
@@ -130,7 +142,7 @@ class UninstallBackgroundTest {
     fun setUp() {
         WatchedLauncherApps.apps.clear()
         WatchedLauncherApps.mainThreadCalls.clear()
-        WatchedLauncherApps.slowFullListMs = 0
+        WatchedLauncherApps.fullListGate = null
         for (i in 0 until APPS) WatchedLauncherApps.apps[pkg(i)] = info(i)
         runBlocking { context.appGraph.settingsRepository.update { it.copy(onboardingDone = true) } }
         val intent =
@@ -147,7 +159,8 @@ class UninstallBackgroundTest {
 
     @After
     fun tearDown() {
-        WatchedLauncherApps.slowFullListMs = 0
+        WatchedLauncherApps.fullListGate?.countDown()
+        WatchedLauncherApps.fullListGate = null
         runCatching { controller.pause().stop().destroy() }
     }
 
@@ -192,30 +205,33 @@ class UninstallBackgroundTest {
     @Test
     fun tList13_removalAfterReturningFromTheDialogIsNotBlocked() {
         assertThat(shown(0)).isTrue()
-        WatchedLauncherApps.slowFullListMs = SLOW_FULL_LIST_MS
+        // Installed while the dialog covered home (no callback): only the full pass lists it, which marks its commit.
+        WatchedLauncherApps.apps[pkg(APPS)] = info(APPS)
+        val gate = CountDownLatch(1)
+        WatchedLauncherApps.fullListGate = gate
+        val entered = WatchedLauncherApps.fullListEntered.get()
         // The uninstall confirmation covered home; confirming returns to home, whose onStart asks for a full pass.
         controller.pause().stop()
         controller.restart()
         controller.resume()
-        shadowOf(Looper.getMainLooper()).idle()
-        // The system removes the package while that full listing is still running.
-        Thread.sleep(200)
+        pumpUntil { WatchedLauncherApps.fullListEntered.get() > entered }
+        // The system removes the package while that full listing is still open.
         remove(listOf(0))
-        val elapsed = pumpUntil(timeoutMs = 2 * SLOW_FULL_LIST_MS) { !shown(0) }
-        assertThat(elapsed).isLessThan(1_000L)
+        pumpUntil { !shown(0) }
+        assertThat(gate.count).isEqualTo(1L)
         assertThat(WatchedLauncherApps.mainThreadCalls).isEmpty()
-        // Once the full pass has committed, the app stays gone.
-        Thread.sleep(SLOW_FULL_LIST_MS)
-        pumpUntil { true }
-        assertThat(
+        // The full pass completes and commits (the marker appears); the removed app stays gone.
+        gate.countDown()
+
+        fun packages() =
             context.appGraph.appCatalog.catalog.value.entries
-                .map { it.packageName },
-        ).doesNotContain(pkg(0))
+                .map { it.packageName }
+        pumpUntil { pkg(APPS) in packages() }
+        assertThat(packages()).doesNotContain(pkg(0))
         assertThat(shown(0)).isFalse()
     }
 
     private companion object {
         const val APPS = 120
-        const val SLOW_FULL_LIST_MS = 3_000L
     }
 }
