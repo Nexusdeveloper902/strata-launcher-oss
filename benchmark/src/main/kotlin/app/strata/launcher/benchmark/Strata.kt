@@ -131,6 +131,34 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
     findOrFail(Strata.ALL_APPS)
 }
 
+/**
+ * Waits until every activity record of the target is STOPPED (from `dumpsys activity activities`, the `state=` /
+ * `mState=` of each `Hist` entry). `am start -W` of another app returns once that app is displayed, but the activity
+ * behind it is stopped only after the new one reports idle. A "warm return" measured before that brings a still-visible
+ * window to front, which draws no new frame, and StartupTimingMetric fails with "No RT frame slice associated with
+ * UI thread frame slice" (runs 43625970551 and 44068284763, T-PERF-02). Fails, never passes, when no state is found.
+ */
+internal fun UiDevice.awaitTargetStopped(timeoutMs: Long = 2 * Strata.TIMEOUT_MS) {
+    fun states(): List<String> =
+        executeShellCommand("dumpsys activity activities")
+            .split(Regex("""(?m)^\s*\*?\s*Hist\s*#"""))
+            .drop(1)
+            .filter { entry -> entry.lineSequence().first().contains("${Strata.TARGET}/") }
+            .mapNotNull { entry -> STATE.find(entry)?.groupValues?.get(1) }
+    // The platform stops the covered activity at the latest 10 s after the new one started, if it never reports idle.
+    val end = SystemClock.uptimeMillis() + timeoutMs
+    var last = states()
+    while (last.isEmpty() || last.any { it != "STOPPED" }) {
+        check(SystemClock.uptimeMillis() < end) {
+            "${Strata.TARGET} not stopped behind the other app within $timeoutMs ms (states: $last)"
+        }
+        SystemClock.sleep(POLL_MS)
+        last = states()
+    }
+}
+
+private val STATE = Regex("""\bm?[sS]tate=([A-Z_]+)""")
+
 /** Clicks [res] once it is on screen, finding it again if it went stale before the click ([onFresh]). */
 internal fun UiDevice.clickOrFail(res: String) = onFresh(res) { it.click() }
 

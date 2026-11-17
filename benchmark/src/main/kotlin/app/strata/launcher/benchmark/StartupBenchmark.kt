@@ -68,6 +68,8 @@ class StartupBenchmark {
                 // Put Strata in the background behind another app (T-PERF-02 "behind a fixture app").
                 device.executeShellCommand("am start -W -a android.settings.SETTINGS")
                 device.waitForIdle()
+                // Measure a return from the background: Strata must be stopped, not merely covered.
+                device.awaitTargetStopped()
             },
         ) {
             startHome()
