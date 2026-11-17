@@ -145,11 +145,58 @@ graphite ships `center`, and any theme can be switched to it. Index visibility o
 - No schema or theme change.
 
 ### Test
-T-THEME-56 `ClockCentreTest` (C, native graphics) runs every preset (Strata Default + `spec/sample-themes/`) forced to
-`center`: 12 h/24 h × seconds off/on × LTR/RTL = 48 cases. It adds a 120 px left-only cutout fixture per preset,
-96 runs in all. It measures the inked columns of the clock time (period node and index strip excluded) and of the
-date against the window centre, ±1 dp.
-- On `main`: 43–50 of 96 fail (which ones depends on the digits of the current time). Every preset fails in some
-  case, e.g. graphite 24 h −22.3 dp, Strata Default 12 h −36.5 dp, paper 12 h −14.8 dp, midnight-oled up to 4 dp,
-  and the cutout fixture.
-- With the fix: 96 of 96 pass. The other home, a11y (contrast) and theme suites still pass.
+T-THEME-56 runs every preset (Strata Default + `spec/sample-themes/`) forced to `center`, with the clock showing a
+fixed time (2026-11-17 21:11:41 UTC, injected through `TimeTicks.nowMillis` → `LocalWallClock`; the test asserts the
+clock's spoken text, so a failure reproduces):
+- `ClockCentreTest`: 12 h/24 h × seconds off/on × LTR/RTL = 48 cases. It measures the inked columns of the time
+  (period node and index strip excluded) and of the date against the window centre, ±1 dp. When the period cannot be
+  reserved on both sides, time and period together are measured: that is the layout's documented fallback.
+- `ClockCentreCutoutTest`: 6 cases (one per preset, 12 h with seconds). A 120 px left-only cutout plus system bars.
+  It first asserts the inset reached the Compose layout (the favourites start at or after 120 px).
+- `ClockFitTest`: 12 cases (preset × LTR/RTL) on 360 dp at `sizeSp` 128 (the schema maximum), 12 h with seconds.
+  The clock's ink stays inside the header span, and the period does not overlap the index.
+
+| Code under test | ClockCentreTest | Cutout | Fit |
+|---|---|---|---|
+| `main` (plus only the time hook) | 46/48 fail (e.g. Default 12 h −23 dp) | 6/6 fail | 8/12 fail |
+| first branch version (before the review) | 2/48 fail (graphite 12 h + seconds: the period overflowed and pushed the ink 19 dp) | 1/6 fail | 12/12 fail (ink outside the span) |
+| now | 48/48 pass | 6/6 pass | 12/12 pass |
+
+The first version's "96/96" had used the real time of day. With the time fixed, the reviewer's overflow shows up even
+at 411 dp.
+
+### Review fixes (PR #36)
+- **Period overflow.** `TimeWithPeriod` measures the time with the period's width deducted (both reserves when
+  centred). When the time does not fit beside two reserves, it falls back to time + period side by side, still
+  ink-centred as a whole, never past the span.
+- **No stale shift.** The ink shift is computed at placement from the current text, the measured width and the cached
+  bearings. The visual order comes from `java.text.Bidi` with the layout direction (`visualEnds`, unit-tested), so it
+  is never a frame late. For the numeric style, `TimeWithPeriod` centres the time's ink, or in the fallback the ink of
+  time and period together. A clipped time is not shifted.
+- **Open item (not changed here):** THEME_SYSTEM §4.7 caps `sizeSp` "so the clock never exceeds 40 % of screen width
+  per glyph line", but the resolver does not implement the cap. At 128 sp × a 1.1 type scale on 360 dp
+  (midnight-oled), the time alone is wider than the header and is clipped (now unshifted and inside the span). The cap
+  belongs in theme resolution; it needs a decision and its own test.
+
+## 4. Review fixes for FB-008 and FB-009 (PR #36)
+- T-LIST-13 (repository and app level) no longer sleeps or uses wall-clock budgets. The fake source / LauncherApps
+  shadow holds the full listing open on a gate and counts the loads that reached it. The test waits for that, removes
+  the package, asserts the row is gone while the gate is still closed, opens the gate, and waits for the full pass's
+  commit (a marker app installed silently, which only the full pass lists). On `main`'s catalog both fail: the
+  repository test's await times out with the victim still listed, and the app test times out after 10 s. With the fix
+  both pass. `FakeAppCatalogSource.loadAllCalls` is `@Volatile`. NFR-PERF-06's 1 s stays a spec citation (and the
+  device check), not a JVM wall-clock assertion.
+- `ListDeviceTest.tList13_removalRightAfterReturnIsPrompt` dropped the invented 200 ms main-stall watchdog, keeps the
+  spec's ≤ 1 s row check, and runs `pm install/uninstall --user <uid / 100000>`. The no-LauncherApps-on-main check
+  stays in the Robolectric T-LIST-14.
+- `switchNavMode` builds its restore before switching and runs it when the overlay check fails, then rethrows.
+- `HomeDeviceTest.tGest10_…` waits for the main thread and Compose to go idle instead of sleeping 1 s.
+- Known edge cases of `HomeArrivalGuard` (review item 7, accepted as is):
+  - Home behind a translucent activity (paused, not stopped) counts as in front, so a Home press there resets as a
+    press made on home would.
+  - Home pressed within the short window after another app opened, before home's `onStop`, also counts as in front
+    unless the system marks the intent brought-to-front.
+  - A stream that starts after resume but before a late window-focus gain is dropped, which costs at most one touch
+    right at arrival.
+  - Focus lost and regained while home is resumed (e.g. the notification shade) moves the start of the interactive
+    period, so a stream begun under the shade is dropped.
