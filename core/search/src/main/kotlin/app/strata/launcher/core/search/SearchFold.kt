@@ -38,7 +38,7 @@ object SearchFold {
 
     /**
      * FR-SEARCH-02 (Proposed): [label] with a space inserted at each camel-case boundary (a lower-case letter followed
-     * by an upper-case one: "YouTube" → "You Tube", "SwiftKey" → "Swift Key") and between a letter and a digit. Runs on
+     * by an upper-case one: "PlayTube" → "Play Tube", "QuickType" → "Quick Type") and between a letter and a digit. Runs on
      * the raw label, before [fold] drops the case. Returns [label] itself when there is no boundary.
      */
     fun splitCamel(label: String): String {

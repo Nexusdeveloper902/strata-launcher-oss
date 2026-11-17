@@ -43,7 +43,7 @@ class SearchPerformanceTest {
     @Test
     fun tPerf05_fuzzyQueriesLatency500Apps() {
         val idx = index(apps, counts)
-        val queries = listOf("mpas", "instgram", "whtasapp", "kalkulator", "zzqx", "calender")
+        val queries = listOf("mpas", "pixlgram", "chtatyapp", "kalkulator", "zzqx", "calender")
         repeat(WARMUP) { queries.forEach { q -> idx.rank(q, includeHidden = true) } }
         val samples = ArrayList<Long>()
         repeat(RUNS) {

@@ -55,8 +55,9 @@ unchanged (median 0.05 ms).
   start; only when the other tiers found fewer than 5 apps.
 - Not built: English labels on a non-English system (a resource load per app per catalog change).
 
-**Manual check on the A56.** Type "ytm", "music", "swiftkey", "camara", "spotfy", "instgram", "whatsap": the
-expected app is in the first rows; "map" still gives Maps first.
+**Manual check on the A56.** For apps on the phone, type a word from the middle of a name, the initials of a
+two-word or camel-case name, a name without its accents, and a name with one letter dropped or two swapped: the
+expected app is in the first rows; an exact name still comes first.
 
 ## 3–4. Not built on this branch: swipe-to-call and the permission checklist
 

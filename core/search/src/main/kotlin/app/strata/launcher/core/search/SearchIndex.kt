@@ -135,10 +135,10 @@ class SearchIndex private constructor(
         /** The folded label: every tier. */
         LABEL,
 
-        /** The label split at camel-case boundaries ("you tube music"): word-prefix and initials only. */
+        /** The label split at camel-case boundaries ("play tube music"): word-prefix and initials only. */
         CAMEL,
 
-        /** The package name ("com whatsapp"): word-prefix of a non-generic segment, scored as a substring (T5). */
+        /** The package name ("com example chatty"): word-prefix of a non-generic segment, scored as a substring (T5). */
         PACKAGE,
     }
 
@@ -391,7 +391,7 @@ internal object Fuzzy {
 
     /**
      * True when the OSA distance between [q] and `f[start, start + L)` is at most [k] for some prefix length L
-     * (`q.length - k ≤ L ≤ q.length + k`). The prefix may run across word boundaries ("googlemaps" → "google maps").
+     * (`q.length - k ≤ L ≤ q.length + k`). The prefix may run across word boundaries ("grandmaps" → "grand maps").
      */
     fun withinEditsOfPrefix(
         q: String,
