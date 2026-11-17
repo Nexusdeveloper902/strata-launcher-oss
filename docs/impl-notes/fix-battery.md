@@ -28,8 +28,8 @@ Line numbers refer to `main` at a1c7f47.
 | Debug build | `README.md:57–61` tells the owner to install `app-debug.apk` | **Likely a large share of the reported number.** In the debug build, StrictMode `detectAll` with `penaltyLog` and a listener captures a stack trace for every violation. The VM policy's `detectLeakedClosableObjects` turns on CloseGuard, which records a stack trace for every cursor, file and parcel descriptor opened. The code is not shrunk (no R8), not AOT-compiled from a Baseline Profile, and runs as debuggable. Each frame and each event costs several times what it costs in the release build. Pseudo-locales cost nothing at runtime. |
 | Background work (`ThemeEditorViewModel.kt:284–289`) | 2 s draft autosave loop | **Small, not changed.** The loop runs while the theme editor activity exists, even in the background (for example, left in Recents). It wakes a thread every 2 s while the CPU is awake and writes only when there are unsaved edits. |
 
-### Other branches in flight
-- `fix-onboarding-contrast`: no loop or animation added. `IndexBubbleHost` writes the index anchor in
+### Other branches
+- `fix-onboarding-contrast` (merged into `main` as 204c436, merged into this branch): no loop or animation added. `IndexBubbleHost` writes the index anchor in
   `onGloballyPositioned`, but the state uses structural equality, so an unchanged position invalidates nothing.
   `SystemBarTint` now calls `window.setBackgroundDrawable(...)` (a full redraw) on each recomposition of the theme
   content, for windows without `FLAG_SHOW_WALLPAPER`. That happens on theme changes only, not continuously. After this
@@ -40,9 +40,9 @@ Line numbers refer to `main` at a1c7f47.
   after the update (a one-off burst). The system icon is now loaded even when a glyph wins (once per render, then cached).
   Nothing runs continuously.
 
-Neither branch conflicts with this one in code: `HomeActivity` gets one added line here, and `HomeWindow.kt` is not
-touched by them. Both branches add rows elsewhere in `spec/TEST_PLAN.md`. After they merge, re-run
-`python3 tools/trace/build.py`.
+The merge of `main` had no code conflict (`HomeActivity` gets one added line here; `HomeWindow.kt` is untouched there).
+Only the generated `spec/REQUIREMENTS_TRACEABILITY.md` conflicted; it was regenerated with `tools/trace/build.py`. When
+`glyphs-private` merges, re-run that script.
 
 ## Changes
 | Change | Files |
