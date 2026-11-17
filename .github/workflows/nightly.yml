@@ -203,3 +203,15 @@ jobs:
             benchmark/build/outputs/**/*-startup-prof.txt
           if-no-files-found: warn
           retention-days: 30
+      - name: Upload reports
+        # The Gradle log only says "There were failing tests"; the report and the per-test logcat say which and why.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-baseline-profile-reports
+          path: |
+            benchmark/build/reports/androidTests/
+            benchmark/build/outputs/androidTest-results/
+            benchmark/build/outputs/managed_device_android_test_additional_output/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Re-check a commit on demand (e.g. main after a merge, docs/ci/RELIABILITY.md); runs the same jobs as a push.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
