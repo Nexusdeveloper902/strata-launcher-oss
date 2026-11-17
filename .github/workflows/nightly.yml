@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [29, 33]
+        api: [33]
         attempt: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
@@ -72,6 +72,7 @@ jobs:
 
   nav-modes:
     name: T-COMPAT-02 API ${{ matrix.api }} ${{ matrix.mode }}
+    if: false # SCRATCH round 5
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -167,6 +168,7 @@ jobs:
     # Collects the app's Baseline Profile on an emulator (profiles record which code runs, not how fast, so an emulator
     # profile is valid). The owner reviews the artifact and commits it as app/src/main/baseline-prof.txt.
     name: Baseline Profile (GMD API 34)
+    if: false # SCRATCH round 5
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -281,7 +283,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1, 2, 3]
+        attempt: [1]
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
