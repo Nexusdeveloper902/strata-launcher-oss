@@ -29,6 +29,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.awaitFocusedActivity
 import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.core.model.WidgetHeights
 import app.strata.launcher.core.model.WidgetPlacement
@@ -271,6 +272,11 @@ class WidgetDeviceTest {
         compose.waitUntil(STALL_MS) { count(SheetTestTags.MENU_WIDGETS) == 1 }
         compose.onNodeWithTag(SheetTestTags.MENU_WIDGETS).performClick()
         compose.waitUntil(STALL_MS) { count(WidgetTestTags.PICKER_LIST) == 1 }
+        // The list is composed before the picker's window is shown and focused; scrolling it during that first layout
+        // and focus change failed with "performMeasureAndLayout called during measure layout" (CI run 44068284763,
+        // API 34, tWidget04, 0.3 s after the picker was displayed). Act on the picker once it is in front and idle.
+        compose.awaitFocusedActivity(app.strata.launcher.widget.WidgetPickerActivity::class.java)
+        compose.waitForIdle()
     }
 
     private fun pick(provider: ComponentName) {

@@ -332,6 +332,18 @@ class HomeDeviceTest {
             assertThat(exclusionRects()).isEmpty()
             val w = device.displayWidth
             val h = device.displayHeight
+            // The app's rects clear at once, but the system's copy (what the back-gesture handler checks) follows on a
+            // later traversal: with home's index exclusion still there, the swipe is not a Back (glyphs-private run
+            // 44067816635, API 34: swipe 18 ms after the IME started showing, frames at 0.5-2 s, no Back reached the
+            // app). Wait until WindowManager no longer excludes the swipe's start point; never clearing is the
+            // owner-reported bug and fails here.
+            try {
+                compose.waitUntil(DEVICE_TIMEOUT_MS) {
+                    systemExclusion().none { it.contains(w - 1, h / 2) }
+                }
+            } catch (e: ComposeTimeoutException) {
+                throw AssertionError("The system still excludes the right edge at y=${h / 2}: ${systemExclusion()}", e)
+            }
             // From the very edge inward, at the index's height: the system back gesture.
             device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
             compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) == 0 }
@@ -546,6 +558,28 @@ class HomeDeviceTest {
         ViewCompat
             .getRootWindowInsets(activity.window.decorView)
             ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+
+    /**
+     * The display's system-gesture exclusion as WindowManager holds and forwards it to System UI's back-gesture
+     * handler (`mSystemGestureExclusion=` of `dumpsys window displays`, API 29+). No listener registered
+     * (`<no lstnrs>`) means nothing is excluded. Fails when the line is missing, so a changed dump format is visible.
+     */
+    private fun systemExclusion(): List<Rect> {
+        val line =
+            shell("dumpsys window displays")
+                .lineSequence()
+                .map(String::trim)
+                .firstOrNull { it.startsWith("mSystemGestureExclusion=") }
+                ?: throw AssertionError("no mSystemGestureExclusion line in `dumpsys window displays`")
+        return Regex("""\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)""")
+            .findAll(line)
+            .map { m ->
+                m.groupValues
+                    .drop(1)
+                    .map(String::toInt)
+                    .let { (l, t, r, b) -> Rect(l, t, r, b) }
+            }.toList()
+    }
 
     private fun exclusionRects(): List<Rect> {
         val rects = mutableListOf<Rect>()

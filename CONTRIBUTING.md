@@ -40,12 +40,61 @@ where Actions minutes are free.
   `research/UNRESOLVED.md` U-001, U-003, U-004). Never add those files, or content from them,
   to anything that is mirrored.
 - `tools/mirror/sync-public.sh <branch>...` (needs `pip install git-filter-repo`) filters and
-  pushes branches. The filter is deterministic, so syncs are fast-forwards; never force-push
-  the mirror.
-- Flow per change: push the branch here, run `tools/mirror/sync-public.sh <branch>`, open a PR
-  on the mirror to run CI, squash-merge the PR **here** once the mirror's CI is green, then run
-  `tools/mirror/sync-public.sh main` and close the mirror PR. Nothing is merged on the mirror.
+  pushes branches, and always brings the mirror's `main` up to date too (a mirror PR's CI tests the
+  branch merged into the *mirror's* `main`). The filter is deterministic, so syncs are
+  fast-forwards; never force-push the mirror.
+- Flow per change:
+  1. Push the branch here and run `tools/mirror/sync-public.sh <branch>`. Open a PR on the mirror
+     to run CI.
+  2. If the change touches device tests (`app/src/androidTest`, `DeviceState.kt`), the benchmark
+     module, test options in `build-logic`, or `nightly.yml`, also run the nightly matrix on the
+     branch: `gh workflow run nightly.yml -R Nexusdeveloper902/strata-launcher-oss --ref <branch>`.
+     PR CI covers only API 26/34/36. The nightly matrix is not a merge gate, but a new failure there is
+     fixed before the merge.
+  3. Before merging, run `tools/mirror/check-pr-fresh.sh <branch>`. It passes only when the newest PR
+     run is green, ran on the branch's current head, and started after the mirror's current `main` was
+     pushed. Otherwise sync again and wait for the new run.
+  4. Squash-merge the PR **here**, run `tools/mirror/sync-public.sh main`, close the mirror PR.
+     Nothing is merged on the mirror.
+  5. Re-check `main`: the sync starts CI on the mirror's `main` (a `push` run). Watch it
+     (`gh run watch -R Nexusdeveloper902/strata-launcher-oss <id>`). If it is red, `main` is broken
+     until it is fixed or reverted. Follow `docs/ci/RELIABILITY.md` to tell a flake from a real
+     failure. CI can also be re-run on `main` by hand (`gh workflow run ci.yml --ref main`).
+- Flaky tests, the re-run rule and how failures are classified: `docs/ci/RELIABILITY.md`.
 - This repository stays the source of truth.
+
+## Release APK from CI (for the owner's phone)
+The debug APK (`strata-debug-apk`) carries debug-only overhead: StrictMode `detectAll` with CloseGuard, no R8, debug
+logging. For daily use, install the **release** APK. The `build` job of every CI run builds it, checks it
+(`checkReleaseApk`, T-CI-07), verifies its signature (`apksigner verify --print-certs`) and writes the signer's
+certificate SHA-256 into the run's summary.
+
+| Run | Signed with | Artifact |
+|---|---|---|
+| push to `main`, manual run (`workflow_dispatch`), with the four secrets set | the stable release key | `strata-release-apk` |
+| pull request, or no secrets yet | the runner's throw-away debug key | `strata-release-apk-unsigned-test` (file `strata-release-TEST-not-for-install-….apk`) |
+
+Each runner creates a new debug key, so two CI runs never share a signature (checked: main runs 43652228837 and
+43599000906 have different certificates). Only `strata-release-apk` can update an installed copy. The secrets are read
+only on push and manual runs, never on `pull_request`, and are never printed. The keystore is decoded to the runner's
+temp directory (outside the workspace) and deleted when the step ends.
+
+One-time setup, on your computer, never inside the repository:
+1. Create the key (the same as `docs/release/RELEASE_GATE.md` §3.11; reuse that key if you already have one):
+   `keytool -genkeypair -v -keystore ~/keys/strata-release.jks -alias strata -keyalg RSA -keysize 4096 -validity 10000`
+2. Base64 it into one line: `base64 -w 0 ~/keys/strata-release.jks > ~/keys/strata-release.b64` (Linux) or
+   `base64 -i ~/keys/strata-release.jks -o ~/keys/strata-release.b64` (macOS).
+3. On `Nexusdeveloper902/strata-launcher-oss`: Settings → Secrets and variables → Actions → New repository secret,
+   four times: `STRATA_RELEASE_KEYSTORE_BASE64` (the contents of the `.b64` file), `STRATA_RELEASE_STORE_PASSWORD`,
+   `STRATA_RELEASE_KEY_ALIAS` (`strata`), `STRATA_RELEASE_KEY_PASSWORD`. Then delete the `.b64` file. Back up the
+   `.jks` and its passwords: a lost key means no more in-place updates.
+4. Run CI on `main` (`gh workflow run ci.yml -R Nexusdeveloper902/strata-launcher-oss --ref main`), download
+   `strata-release-apk`, and note the certificate SHA-256 from the run summary.
+
+Switching the phone from the debug APK to the release APK takes **one uninstall**, because the signatures differ.
+Back up first in Strata (Settings → Backup and restore → Export), uninstall, install the release APK, then restore the backup
+(Settings → Backup and restore → Restore from file). Every later `strata-release-apk` from `main` installs over it in place, as long as the
+summary shows the same certificate SHA-256.
 
 ## Clean room
 Follow `AGENTS.md`. Implement from `spec/` only. Never open `research/APK_ANALYSIS.md` or

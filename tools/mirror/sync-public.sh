@@ -23,9 +23,16 @@ command -v git-filter-repo >/dev/null 2>&1 || {
 
 src="$(git rev-parse --show-toplevel)"
 [ "$#" -gt 0 ] || set -- main
+# Always bring the mirror's main up to date too: a mirror PR's CI tests refs/pull/N/merge, i.e. the branch merged
+# into the MIRROR's main. If that main lags the private one, CI tests a merge that will never exist
+# (docs/ci/RELIABILITY.md, "Green PR, red main"). Pushing main is a fast-forward like every other sync.
+case " $* " in *" main "*) ;; *) set -- "$@" main ;; esac
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+
+# The mirror's main must match the private main as it is now, not as last fetched.
+git -C "$src" fetch -q origin main
 
 git init -q --bare "$work/repo"
 cd "$work/repo"

@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -210,6 +211,11 @@ class ContrastTest(
     @Test
     fun themeEditorJsonAndEnd() {
         launch(ThemeEditorActivity::class.java, ThemeEditorActivity.intent(context, EditorRequest.New))
+        // The controls are composed only once the draft document and its preview have loaded (off the main thread);
+        // looking them up right after launch failed on a loaded machine for 2 of the 16 presets.
+        compose.waitUntil(EDITOR_LOAD_MS) {
+            compose.onAllNodesWithTag(EditorTestTags.SCROLL).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag(EditorTestTags.SCROLL).performScrollToNode(hasTestTag(EditorTestTags.RESET_DEFAULT))
         idle()
         check("theme editor (end)")
@@ -219,6 +225,7 @@ class ContrastTest(
 
     companion object {
         private const val DARK = "dark"
+        private const val EDITOR_LOAD_MS = 10_000L
         private const val DEFAULT = "strata-default"
 
         /** Screens drawn as a layer over home: only the layer's own texts (home under a scrim is dimmed by design). */
