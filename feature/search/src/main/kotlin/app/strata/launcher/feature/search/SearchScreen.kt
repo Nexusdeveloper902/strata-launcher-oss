@@ -96,6 +96,7 @@ import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.iconKey
+import app.strata.launcher.core.ui.imeField
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -418,6 +419,7 @@ private fun SearchField(
                         Modifier
                             .fillMaxWidth()
                             .focusRequester(focus)
+                            .imeField()
                             .onPreviewKeyEvent { e ->
                                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                 when (e.key) {

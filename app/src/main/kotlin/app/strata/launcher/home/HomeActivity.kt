@@ -10,9 +10,7 @@ import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -34,7 +32,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.strata.launcher.BuildConfig
 import app.strata.launcher.appGraph
 import app.strata.launcher.core.common.trace.TraceSections
+import app.strata.launcher.core.ui.ImeFields
 import app.strata.launcher.core.ui.LocalIconLoader
+import app.strata.launcher.core.ui.LocalImeFields
+import app.strata.launcher.core.ui.StrayImeGuard
 import app.strata.launcher.di.localeTags
 import app.strata.launcher.feature.home.HomeAction
 import app.strata.launcher.feature.home.HomeEffect
@@ -208,12 +209,12 @@ class HomeActivity : ComponentActivity() {
             }
             setContent {
                 themeHost.Content(window) {
-                    CompositionLocalProvider(LocalIconLoader provides iconLoader) {
+                    CompositionLocalProvider(LocalIconLoader provides iconLoader, LocalImeFields provides imeFields) {
                         val state by viewModel.state.collectAsStateWithLifecycle()
                         // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                         ReportDrawnWhen { state.listReady }
                         WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
-                        HideStrayIme(state.imeAllowed)
+                        HideStrayIme(state.imeAllowed || state.showOnboarding)
                         val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
                         HomeRoute(
                             state = state,
@@ -322,6 +323,13 @@ class HomeActivity : ComponentActivity() {
         }
     }
 
+    /** The focused text fields of this window ([app.strata.launcher.core.ui.imeField]). */
+    private val imeFields = ImeFields()
+
+    /** Keyboards hidden by [HideStrayIme] in this activity (tests: a focused field must never be cut off). */
+    @VisibleForTesting
+    internal var strayImeHides = 0
+
     /**
      * Keeps the IME hidden whenever no text field is open ([app.strata.launcher.feature.home.HomeUiState.imeAllowed]).
      * Closing search (Home press, Back, launch) ends the field's input session, which asks for a hide. On a loaded
@@ -329,16 +337,17 @@ class HomeActivity : ComponentActivity() {
      * the late show leaves the keyboard up over home at rest (CI run 41820860155, API 34, T-HOME-09: hide
      * "onCancelled at PHASE_CLIENT_APPLY_ANIMATION", then `onShown`). Reacting to the IME actually being visible,
      * rather than issuing one hide at close time, makes the rest state hold whatever order the IME finishes in.
+     *
+     * A focused text field always keeps its keyboard ([StrayImeGuard]): the screen-state whitelist alone missed the
+     * Edit favourites picker and onboarding shown as home's first layer, whose keyboard this guard closed as soon as it
+     * appeared (owner report on the Galaxy A56; T-HOME-14).
      */
-    @OptIn(ExperimentalLayoutApi::class)
     @Composable
     private fun HideStrayIme(allowed: Boolean) {
-        val visible = WindowInsets.isImeVisible
-        LaunchedEffect(visible, allowed) {
-            if (visible && !allowed) {
-                searchCloseLog("IME visible without a text field -> hide")
-                WindowCompat.getInsetsController(window, window.decorView).hide(WindowInsetsCompat.Type.ime())
-            }
+        StrayImeGuard(allowed = allowed, fields = imeFields) {
+            strayImeHides++
+            searchCloseLog("IME visible without a text field -> hide")
+            WindowCompat.getInsetsController(window, window.decorView).hide(WindowInsetsCompat.Type.ime())
         }
     }
 

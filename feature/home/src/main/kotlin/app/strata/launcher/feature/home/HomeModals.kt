@@ -51,6 +51,7 @@ import app.strata.launcher.core.ui.StrataSheet
 import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.focusRing
 import app.strata.launcher.core.ui.iconKey
+import app.strata.launcher.core.ui.imeField
 import app.strata.launcher.core.ui.rememberAppIconState
 
 object SheetTestTags {
@@ -384,7 +385,12 @@ private fun RenameField(
             label = { Text(text = stringResource(R.string.sheet_name_label)) },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { save() }),
-            modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(SheetTestTags.RENAME_FIELD),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focus)
+                    .imeField()
+                    .testTag(SheetTestTags.RENAME_FIELD),
         )
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(
