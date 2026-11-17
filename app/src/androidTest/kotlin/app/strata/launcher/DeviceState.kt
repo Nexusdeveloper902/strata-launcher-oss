@@ -139,12 +139,6 @@ fun ComposeTestRule.openAllApps(timeoutMillis: Long = 10_000) {
 }
 
 /**
- * Completes the first-run flow (FR-ONBOARD-01) when it is showing, without changes: Welcome → Skip favourites → the
- * set-default step (Continue while Strata is home, else "Not now") → Done. The Orchestrator clears app data before
- * every test, so each HomeActivity test starts with it. Returns the number of screens passed.
- */
-
-/**
  * Waits until a RESUMED activity of [type] has window focus, i.e. WindowManager shows it and input goes to it. Compose
  * finds nodes as soon as they are composed, which can be well before that: CI run 44068284763 (API 34, tSearch13)
  * clicked onboarding 1.3 s before HomeActivity was displayed, the touch landed on the window below (another app) and
@@ -174,6 +168,12 @@ fun ComposeTestRule.awaitFocusedActivity(
         throw AssertionError("No focused ${type.simpleName} within $timeoutMillis ms. ${focusReport()}", e)
     }
 }
+
+/**
+ * Completes the first-run flow (FR-ONBOARD-01) when it is showing, without changes: Welcome → Skip favourites → the
+ * set-default step (Continue while Strata is home, else "Not now") → Done. The Orchestrator clears app data before
+ * every test, so each HomeActivity test starts with it. Returns the number of screens passed.
+ */
 
 fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
     fun count(tag: String) = onAllNodesWithTag(tag).fetchSemanticsNodes().size
