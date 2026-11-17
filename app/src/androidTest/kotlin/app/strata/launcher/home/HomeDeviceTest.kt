@@ -48,8 +48,11 @@ import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.focusReport
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
+import app.strata.launcher.resumedHomeActivity
 import app.strata.launcher.shell
 import app.strata.launcher.switchNavMode
+import app.strata.launcher.visitRecentsAndReturn
+import app.strata.launcher.windowMatchesNavMode
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -227,9 +230,13 @@ class HomeDeviceTest {
     fun tHome07_hideStatusBar() {
         runBlocking { appGraph().settingsRepository.update { it.copy(hideStatusBar = true) } }
         compose.waitUntil(5_000) { !statusBarVisible() }
-        device.pressRecentApps()
-        device.waitForIdle()
-        device.pressBack()
+        compose.visitRecentsAndReturn(ownedActivity(), device)
+    }
+
+    private fun ownedActivity(): HomeActivity {
+        lateinit var owned: HomeActivity
+        compose.activityRule.scenario.onActivity { owned = it }
+        return owned
     }
 
     /** T-HOME-09: one Home press from sheet / search / list returns to rest (INTERACTION_SPEC §6). */
@@ -291,9 +298,7 @@ class HomeDeviceTest {
         var width = 0
         compose.activityRule.scenario.onActivity { width = it.window.decorView.width }
         rects.forEach { assertThat(it.left).isAtLeast(width / 2) } // index on the end side (LTR)
-        device.pressRecentApps()
-        device.waitForIdle()
-        device.pressBack()
+        compose.visitRecentsAndReturn(ownedActivity(), device)
     }
 
     /**
@@ -312,9 +317,17 @@ class HomeDeviceTest {
                 "navigation_mode is not gestural",
                 shell("settings get secure navigation_mode").trim() == GESTURAL_NAV_MODE,
             )
+            // The overlay switch is a configuration change: on API 29 the activity is recreated, sometimes twice, and is
+            // briefly stopped (nightly run 43699451179: "No compose hierarchies found" while waiting for the index).
+            // Wait for a resumed, focused home whose insets show the gesture edges, without touching Compose meanwhile.
+            awaitResumedHomeIn(gestural = true)
             awaitHomeIndex()
             compose.onNodeWithTag(HomeTestTags.PILL).performClick()
             compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) > 0 }
+            // Search opens with the IME. Swipe only once it is shown: a Back gesture sent while the IME window is still
+            // coming in was lost on API 29 (nightly run 43842913826: swipe at +0.2 s, IME shown 0.3 s later, no Back
+            // reached the app). In every passing run the Back hid the IME and that closed search (blank query).
+            compose.waitUntil(DEVICE_TIMEOUT_MS) { imeVisible() }
             compose.waitForIdle()
             assertThat(exclusionRects()).isEmpty()
             val w = device.displayWidth
@@ -324,6 +337,22 @@ class HomeDeviceTest {
             compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) == 0 }
         } finally {
             restoreNav.getOrNull()?.invoke()
+        }
+    }
+
+    /** Waits until a HomeActivity is resumed and focused and its insets match the navigation mode ([gestural]). */
+    private fun awaitResumedHomeIn(gestural: Boolean) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        try {
+            compose.waitUntil(DEVICE_TIMEOUT_MS) {
+                val home = resumedHomeActivity()
+                var focused = false
+                if (home != null) instrumentation.runOnMainSync { focused = home.window.decorView.hasWindowFocus() }
+                if (!focused) closeSystemErrorDialog(device)
+                home != null && focused && windowMatchesNavMode(home, gestural)
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("No focused home with gestural=$gestural insets. ${focusReport()}", e)
         }
     }
 
@@ -416,26 +445,29 @@ class HomeDeviceTest {
     /** T-FAV-02 (I): reorder survives a process restart (the Room half runs on the JVM). */
     @Test
     fun tFav02_reorderSurvivesRestart() {
-        val list = vm().state.value.list ?: return
+        // Not `?: return`: a list that has not loaded yet made the test pass without checking anything.
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { vm().state.value.list != null }
+        val list = checkNotNull(vm().state.value.list)
         val three = list.sections.flatMap { it.apps }.take(3)
-        assumeTrue(three.size == 3)
+        assumeTrue("needs three launchable apps, found ${three.size}", three.size == 3)
+        val expected = listOf(three[2].key, three[0].key, three[1].key)
         runBlocking {
             val repo = appGraph().favorites
             three.forEach { repo.add(it.key) { true } }
-            repo.reorder(listOf(three[2].key, three[0].key, three[1].key))
+            repo.reorder(expected)
         }
         compose.activityRule.scenario.recreate()
-        compose.waitUntil(5_000) {
-            vm()
-                .state.value.favorites.size >= 3
-        }
-        assertThat(
+
+        fun shown() =
             vm()
                 .state.value.favorites
                 .take(3)
-                .map { it.key },
-        ).containsExactly(three[2].key, three[0].key, three[1].key)
-            .inOrder()
+                .map { it.key }
+        // recreate() keeps the ViewModel, so its state can still be an earlier emission: CI run 43599000906 (API 36)
+        // waited for "3 favourites", got the adds' [a, b, c] before the reorder had arrived, and asserted on that.
+        // Wait for the stored order to be shown; if it never is, the assertion below reports what was shown instead.
+        runCatching { compose.waitUntil(DEVICE_TIMEOUT_MS) { shown() == expected } }
+        assertThat(shown()).containsExactlyElementsIn(expected).inOrder()
     }
 
     /** T-APPS-08 / T-APPS-11 / T-LIFE-05…07 with the "Zz Test" fixture: rename, uninstall, suspend. */
