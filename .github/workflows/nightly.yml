@@ -25,13 +25,14 @@ env:
 
 jobs:
   compat-matrix:
-    name: T-COMPAT-01 API ${{ matrix.api }}
+    name: T-COMPAT-01 API ${{ matrix.api }} try ${{ matrix.attempt }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         api: [28, 29, 31, 33, 35]
+        attempt: [1, 2]
     steps:
       - uses: actions/checkout@v7
       - name: Enable KVM
@@ -62,7 +63,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: nightly-compat-api${{ matrix.api }}
+          name: nightly-compat-api${{ matrix.api }}-try${{ matrix.attempt }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
@@ -76,7 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [29]
+        api: [29, 34, 36]
         mode: [gestural, threebutton]
     steps:
       - uses: actions/checkout@v7
@@ -275,7 +276,11 @@ jobs:
   benchmark-repeat:
     # M9: the Macrobenchmarks as correctness checks on an emulator (dry run: one iteration, no budgets; the budgets are
     # asserted only on a physical device, docs/release/RELEASE_GATE.md). Also T-PERF-09's jobs/alarms check.
-    name: Macrobenchmark correctness (GMD API 34)
+    name: FLAKE Macrobenchmark try ${{ matrix.attempt }}
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3]
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -320,7 +325,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: benchmark-gmd-reports
+          name: flake-benchmark-try${{ matrix.attempt }}
           path: |
             benchmark/build/reports/androidTests/
             benchmark/build/outputs/androidTest-results/
