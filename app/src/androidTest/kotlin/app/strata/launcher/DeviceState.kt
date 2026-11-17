@@ -22,6 +22,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
@@ -89,7 +90,13 @@ fun closeSystemErrorDialog(device: UiDevice): Boolean {
     val systemUi = focus.contains("Not Responding: com.android.systemui")
     val button = if (systemUi) wait ?: close else close ?: wait
     Log.w(TAG, "Answering system error dialog with " + (if (button === wait) "Wait" else "Close") + ": " + focus)
-    button?.click()
+    try {
+        button?.click()
+    } catch (e: StaleObjectException) {
+        // The dialog went away between the lookup and the click (CI run 44129245277, API 34, HomeSmokeTest): nothing
+        // is left to answer.
+        Log.w(TAG, "System error dialog closed before it was answered", e)
+    }
     return true
 }
 
@@ -217,7 +224,15 @@ private const val MAX_ONBOARDING_SCREENS = 6
  *   41667894220), which makes Back timing depend on emulator load. The close logic keys off the IME target state
  *   either way (docs/impl-notes/M2.md items 16, 17); this only removes the load-dependent animation time.
  */
-class DeviceStateRule : TestRule {
+class DeviceStateRule(
+    /**
+     * A navigation mode a test needs (`gestural` / `threebutton`), switched before its activity starts. It wins over
+     * the job's `strata.navMode`: a test that needs gestures needs them in every job. Switching mid-test instead (after
+     * the activity started) left API 29 without a working Back gesture although every observable state was right
+     * (flake-hunt run 44129238421); switched before the start, the same test passed in every run.
+     */
+    private val navModeFor: (Description) -> String? = { null },
+) : TestRule {
     private val component = "app.strata.launcher/app.strata.launcher.home.HomeActivity"
 
     override fun apply(
@@ -239,7 +254,7 @@ class DeviceStateRule : TestRule {
                 var restoreNav: (() -> Unit)? = null
                 try {
                     // Inside the try: a failing nav-mode switch must still restore everything changed above.
-                    restoreNav = applyNavMode()
+                    restoreNav = applyNavMode(navModeFor(description))
                     closeSystemErrorDialog(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()))
                     // Each test is a short process that never lives the 10 s that mark a start good (ARCHITECTURE
                     // §10). Without this, the third test in a row would boot in safe mode with its banner.
@@ -264,8 +279,8 @@ class DeviceStateRule : TestRule {
  * Fails when the wanted overlay is not active afterwards. Returns how to put back exactly the navigation overlays that
  * were enabled before (two-button, gestural variants, or none), or null when nothing changed.
  */
-private fun applyNavMode(): (() -> Unit)? {
-    val wanted = InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
+private fun applyNavMode(testWants: String?): (() -> Unit)? {
+    val wanted = testWants ?: InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
     return switchNavMode(wanted)
 }
 

@@ -61,7 +61,11 @@ class GlyphBundleTest {
         assertThat(GlyphIndex.parse("").size).isEqualTo(0)
     }
 
-    /** Production index: parses cleanly, no duplicate packages, every id has a single-colour vector drawable. */
+    /**
+     * Production index as packaged (the public index plus the private overlay when `glyphs-private/` exists): parses
+     * cleanly, no duplicate packages, every id has a single-colour vector drawable in exactly one of the two sets,
+     * and every overlay package reaches the packaged index.
+     */
     @Test
     fun tTheme55_productionIndex() {
         val text =
@@ -74,14 +78,26 @@ class GlyphBundleTest {
         val lines = text.lines().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }
         assertThat(index.size).isEqualTo(lines.size) // no duplicate was dropped
         assertThat(GlyphBundle.DRAWABLES.keys).containsAtLeastElementsIn(index.glyphIds)
-        val dir = File(System.getProperty("user.dir"), "src/main/res/drawable-nodpi")
+        val module = File(System.getProperty("user.dir"))
+        val publicDir = File(module, "src/main/res/drawable-nodpi")
+        val privateRoot = File(module, "glyphs-private")
+        val privateDir = File(privateRoot, "res/drawable-nodpi")
         for (id in index.glyphIds) {
-            val xml = File(dir, "glyph_$id.xml").readText()
+            val found = listOf(publicDir, privateDir).map { File(it, "glyph_$id.xml") }.filter { it.isFile }
+            assertThat(found).hasSize(1) // present, and not defined in both sets
+            val xml = found.single().readText()
             assertThat(xml).contains("<vector")
             val fills = Regex("android:fillColor=\"([^\"]*)\"").findAll(xml).map { it.groupValues[1] }.toSet()
             assertThat(fills).hasSize(1)
             assertThat(xml).doesNotContain("strokeColor")
         }
+        val overlay = File(privateRoot, "index.txt")
+        if (overlay.isFile) {
+            val private = GlyphIndex.parse(overlay.readText())
+            assertThat(private.problems).isEmpty()
+            for (pkg in private.packages) assertThat(index.glyphFor(pkg)).isEqualTo(private.glyphFor(pkg))
+        }
+        assertThat(index.glyphFor("app.strata.launcher")).isEqualTo("strata")
         assertThat(GlyphBundle.VERSION).matches("[0-9a-f]{16}")
     }
 
@@ -126,6 +142,62 @@ class GlyphBundleTest {
         fun lookup(version: String) = BundledGlyphs({ "" }, emptyMap(), version)
         assertThat(provider(lookup("aaaa")).cacheKey(req)).isEqualTo(provider(lookup("aaaa")).cacheKey(req))
         assertThat(provider(lookup("bbbb")).cacheKey(req)).isNotEqualTo(provider(lookup("aaaa")).cacheKey(req))
+    }
+
+    /** D-020: the layer check on real drawables; empty and full-bleed layers fall back to the glyph. */
+    @Test
+    fun tTheme54_monochromeLayerCheckOnDrawables() {
+        val transparent = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+        val fullBleed = android.graphics.drawable.ColorDrawable(Color.BLACK)
+        val glyph = requireNotNull(app.getDrawable(R.drawable.glyph_strata))
+        assertThat(MonochromeLayers.isUsable(transparent)).isFalse()
+        assertThat(MonochromeLayers.isUsable(fullBleed)).isFalse()
+        assertThat(MonochromeLayers.isUsable(glyph)).isTrue()
+    }
+
+    /**
+     * D-020 through the provider (sources() via coverage(), shared with render): an app with a glyph and an adaptive
+     * icon whose monochrome layer is transparent or a full-bleed block gets the glyph; a usable layer wins; no layer:
+     * the glyph.
+     */
+    @Test
+    fun tTheme54_providerChecksTheMonochromeLayer() {
+        val comp = "com.example.mail/com.example.mail.Main"
+        val glyphs = BundledGlyphs({ "com.example.mail strata\n" }, mapOf("strata" to R.drawable.glyph_strata))
+        val tinted = IconStyle(tint = IconTintMode.MONOCHROME, tintColor = Color.WHITE, plateColor = Color.BLACK)
+
+        fun sourceWith(mono: android.graphics.drawable.Drawable?): IconSource {
+            val icon =
+                android.graphics.drawable.AdaptiveIconDrawable(
+                    android.graphics.drawable.ColorDrawable(Color.BLUE),
+                    android.graphics.drawable.ColorDrawable(Color.RED),
+                    mono,
+                )
+            val provider = provider(glyphs, systemIcons = { _, _, _ -> icon })
+            return runBlocking { provider.coverage(listOf(visible(comp)), tinted) }.single().source
+        }
+        assertThat(sourceWith(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))).isEqualTo(IconSource.GLYPH)
+        assertThat(sourceWith(android.graphics.drawable.ColorDrawable(Color.BLACK))).isEqualTo(IconSource.GLYPH)
+        assertThat(sourceWith(null)).isEqualTo(IconSource.GLYPH)
+        assertThat(sourceWith(app.getDrawable(R.drawable.glyph_strata))).isEqualTo(IconSource.PLATFORM_MONOCHROME)
+    }
+
+    /** A layer that throws while drawing counts as unusable (D-020). */
+    @Test
+    fun tTheme54_layerThatFailsToDrawIsUnusable() {
+        val broken =
+            object : android.graphics.drawable.ColorDrawable(Color.BLACK) {
+                override fun draw(canvas: android.graphics.Canvas): Unit = throw IllegalStateException("broken")
+            }
+        assertThat(MonochromeLayers.isUsable(broken)).isFalse()
+    }
+
+    /** D-020: the precedence change invalidates every cached bitmap: the key starts with the pipeline version. */
+    @Test
+    fun cacheKeyCarriesThePipelineVersion() {
+        val req = IconRequest(AppKey("com.example.mail/.Main", serial), 1L, 96, 420)
+        assertThat(AndroidIconProvider.baseKey(req)).startsWith(AndroidIconProvider.PIPELINE_VERSION + "|")
+        assertThat(AndroidIconProvider.PIPELINE_VERSION).isEqualTo("v3")
     }
 
     /** Override and pack beat the glyph in the pipeline as well (T-THEME-54 through the provider). */
@@ -181,6 +253,10 @@ class GlyphBundleTest {
     private fun provider(
         glyphs: GlyphLookup,
         packs: FakePackSource = FakePackSource(),
+        systemIcons: (
+            (android.content.ComponentName, android.os.UserHandle, Int) -> android.graphics.drawable.Drawable?
+        )? =
+            null,
     ) = AndroidIconProvider(
         context = app,
         renderDispatcher = Dispatchers.Unconfined,
@@ -190,5 +266,6 @@ class GlyphBundleTest {
         diskDir = { File(app.cacheDir, "icons-glyph").also { it.deleteRecursively() } },
         packSource = packs,
         glyphs = glyphs,
+        systemIcons = systemIcons,
     )
 }

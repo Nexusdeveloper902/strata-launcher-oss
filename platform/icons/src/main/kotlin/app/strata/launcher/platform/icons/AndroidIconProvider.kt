@@ -48,7 +48,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The icon pipeline of ARCHITECTURE §9. Source by THEME_SYSTEM §4.6 precedence ([IconSourceResolver]): per-app
- * override, the theme's pack mapping, then (tinted only) Strata glyph, platform monochrome (API 33+), desaturated;
+ * override, the theme's pack mapping, then (tinted only) platform monochrome (API 33+, usable layers only), Strata glyph,
+ * desaturated (D-020);
  * untinted apps show their system icon in the theme's shape. Rendered by [IconRenderer] at the exact pixel size,
  * badged afterwards for other profiles. L1 = byte-sized [LruCache] of at most 1/8 of the memory class; L2 = files in
  * `cacheDir/icons/` (not backed up), LRU-capped at [DISK_CAP_BYTES]. The cache key covers every request field, the
@@ -72,6 +73,8 @@ class AndroidIconProvider(
     private val dayOfMonth: () -> Int = { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) },
     /** The Strata glyph set (FR-THEME-35); default: the bundled index and drawables. */
     glyphs: GlyphLookup? = null,
+    /** The app's own launcher icon (component, user, density); default: `LauncherApps`. Swapped in tests. */
+    private val systemIcons: ((ComponentName, UserHandle, Int) -> Drawable?)? = null,
 ) : IconProvider {
     private val appContext = context.applicationContext
     private val diskDir: File by lazy { diskDir?.invoke() ?: File(appContext.cacheDir, "icons") }
@@ -258,8 +261,9 @@ class AndroidIconProvider(
     )
 
     /**
-     * THEME_SYSTEM §4.6 inputs, loaded in precedence order (override, pack, glyph, monochrome, system icon) so the
-     * coverage tool and the renderer take the same decision from the same reads (ARCHITECTURE §9.1).
+     * THEME_SYSTEM §4.6 inputs, loaded in precedence order (override, pack, system icon and its monochrome layer,
+     * glyph) so the coverage tool and the renderer take the same decision from the same reads (ARCHITECTURE §9.1).
+     * Runs on the render or I/O dispatcher, never on main: the layer check draws the layer once (D-020).
      */
     private fun sources(
         component: ComponentName,
@@ -284,16 +288,23 @@ class AndroidIconProvider(
                 }
             }
         val supplied = overrideDrawable ?: packDrawable
-        val glyphRes =
-            if (supplied == null && IconSourceResolver.isTinted(style)) glyphs.glyphRes(component.packageName) else null
-        val glyph = glyphRes?.let { glyphDrawable(it) }
+        val tinted = supplied == null && IconSourceResolver.isTinted(style)
         val icon: Drawable? =
-            if (supplied != null || glyph != null) null else systemIcon(component, user, densityDpi)
+            if (supplied != null) null else (systemIcons ?: ::systemIcon).invoke(component, user, densityDpi)
         val monochrome =
-            if (apiLevel >= IconSourceResolver.MONOCHROME_API &&
+            if (tinted &&
+                apiLevel >= IconSourceResolver.MONOCHROME_API &&
                 icon is AdaptiveIconDrawable
             ) {
-                monochromeOf(icon)
+                monochromeOf(icon)?.takeIf { MonochromeLayers.isUsable(it) }
+            } else {
+                null
+            }
+        val glyph =
+            if (tinted &&
+                monochrome == null
+            ) {
+                glyphs.glyphRes(component.packageName)?.let { glyphDrawable(it) }
             } else {
                 null
             }
@@ -458,6 +469,12 @@ class AndroidIconProvider(
 
     companion object {
         private const val TAG = "Icons"
+
+        /**
+         * First field of every cache key (ARCHITECTURE §9): bumped whenever the same inputs would draw differently, so
+         * L1 and L2 entries of the old pipeline are never hit again. v3: monochrome layer before the glyph (D-020).
+         */
+        const val PIPELINE_VERSION = "v3"
         private const val EXT = "webp"
         private const val QUALITY = 100
         private const val MAX_SIZE_PX = 512
@@ -474,8 +491,14 @@ class AndroidIconProvider(
 
         /** The request half of the key: format version, component, user, update time, size, density. */
         fun baseKey(req: IconRequest): String =
-            listOf("v2", req.key.component, req.key.userSerial, req.lastUpdateTime, req.sizePx, req.densityDpi)
-                .joinToString("|")
+            listOf(
+                PIPELINE_VERSION,
+                req.key.component,
+                req.key.userSerial,
+                req.lastUpdateTime,
+                req.sizePx,
+                req.densityDpi,
+            ).joinToString("|")
 
         private fun digest(raw: String): String = hex(MessageDigest.getInstance("SHA-1").digest(raw.toByteArray()))
 

@@ -39,6 +39,11 @@ import app.strata.launcher.core.ui.ThemeApplyTrace
 class ThemeHost(
     private val repository: ThemeRepository,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
+    /**
+     * Whether [Content] sets the background of a window without the wallpaper. Home passes false: its window
+     * background follows its wallpaper state (`HomeWallpaperWindow`), one writer only.
+     */
+    private val ownsWindowBackground: Boolean = true,
 ) {
     private var createdAt = 0L
     private var composedLoaded = false
@@ -72,7 +77,7 @@ class ThemeHost(
         var shownLoaded by remember { mutableStateOf(false) }
         StrataTheme(state.themes, crossFade = shownLoaded) {
             content()
-            if (window != null) SystemBarTint(window, Strata.theme)
+            if (window != null) SystemBarTint(window, Strata.theme, ownsWindowBackground)
         }
         SideEffect {
             if (state.loaded) {
@@ -134,6 +139,7 @@ class ThemeHost(
 private fun SystemBarTint(
     window: Window,
     theme: ResolvedTheme,
+    ownsBackground: Boolean,
 ) {
     val light = backdropIsLight(theme)
     val background = theme.colors.background
@@ -143,7 +149,7 @@ private fun SystemBarTint(
         controller.isAppearanceLightNavigationBars = light
         // Windows that do not show the wallpaper: the window background is the theme's, not the platform's light or
         // dark default, so nothing the content leaves unpainted (resize, IME, transitions) shows the wrong colour.
-        if (window.attributes.flags and WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER == 0) {
+        if (ownsBackground && window.attributes.flags and WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER == 0) {
             window.setBackgroundDrawable(ColorDrawable(background or OPAQUE))
         }
     }

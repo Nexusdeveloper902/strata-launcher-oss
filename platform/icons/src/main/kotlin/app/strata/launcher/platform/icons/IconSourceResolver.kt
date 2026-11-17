@@ -6,10 +6,10 @@ import app.strata.launcher.core.model.IconTintMode
 
 /**
  * Icon source precedence of THEME_SYSTEM §4.6 (ARCHITECTURE §9.1), pure so the render pipeline and the M8 coverage
- * tool (FR-SET-07) cannot disagree. Steps: per-app override, pack mapping, then only when the icon is tinted: Strata
- * glyph, platform monochrome layer (API 33+), desaturated. Untinted icons without override or pack are [IconSource.PLAIN].
- *
- * The glyph set (FR-THEME-35) is M8: until then callers pass `hasGlyph = false`, and nothing else changes when it lands.
+ * tool (FR-SET-07) cannot disagree. Steps: per-app override, pack mapping, then only when the icon is tinted: the app's
+ * platform monochrome layer (API 33+, usable layers only, [MonochromeLayers]), Strata glyph (FR-THEME-35), desaturated
+ * (D-020: the app's own monochrome icon comes before the glyph). Untinted icons without override or pack are
+ * [IconSource.PLAIN].
  */
 object IconSourceResolver {
     /** `AdaptiveIconDrawable.getMonochrome()` (DOC-043). */
@@ -22,6 +22,7 @@ object IconSourceResolver {
         /** The theme's pack maps this component to a drawable that loads. */
         packMapped: Boolean,
         hasGlyph: Boolean,
+        /** The app's adaptive icon has a usable monochrome layer ([MonochromeLayers.isUsable]). */
         hasMonochromeLayer: Boolean,
         apiLevel: Int,
     ): IconSource =
@@ -29,8 +30,8 @@ object IconSourceResolver {
             overrideAvailable -> IconSource.OVERRIDE
             packMapped -> IconSource.PACK
             !isTinted(style) -> IconSource.PLAIN
-            hasGlyph -> IconSource.GLYPH
             hasMonochromeLayer && apiLevel >= MONOCHROME_API -> IconSource.PLATFORM_MONOCHROME
+            hasGlyph -> IconSource.GLYPH
             else -> IconSource.DESATURATED
         }
 

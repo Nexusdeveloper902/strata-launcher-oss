@@ -104,4 +104,81 @@ class GlyphBundleLogicTest {
         assertThat(Regex("R.drawable.glyph_dot").findAll(src).count()).isEqualTo(1)
         assertThat(src.indexOf("\"box\"")).isLessThan(src.indexOf("\"dot\""))
     }
+
+    private fun overlaySet(
+        index: String,
+        vararg glyphs: Pair<String, String>,
+    ): GlyphBundleLogic.GlyphSet {
+        val (i, d) = bundle(index, *glyphs)
+        return GlyphBundleLogic.GlyphSet("private", i, d)
+    }
+
+    private fun publicSet(
+        index: String,
+        vararg glyphs: Pair<String, String>,
+    ): GlyphBundleLogic.GlyphSet {
+        val (i, d) = bundle(index, *glyphs)
+        return GlyphBundleLogic.GlyphSet("public", i, d)
+    }
+
+    /** Overlay absent (the public mirror): the packaged index and version are exactly the public set's. */
+    @Test
+    fun `without an overlay the merged index is the public index unchanged`() {
+        val text = "# stub\ncom.example.home box\n"
+        val pub = publicSet(text, "box" to vector)
+        val checked = GlyphBundleLogic.check(pub, null)
+        assertThat(String(checked.mergedIndex)).isEqualTo(text)
+        assertThat(checked.version).isEqualTo(GlyphBundleLogic.check(pub.index, pub.drawables).first)
+        assertThat(checked.ids).containsExactly("box")
+    }
+
+    /** Overlay present: its lines follow the public ones, its drawables count, and they move the version. */
+    @Test
+    fun `an overlay is merged after the public index and versioned`() {
+        val pub = publicSet("com.example.home box", "box" to vector)
+        val priv = overlaySet("com.example.extra dot\ncom.example.more box\n", "dot" to vector)
+        val checked = GlyphBundleLogic.check(pub, priv)
+        val merged = String(checked.mergedIndex)
+        assertThat(merged).startsWith("com.example.home box\n# --- private overlay ---\ncom.example.extra dot")
+        val (entries, problems) = GlyphBundleLogic.parse(merged)
+        assertThat(problems).isEmpty()
+        assertThat(entries.map { it.packageName })
+            .containsExactly("com.example.home", "com.example.extra", "com.example.more")
+            .inOrder()
+        assertThat(checked.ids).containsExactly("box", "dot")
+        assertThat(checked.version).isNotEqualTo(GlyphBundleLogic.check(pub, null).version)
+        val changed =
+            overlaySet(
+                "com.example.extra dot\ncom.example.more box\n",
+                "dot" to vector.replace("M4,4", "M3,3"),
+            )
+        assertThat(GlyphBundleLogic.check(pub, changed).version).isNotEqualTo(checked.version)
+    }
+
+    @Test
+    fun `a package in both indexes fails`() {
+        val pub = publicSet("com.example.home box\n", "box" to vector)
+        val priv = overlaySet("com.example.extra dot\ncom.example.home dot\n", "dot" to vector)
+        val e = assertThrows(GradleException::class.java) { GlyphBundleLogic.check(pub, priv) }
+        assertThat(e.message).contains("duplicate package 'com.example.home' in the public and private indexes")
+    }
+
+    @Test
+    fun `an overlay glyph that redefines a public glyph fails`() {
+        val pub = publicSet("com.example.home box\n", "box" to vector)
+        val priv = overlaySet("com.example.extra box\n", "box" to vector)
+        val e = assertThrows(GradleException::class.java) { GlyphBundleLogic.check(pub, priv) }
+        assertThat(e.message).contains("glyph_box.xml: the private set must not redefine a public glyph")
+    }
+
+    @Test
+    fun `overlay problems name the overlay and missing drawables name both sets`() {
+        val pub = publicSet("com.example.home box\n", "box" to vector)
+        val priv = overlaySet("com.example.extra gone\nbroken line here\n")
+        val e = assertThrows(GradleException::class.java) { GlyphBundleLogic.check(pub, priv) }
+        assertThat(e.message).contains("private index: line 2: expected '<package> <glyph id>'")
+        assertThat(
+            e.message,
+        ).contains("glyph 'gone': missing glyph_gone.xml in public drawable-nodpi/ or private drawable-nodpi/")
+    }
 }
