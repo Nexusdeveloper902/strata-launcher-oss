@@ -74,9 +74,12 @@ the main commit also had the same tree.
   Cost: one `pm clear` per test.
 - **Animations: off for every test** (`animationsDisabled`). Most classes already set the scales to 0 via
   `DeviceStateRule`; this covers the rest (`HomeSmokeTest`, `ListDeviceTest`, `CatalogDeviceTest`, …).
-- **No separate boot "device ready" gate.** GMD starts tests only after boot completes. No failure in these runs came at
-  boot, or from the keyguard or screen state; the stalls came minutes in. The default-home step now verifies its result,
-  which catches the stall that did happen.
+- **A device-ready gate, state-based.** GMD starts tests only after boot completes, so a boot-completed check adds
+  nothing. Neither keyguard nor screen state caused any failure here. What did fail was the first tests after boot,
+  while the boot broadcasts were still being delivered (round 4: HomeSmokeTest on API 33, display after 4 s, injection
+  refused on a focused window). `passOnboarding` therefore first waits for `cmd activity wait-for-broadcast-idle`
+  (bounded to 60 s, never failing; it returns at once on a settled system). Then it waits for a focused window
+  (`awaitFocusedActivity`). The default-home step also verifies its own result.
 - **Monkey on ATD.** T-REL-01 needs our app under random input, not GMS. ATD lacks a soft keyboard, so the PR smoke and
   compat jobs stay on Google APIs (T-SEARCH-10 needs the IME).
 
@@ -85,30 +88,33 @@ the main commit also had the same tree.
 Each round dispatched `nightly.yml` on the scratch branch, with the PR smoke and Macrobenchmark jobs added and repeated.
 Counts are jobs passed / jobs run. "Baseline" is main's code plus the diagnostics only.
 
-| Job | Nightly ×3 on main (before) | Round 1, baseline (43994307244) | Round 2, first fixes (44068284763) | Round 3, more fixes (44129238421 + CI 44129245277) |
-|---|---|---|---|---|
-| PR smoke API 26 | – | 3/3 | 3/3 | 4/4 |
-| PR smoke API 34 | – | 3/3 | 1/3 (tWidget04, tSearch13) | 2/3 + 1 cancelled (HomeSmokeTest stale node: below) |
-| PR smoke API 36 | – | 3/3 | 3/3 | 4/4 |
-| Macrobenchmark correctness | – | 0/1 (stale click) | 1/3 (tPerf02 ×2, System UI ANR ×1) | 0/4 (tPerf02 ×2, System UI ANR ×1, focus ×1) |
-| T-COMPAT-01 API 28 | 3/3 | 1/1 | 2/2 | 2/2 |
-| T-COMPAT-01 API 29 | 2/3 | 1/1 | 1/2 (edge-back) | 1/2 (edge-back; mid-test nav switch) |
-| T-COMPAT-01 API 31 | 0/3 | 0/1 | 2/2 | 2/2 |
-| T-COMPAT-01 API 33 | 0/3 | 0/1 | 2/2 | 1/2 (tOnboard01 click: below) |
-| T-COMPAT-01 API 35 | 0/3 | 0/1 | 2/2 | 2/2 |
-| T-COMPAT-02 API 29 (2 modes) | 3/6 | 1/2 | 2/2 | 1/2 (edge-back, mid-test nav switch) |
-| T-COMPAT-02 API 34/36 (4 jobs) | 12/12 | – | 4/4 | 4/4 |
-| T-REL-01 monkey | 0/3 | 0/1 (target ANR on Google APIs, CPU-starved) | 1/1 (ATD) | 1/1 (ATD) |
-| Baseline Profile | 0/3 | 0/1 (stale) | 0/1 (field off screen) | 1/1 |
+| Job | Nightly ×3 on main (before) | Round 1, baseline (43994307244) | Round 2, first fixes (44068284763) | Round 3, more fixes (44129238421 + CI 44129245277) | Round 4, all fixes but the settle gate (44183532175 + CI 44183536801) |
+|---|---|---|---|---|---|
+| PR smoke API 26 | – | 3/3 | 3/3 | 4/4 | 4/4 |
+| PR smoke API 34 | – | 3/3 | 1/3 (tWidget04, tSearch13) | 2/3 + 1 cancelled (HomeSmokeTest stale node: below) | 4/4 |
+| PR smoke API 36 | – | 3/3 | 3/3 | 4/4 | 3/4 (tNotif02 injection: settle gate) |
+| Macrobenchmark correctness | – | 0/1 (stale click) | 1/3 (tPerf02 ×2, System UI ANR ×1) | 0/4 (tPerf02 ×2, System UI ANR ×1, focus ×1) | 4/4 |
+| T-COMPAT-01 API 28 | 3/3 | 1/1 | 2/2 | 2/2 | – |
+| T-COMPAT-01 API 29 | 2/3 | 1/1 | 1/2 (edge-back) | 1/2 (edge-back; mid-test nav switch) | 3/3 |
+| T-COMPAT-01 API 31 | 0/3 | 0/1 | 2/2 | 2/2 | – |
+| T-COMPAT-01 API 33 | 0/3 | 0/1 | 2/2 | 1/2 (tOnboard01 click: below) | 2/3 (HomeSmokeTest injection, first test after boot: settle gate) |
+| T-COMPAT-01 API 35 | 0/3 | 0/1 | 2/2 | 2/2 | – |
+| T-COMPAT-02 API 29 (2 modes) | 3/6 | 1/2 | 2/2 | 1/2 (edge-back, mid-test nav switch) | 2/2 |
+| T-COMPAT-02 API 34/36 (4 jobs) | 12/12 | – | 4/4 | 4/4 | – |
+| T-REL-01 monkey | 0/3 | 0/1 (target ANR on Google APIs, CPU-starved) | 1/1 (ATD) | 1/1 (ATD) | – (2/2 already) |
+| Baseline Profile | 0/3 | 0/1 (stale) | 0/1 (field off screen) | 1/1 | 1/1 |
 
 Other data points: PR #34 (`fix-battery`) passed all 9 checks. PR #19 (`search-contacts-permissions`) failed
 Macrobenchmark twice (tPerf02; stale click in `passOnboardingAndWaitForHome`), and main `ae168c4` (run 44131037055) failed
 on tPerf02 and the edge-back test. Those branches did not have the fixes above.
 
-Fixes after round 3 (tPerf02 trace metric, edge-back mode set before start) and the round-3 leftovers
-(`HomeSmokeTest` stale node, `tOnboard01` click on API 33, one Macrobenchmark focus timeout) are listed under
-"Still open" until a run shows them green.
+After round 4, the edge-back test (5/5 on API 29, where it failed before) and Macrobenchmark (4/4) are fixed.
 
 ## Still open
 
-- Round 4 has not run yet: re-run the nightly on the branch and fill in the table.
+- Round 4 left two "Failed to inject touch input" clicks in `passOnboarding`, on a focused window early after boot
+  (API 33 HomeSmokeTest, API 36 tNotif02). The broadcast-idle gate above is the fix, committed after round 4. It has
+  not yet been confirmed by a run.
+- `OnboardingDeviceTest.tOnboard01` on API 33 ("onboarding_continue could not be clicked"): once in about 25 compat
+  runs, in round 3, and not seen in round 4. Not root-caused; the log shows no system dialog or focus change. Watch it.
+- The `ci-flake-hunt` branch on the mirror is a scratch branch. Its `nightly.yml` repeats jobs and is not for merging.

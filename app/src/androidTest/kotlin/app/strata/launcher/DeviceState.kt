@@ -146,6 +146,30 @@ fun ComposeTestRule.openAllApps(timeoutMillis: Long = 10_000) {
 }
 
 /**
+ * Device-ready gate: waits (bounded by [SETTLE_TIMEOUT_MS], never failing) until the system's broadcast queues are
+ * idle. The first tests after an emulator boots ran while the boot broadcasts were still being delivered: run
+ * 44183532175 (API 33, HomeSmokeTest, the first test of the run) saw HomeActivity displayed after 4 s, 2.5 s frames and
+ * system_server lock contention, and a click on a focused window still failed to inject. Returns at once on a settled
+ * system. Not a sleep: `wait-for-broadcast-idle` ends when the queues are empty.
+ */
+fun awaitSystemSettled() {
+    val done = java.util.concurrent.CountDownLatch(1)
+    val waiter =
+        Thread({
+            runCatching { shell("cmd activity wait-for-broadcast-idle") }
+            done.countDown()
+        }, "settle-gate").apply {
+            isDaemon = true
+            start()
+        }
+    if (!done.await(SETTLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+        Log.w(TAG, "Broadcast queues still busy after $SETTLE_TIMEOUT_MS ms; continuing (${waiter.name})")
+    }
+}
+
+private const val SETTLE_TIMEOUT_MS = 60_000L
+
+/**
  * Waits until a RESUMED activity of [type] has window focus, i.e. WindowManager shows it and input goes to it. Compose
  * finds nodes as soon as they are composed, which can be well before that: CI run 44068284763 (API 34, tSearch13)
  * clicked onboarding 1.3 s before HomeActivity was displayed, the touch landed on the window below (another app) and
@@ -194,6 +218,7 @@ fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
             count(OnboardingTestTags.CONTINUE) > 0 -> OnboardingTestTags.CONTINUE
             else -> ""
         }
+    awaitSystemSettled()
     // Touches go to the focused window only: wait until home (or onboarding's own activity) is shown and focused.
     awaitFocusedActivity(ComponentActivity::class.java)
     var screens = 0
