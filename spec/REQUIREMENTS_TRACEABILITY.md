@@ -33,7 +33,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-LIST-01 | P0 | Locale-collated alphabetical list with ICU index sections | Corroborated | PUB-009, APK-019 | :feature:home, :core:ui, :platform:apps, :core:data (area); cited ARCH §8 | PRODUCT_SPEC §4.2 | T-LIST-01, T-LIST-02, T-LIST-03 | M1 [spec Rel: v1] |
 | FR-LIST-02 | P0 | Edge alphabet index with bubble, dimming and haptic ticks | Corroborated | PUB-001, PUB-012, APK-026, APK-029 | :feature:home, :core:ui, :platform:apps, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.2 | T-LIST-04, T-LIST-05 | M1 [spec Rel: v1] |
 | FR-LIST-03 | P0 (marker P1) | Row content: icon, label, badges, new marker | Corroborated | PUB-064, APK-028 | :feature:home, :core:ui, :platform:apps, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.2 | T-LIST-06, T-LIST-07 | M1, v1.x [spec Rel: v1 / v1.x] |
-| FR-LIST-04 | P0 | Live list updates on install, removal and profile changes | Proposed | DOC-010, DOC-011 | :feature:home, :core:ui, :platform:apps, :core:data (area); cited ARCH §4 | PRODUCT_SPEC §4.2 | T-LIST-08, T-LIFE-05, T-LIFE-06, T-LIFE-07, T-LIFE-08, T-PERF-10 | M1 [spec Rel: v1] |
+| FR-LIST-04 | P0 | Live list updates on install, removal and profile changes | Proposed | DOC-010, DOC-011 | :feature:home, :core:ui, :platform:apps, :core:data (area); cited ARCH §4 | PRODUCT_SPEC §4.2 | T-LIST-08, T-LIFE-05, T-LIFE-06, T-LIFE-07, T-LIFE-08, T-PERF-10, T-LIST-13^, T-LIST-14^ | M1 [spec Rel: v1] |
 | FR-LIST-05 | P1 | Optional sort by usage within each letter | Corroborated (capability); Proposed (default) | PUB-010, APK-026 | :feature:home, :core:ui, :platform:apps, :core:data (area); cited ARCH §4.2 | PRODUCT_SPEC §4.2 | T-LIST-12 | v1.x [spec Rel: v1.x] |
 | FR-LIST-06 | P0 | List end shows Settings and Hidden apps rows | Inferred | PUB-012, PUB-064 | :feature:home, :core:ui, :platform:apps, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.2 | T-LIST-09 | M1 [spec Rel: v1] |
 | FR-LIST-07 | P1 | Two columns at widths of 600 dp or more | Corroborated | PUB-052, APK-026, DOC-067 | :feature:home, :core:ui, :platform:apps, :core:data (area); cited ARCH §4.2, §14.2 | PRODUCT_SPEC §4.2 | T-LIST-10, T-LIST-11 | M1 [spec Rel: v1] |
@@ -208,7 +208,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | NFR-PERF-03 | P0 | Search results recomputed within 8 ms median | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §8 | PRODUCT_SPEC §5 | T-PERF-05, T-PERF-06 | M2, M7, M9 |
 | NFR-PERF-04 | P0 | Memory ceiling and bounded icon cache | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §9 | PRODUCT_SPEC §5 | T-PERF-07, T-PERF-08 | M3, M9 |
 | NFR-PERF-05 | P0 | No periodic jobs, alarms or wakelocks | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-09 | M9 |
-| NFR-PERF-06 | P1 | Package changes within 1 s; theme apply within 300 ms | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-10, T-LIST-08, T-THEME-53 | M9 |
+| NFR-PERF-06 | P1 | Package changes within 1 s; theme apply within 300 ms | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-10, T-LIST-08, T-THEME-53, T-LIST-13^, T-LIST-14^ | M9 |
 | NFR-PERF-07 | P1 | Release APK at most 12 MB per ABI | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-CI-07 | M9 |
 
 ## NFR-A11Y (PRODUCT_SPEC §5)
@@ -281,15 +281,15 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
 - Requirements with at least one test: 145; without: 11.
 - Requirements with a roadmap milestone: 152; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 262; §22 rows: 144.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 264; §22 rows: 144.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
 - Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
-- §22-only pairs (~): none. Covers-only pairs (^): FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PRIV-01/T-SET-09.
-- §22/Covers disagreements in total: 0 §22-only pairs, 9 Covers-only pairs (suffixes in the matrix).
+- §22-only pairs (~): none. Covers-only pairs (^): FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-LIST-04/T-LIST-13, FR-LIST-04/T-LIST-14, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-06/T-LIST-13, NFR-PERF-06/T-LIST-14, NFR-PRIV-01/T-SET-09.
+- §22/Covers disagreements in total: 0 §22-only pairs, 13 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria

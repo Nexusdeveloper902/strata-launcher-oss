@@ -295,6 +295,68 @@ class AppCatalogRepositoryTest {
         }
     }
 
+    /**
+     * T-LIST-13 (FB-009): a removal that arrives while a full pass is loading (the reconcile `onStart` asks for when home
+     * comes back from the uninstall dialog) is published within 1 s (NFR-PERF-06), not after the whole load; and the
+     * load, read before the removal, does not bring the app back.
+     */
+    @Test
+    fun tList13_removalDuringFullPassIsPublishedAtOnce() {
+        source.silentlySet(AppFixtures.APPS120)
+        val repo = repo()
+        repo.start()
+        repo.requestReconcile()
+        await(repo) { !it.fromSnapshot && it.entries.size == 120 }
+        val victim = AppFixtures.APPS120.first()
+        source.loadAllSnapshotsAtStart = true
+        source.loadDelayMs = 3_000
+        repo.requestReconcile()
+        // Let the full pass start and read the installed set (victim included).
+        Thread.sleep(200)
+        val started = System.nanoTime()
+        source.uninstall(victim.packageName)
+        val remaining = AppFixtures.APPS120.filterNot { it.packageName == victim.packageName }.map { it.key }
+        val gone = await(repo) { c -> c.entries.none { it.key == victim.key } }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertThat(gone.entries.map { it.key }).containsExactlyElementsIn(remaining)
+        assertThat(elapsedMs).isLessThan(1_000)
+        // After the full pass has committed, the victim is still gone.
+        runBlocking { withTimeout(10_000) { while (source.loadAllCalls < 2) delay(10) } }
+        Thread.sleep(3_300)
+        assertThat(
+            repo.catalog.value.entries
+                .map { it.key },
+        ).containsExactlyElementsIn(remaining)
+    }
+
+    /** T-LIST-14 (FB-009): a burst of 1 and of 20 removals is reconciled per package; nothing reloads the whole catalog. */
+    @Test
+    fun tList14_removalBurstIsIncremental() {
+        source.silentlySet(AppFixtures.APPS120)
+        val repo = repo()
+        repo.start()
+        repo.requestReconcile()
+        await(repo) { !it.fromSnapshot && it.entries.size == 120 }
+        val fullLoads = source.loadAllCalls
+        for (n in listOf(1, 20)) {
+            val victims =
+                repo.catalog.value.entries
+                    .map { it.packageName to it.key.userSerial }
+                    .distinct()
+                    .take(n)
+            val expected =
+                repo.catalog.value.entries
+                    .filterNot { (it.packageName to it.key.userSerial) in victims }
+                    .map { it.key }
+                    .toSet()
+            source.loadPackageCalls.clear()
+            victims.forEach { (pkg, serial) -> source.uninstall(pkg, serial) }
+            await(repo) { c -> c.entries.map { it.key }.toSet() == expected }
+            assertThat(source.loadPackageCalls.toSet()).containsExactlyElementsIn(victims.map { it.first }.toSet())
+        }
+        assertThat(source.loadAllCalls).isEqualTo(fullLoads)
+    }
+
     private companion object {
         const val DAY = 24L * 60 * 60 * 1000
     }

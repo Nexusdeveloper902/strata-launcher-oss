@@ -1,6 +1,7 @@
 package app.strata.launcher.feature.home.list
 
 import android.os.Trace
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -203,6 +204,8 @@ fun AppListScreen(
             currentOnJumpConsumed(j)
         }
         val jumpLabel = stringResource(R.string.list_jump_to_letter)
+        // Row removal motion (VISUAL_SPEC §10 motion.short, scaled by the theme; 0 with reduced motion: no animation).
+        val rowMotion = (ROW_REMOVAL_MS * Strata.theme.animation.themeDurationScale).toInt()
 
         if (list.appCount == 0 && list.hiddenCount > 0) {
             EmptyAllHidden(onOpenHiddenApps, Modifier.align(Alignment.Center))
@@ -237,17 +240,28 @@ fun AppListScreen(
                 key = { model.items[it].key },
                 contentType = { model.items[it]::class },
             ) { i ->
+                // FB-009: a removed app's row fades out and the rows below slide up, instead of vanishing at once.
+                val removal =
+                    if (rowMotion > 0) {
+                        Modifier.animateItem(
+                            fadeInSpec = null,
+                            fadeOutSpec = tween(rowMotion),
+                            placementSpec = tween(rowMotion),
+                        )
+                    } else {
+                        Modifier
+                    }
                 when (val item = model.items[i]) {
                     is ListItem.Header -> {
                         SectionHeader(item.label)
                     }
 
                     is ListItem.Row -> {
-                        ListRow(item.app, row, Modifier.fillMaxWidth(), focus = item.app.key == focusTarget)
+                        ListRow(item.app, row, removal.fillMaxWidth(), focus = item.app.key == focusTarget)
                     }
 
                     is ListItem.Pair -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(GUTTER)) {
+                        Row(removal, horizontalArrangement = Arrangement.spacedBy(GUTTER)) {
                             ListRow(item.start, row, Modifier.weight(1f), focus = item.start.key == focusTarget)
                             if (item.end != null) {
                                 ListRow(item.end, row, Modifier.weight(1f), focus = item.end.key == focusTarget)
@@ -582,6 +596,9 @@ private fun EmptyAllHidden(
 
 private const val SEARCH_FIELD_KEY = "search_field"
 private const val WORK_BAR_KEY = "work_bar"
+
+/** VISUAL_SPEC §10 `motion.short` (row collapse). */
+private const val ROW_REMOVAL_MS = 150
 private val INDEX_RESERVE = 48.dp
 private val INDEX_BOTTOM_GAP = 24.dp
 private val GUTTER = 24.dp

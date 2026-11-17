@@ -1,6 +1,10 @@
 package app.strata.launcher.catalog
 
+import android.content.Intent
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
@@ -14,15 +18,24 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import app.strata.launcher.CoverActivity
+import app.strata.launcher.DEVICE_TIMEOUT_MS
+import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
+import app.strata.launcher.resumedHomeActivity
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.concurrent.thread
 
 /**
  * Level I/M tests that install, disable and launch the "Zz Test" fixture APK. The fixture (package
@@ -70,6 +83,51 @@ class ListDeviceTest {
         waitForRow(present = false)
     }
 
+    /**
+     * T-LIST-13 / T-LIST-14 (FB-009, device half): an uninstall right after home came back to front (as when the
+     * uninstall confirmation closes; `onStart` asks for a full reconcile) removes the row within 1 s, and the main
+     * thread never stalls for more than [MAX_MAIN_STALL_MS] meanwhile.
+     */
+    @Test
+    fun tList13_removalRightAfterReturnIsPromptAndSmooth() {
+        assumeTrue(File(FIXTURE_APK).exists() || shell("ls $FIXTURE_APK").contains(FIXTURE_APK))
+        shell("pm install -r $FIXTURE_APK")
+        openList()
+        waitForRow(present = true, timeoutMs = DEVICE_TIMEOUT_MS)
+        lateinit var home: HomeActivity
+        compose.activityRule.scenario.onActivity { home = it }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.context.startActivity(
+            Intent()
+                .setClassName(instrumentation.context, CoverActivity::class.java.name)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { resumedHomeActivity() == null }
+        compose.bringHomeToFront(home, device)
+        val main = Handler(Looper.getMainLooper())
+        val maxStall = AtomicLong(0)
+        val watching = AtomicBoolean(true)
+        val watchdog =
+            thread(name = "fb009-watchdog") {
+                while (watching.get()) {
+                    val posted = SystemClock.uptimeMillis()
+                    val ran = CountDownLatch(1)
+                    main.post { ran.countDown() }
+                    ran.await(DEVICE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    maxStall.accumulateAndGet(SystemClock.uptimeMillis() - posted) { a, b -> maxOf(a, b) }
+                    SystemClock.sleep(WATCHDOG_PERIOD_MS)
+                }
+            }
+        try {
+            shell("pm uninstall $FIXTURE_PACKAGE")
+            waitForRow(present = false)
+        } finally {
+            watching.set(false)
+            watchdog.join()
+        }
+        assertThat(maxStall.get()).isLessThan(MAX_MAIN_STALL_MS)
+    }
+
     /** T-APPS-02: the fixture starts with sourceBounds equal to the row bounds (±2 px). */
     @Test
     fun tApps02_launchWithSourceBounds() {
@@ -107,5 +165,7 @@ class ListDeviceTest {
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
         const val FIXTURE_APK = "/data/local/tmp/strata-fixture-zz.apk"
+        const val MAX_MAIN_STALL_MS = 200L
+        const val WATCHDOG_PERIOD_MS = 16L
     }
 }

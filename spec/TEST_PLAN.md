@@ -72,6 +72,8 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-LIST-10 | Two columns | API 36 tablet landscape, setting default | Show the list. Traverse with TalkBack (UiAutomator a11y node order) | Two columns. Traversal covers all of section A before any B item | I + C | FR-LIST-07 |
 | T-LIST-11 | Two-column off | same, setting off | Show the list | One column | C | FR-LIST-07 |
 | T-LIST-12 | Sort by usage in letter (v1.x) | setting on; launch log B2 ×5, B1 ×2 within 30 days; B1 ×10 at 31 days | Render section B | B2 above B1 (the 31-day-old events are ignored) | U | FR-LIST-05 |
+| T-LIST-13 | Removal not blocked by a full pass (FB-009) | list open; full listing slowed to 3 s | Home returns to front (the `onStart` full reconcile starts), then the package is removed | Row gone ≤ 1 s, before the full pass ends. After the full pass commits, the app stays gone (a load read before the removal does not bring it back). The row fades out (`motion.short`, none with reduced motion) | R + C + I | FR-LIST-04, NFR-PERF-06 |
+| T-LIST-14 | Removal burst stays incremental and off main (FB-009) | list open, 120 apps; real catalog, Room and list pipeline | Remove 1 package, then 20 in a burst (`onPackageRemoved`) | Each burst is reconciled per package (no full reload). No LauncherApps call on the main thread. The rows leave the list. Device: no main-thread stall over 200 ms | R + C + I | FR-LIST-04, NFR-PERF-06 |
 
 ## 4. SEARCH
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |

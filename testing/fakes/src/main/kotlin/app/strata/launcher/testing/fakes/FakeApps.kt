@@ -40,21 +40,34 @@ class FakeAppCatalogSource(
     var loadAllCalls: Int = 0
         private set
 
+    /** Packages read with [loadPackage], in call order. */
+    val loadPackageCalls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+
+    /**
+     * When true, [loadAll] reads the installed set when it starts and returns it after [loadDelayMs], as the platform
+     * does (`getActivityList` lists, then labels are loaded): a change during the delay is not in that load.
+     */
+    var loadAllSnapshotsAtStart: Boolean = false
+
     private val events = MutableSharedFlow<PackageChange>(extraBufferCapacity = 64)
 
     override val changes: Flow<PackageChange> = events
 
     override suspend fun loadAll(): CatalogLoad {
         loadAllCalls++
+        val atStart = apps
         if (loadDelayMs > 0) delay(loadDelayMs)
-        val current = apps
+        val current = if (loadAllSnapshotsAtStart) atStart else apps
         return CatalogLoad(current, current.mapTo(HashSet()) { it.key.userSerial } + MAIN_SERIAL)
     }
 
     override suspend fun loadPackage(
         packageName: String,
         userSerial: Long,
-    ): List<AppEntry> = apps.filter { it.packageName == packageName && it.key.userSerial == userSerial }
+    ): List<AppEntry> {
+        loadPackageCalls += packageName
+        return apps.filter { it.packageName == packageName && it.key.userSerial == userSerial }
+    }
 
     /** Installs [entry] and fires `onPackageAdded`. */
     fun install(entry: AppEntry) {

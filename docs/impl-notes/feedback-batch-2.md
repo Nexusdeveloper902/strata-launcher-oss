@@ -53,3 +53,59 @@ the resume, after a pause/stop/restart/new-intent/resume cycle. The device test 
 (`switchNavMode`, restored in `finally`), turns "Home press opens search" on (reset in `@After`), puts
 `CoverActivity` in front, swipes up from the bottom edge and checks that the resumed HomeActivity is not in SEARCH and
 shows no IME.
+
+## 2. FB-009 "Uninstalling apps freezes the launcher"
+
+### Path traced
+Sheet → Uninstall → `HomeViewModel.uninstall` closes the sheet and calls `AppLauncher.requestUninstall`.
+`LauncherAppsAppLauncher` starts `ACTION_DELETE` (`package:` URI, `EXTRA_USER` for other profiles) from the
+application context, so the system confirmation appears over home. This is kept as ANDROID_PLATFORM §5 says (no
+`PackageInstaller.uninstall`; the system asks either way). After the confirmation, the system removes the package →
+`LauncherApps.Callback.onPackageRemoved` on the `strata-platform` thread → `AppCatalogRepository` (single writer, on
+`catalogDispatcher` = IO, parallelism 1) → per-package `Reconciler.packages` → publish, then Room writes and the
+override/favourite marks → `AssembledAppListSource` re-assembles on Default → the home and list UI.
+
+### Measured (Robolectric, real `DefaultAppGraph`, 300 apps, list open)
+A probe ran HomeActivity on the real graph: real catalog, Room, list pipeline and icon provider. `ShadowLauncherApps`
+recorded every LauncherApps call made on the main thread.
+- Removing 1 package: 2–7 ms of main-thread time in total. A burst of 20: 7–26 ms. **No** LauncherApps/UserManager
+  call on main. The catalog pass was already per package: no full rebuild, no `runBlocking`, and every DAO call is
+  `suspend` (Room's executor).
+- Leaving home and coming back (pause/stop/restart/resume): 5–10 ms on main.
+
+So no main-thread work explains a freeze. What does: `HomeActivity.onStart` asks for a **full** reconcile
+(ANDROID_PLATFORM §3.1, Verified, kept). The uninstall flow is exactly when that happens: the confirmation covers
+home, and confirming brings home back. The repository served requests strictly one batch at a time, and a batch that
+contained a full request swallowed the per-package ones. So the removal callback, arriving a moment later, waited
+for the whole `loadAll`: every launcher activity of every profile, with labels, which takes seconds on a phone with
+hundreds of apps. Meanwhile the uninstalled app's row stayed on screen. Tapping it fails, and the list looks stuck
+(NFR-PERF-06 wants ≤ 1 s). Shown by T-LIST-13: on `main` the row left after **2835 ms** (app level, 3 s simulated
+listing) and 2838 ms (repository level).
+
+Inferred, not measurable here: whether One UI's own uninstall progress UI adds time. ACTION_DELETE without a requested
+result is the system's background uninstall path in AOSP. Device check: `ListDeviceTest.tList13_…`.
+
+### Fix
+- `AppCatalogRepository`: per-package requests never wait for a full pass. In a batch they run first. While a full
+  pass's `loadAll` is running (it suspends on the source's I/O dispatcher, so the catalog dispatcher is free), new
+  per-package requests are served at once via `select`. When the load completes, the packages handled meanwhile keep
+  their per-package result, so a load read before the uninstall cannot bring the app back. A full request that
+  arrives during a load schedules one more full pass. One writer, as before.
+- `AppListScreen`: app rows use `animateItem` (fade-out and placement, `motion.short` 150 ms × the theme's factor;
+  none when animations are off), so a removed row fades and the rows below slide up instead of jumping.
+- Unchanged: `ACTION_DELETE` start (two cheap `UserManager` reads plus `startActivity` on main, as for every launch);
+  `HomeActivity.onStart` (fix-battery edits that file).
+
+### Tests
+| Test | Level | Before the fix (main) | After |
+|---|---|---|---|
+| T-LIST-13 `AppCatalogRepositoryTest.tList13_removalDuringFullPassIsPublishedAtOnce` | R | fails: 2838 ms > 1000 ms | passes; app stays gone after the full commit |
+| T-LIST-13 `UninstallBackgroundTest.tList13_removalAfterReturningFromTheDialogIsNotBlocked` | C (real graph) | fails: 2835 ms > 1000 ms | passes |
+| T-LIST-14 `AppCatalogRepositoryTest.tList14_removalBurstIsIncremental` | R | passes (guard: already per package) | passes |
+| T-LIST-14 `UninstallBackgroundTest.tList14_removalBurstStaysOffTheMainThread` | C (real graph) | passes (guard: no LauncherApps call on main) | passes |
+| T-LIST-13/14 `ListDeviceTest.tList13_removalRightAfterReturnIsPromptAndSmooth` | I (needs the Zz fixture APK) | not run here | compiles |
+
+The two T-LIST-14 tests are guards that record the measured facts above (incremental, nothing on main). They pass on
+`main` by design; the failing-first tests for this fix are the T-LIST-13 pair. StrictMode `penaltyDeath` was not used
+in Robolectric: on the JVM, file I/O does not go through BlockGuard, so it would detect nothing. The watchdog is the
+LauncherApps shadow that records main-thread calls, plus, on the device, a main-looper latency probe (≤ 200 ms).
