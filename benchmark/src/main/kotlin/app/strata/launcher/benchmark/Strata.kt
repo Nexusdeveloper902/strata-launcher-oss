@@ -149,7 +149,17 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
     var screens = 0
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()
-        if (wait(Until.hasObject(By.res(ONBOARDING_ROOT_TAG)), SHORT_WAIT_MS) != true) break
+        // Onboarding or home, whichever shows: not "no onboarding within 1.5 s". On a slow emulator onboarding came up
+        // later and covered home, and the journey then waited for a home that was not showing (run 44129238421).
+        val first =
+            pollFor(Strata.TIMEOUT_MS) {
+                when {
+                    hasObject(By.res(ONBOARDING_ROOT_TAG)) -> ONBOARDING_ROOT_TAG
+                    hasObject(By.res(Strata.ALL_APPS)) -> Strata.ALL_APPS
+                    else -> null
+                }
+            }
+        if (first != ONBOARDING_ROOT_TAG) break
         // The set-default step shows its buttons once the role check (off main) has finished. After the last click
         // ("Not now" / "Go to home") the layer is still leaving when the root is checked above, so the poll also ends
         // when the root is gone (CI run 43563634680, BackgroundCostTest: it waited 10 s for buttons of a closed layer).
@@ -233,7 +243,6 @@ private val ONBOARDING_ORDER_REST =
 private const val ONBOARDING_GONE = "<onboarding gone>"
 private const val MAX_ONBOARDING_SCREENS = 6
 private const val MAX_SCROLLS = 200
-private const val SHORT_WAIT_MS = 1_500L
 private const val POLL_MS = 100L
 
 /** From home: the pill menu -> Themes -> the theme library. */

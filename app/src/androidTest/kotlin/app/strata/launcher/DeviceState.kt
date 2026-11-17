@@ -22,6 +22,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
@@ -89,7 +90,13 @@ fun closeSystemErrorDialog(device: UiDevice): Boolean {
     val systemUi = focus.contains("Not Responding: com.android.systemui")
     val button = if (systemUi) wait ?: close else close ?: wait
     Log.w(TAG, "Answering system error dialog with " + (if (button === wait) "Wait" else "Close") + ": " + focus)
-    button?.click()
+    try {
+        button?.click()
+    } catch (e: StaleObjectException) {
+        // The dialog went away between the lookup and the click (CI run 44129245277, API 34, HomeSmokeTest): nothing
+        // is left to answer.
+        Log.w(TAG, "System error dialog closed before it was answered", e)
+    }
     return true
 }
 
