@@ -46,9 +46,9 @@ class IconCoverageTest {
             IconSource.OVERRIDE,
             IconSource.PACK,
             IconSource.PACK,
-            IconSource.GLYPH,
-            IconSource.GLYPH,
             IconSource.PLATFORM_MONOCHROME,
+            IconSource.GLYPH,
+            IconSource.GLYPH,
             IconSource.DESATURATED,
             IconSource.DESATURATED,
             IconSource.DESATURATED,
@@ -90,19 +90,18 @@ class IconCoverageTest {
         }
         compose.waitForIdle()
         assertThat(vm.state.value.loading).isFalse()
-        // Counts 2/2/2/1/3 per source.
+        // Counts 2/2/1/2/3 per source, listed in precedence order (D-020): override, pack, monochrome, glyph, desaturated.
         val expected =
-            mapOf(
+            linkedMapOf(
                 IconSource.OVERRIDE to 2,
                 IconSource.PACK to 2,
-                IconSource.GLYPH to 2,
                 IconSource.PLATFORM_MONOCHROME to 1,
+                IconSource.GLYPH to 2,
                 IconSource.DESATURATED to 3,
             )
-        assertThat(
-            vm.state.value.counts
-                .toMap(),
-        ).isEqualTo(expected)
+        assertThat(vm.state.value.counts)
+            .containsExactlyElementsIn(expected.toList())
+            .inOrder()
         for ((source, n) in expected) {
             tag(SettingsPageTags.count(source)).assertExists()
             assertThat(textOf(SettingsPageTags.count(source))).endsWith(": $n")

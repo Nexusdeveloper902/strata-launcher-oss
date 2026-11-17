@@ -132,6 +132,9 @@ class FakeTimeTicks : TimeTicks {
 
     override val ticks: Flow<Unit> = events.onStart { emit(Unit) }
 
+    /** Collectors of [ticks] right now: the real source holds a broadcast receiver for each one. */
+    val collectors: Int get() = events.subscriptionCount.value
+
     fun tick() {
         events.tryEmit(Unit)
     }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Discovered icon packs and their parsed `appfilter.xml`, cached in memory per (pack, versionCode) (ARCHITECTURE §9).
@@ -38,8 +39,20 @@ class IconPackRegistry(
     /** Bumped on every change that can change a rendered icon. */
     val revision: StateFlow<Long> = revisionFlow.asStateFlow()
 
+    /** A [refresh] is scheduled and has not started yet. */
+    private val refreshQueued = AtomicBoolean(false)
+
+    /**
+     * Schedules a discovery. Calls while one is still waiting to start join it: every package broadcast asks for one
+     * (`PACKAGE_CHANGED` comes in bursts, and often), and a single pass after the burst sees the same packages.
+     */
     fun refresh() {
-        scope.launch(worker) { refreshNow() }
+        if (!refreshQueued.compareAndSet(false, true)) return
+        scope.launch(worker) {
+            // Cleared before the pass: a change during it schedules one more, so nothing is missed.
+            refreshQueued.set(false)
+            refreshNow()
+        }
     }
 
     /** Discovers and parses on the caller's thread (the worker, or a test). */
