@@ -10,6 +10,7 @@ import app.strata.launcher.diagnostics.CrashLoggingHandler
 import app.strata.launcher.diagnostics.StrictModeConfig
 import app.strata.launcher.diagnostics.StrictModeSetup
 import app.strata.launcher.diagnostics.StrictPenalty
+import app.strata.launcher.home.HomeWindowMemory
 import app.strata.launcher.startup.AndroidTracer
 
 class StrataApplication : Application() {
@@ -28,6 +29,8 @@ class StrataApplication : Application() {
                 }
             }
             graph = AndroidTracer.section(TraceSections.GRAPH_CREATE) { DefaultAppGraph(this) }
+            // Home's remembered wallpaper state, read off main now so home's onCreate never touches the disk.
+            HomeWindowMemory.start(this)
             CrashLoggingHandler.install { graph.logger }
         }
     }

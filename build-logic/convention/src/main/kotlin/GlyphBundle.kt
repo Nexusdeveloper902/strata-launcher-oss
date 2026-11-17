@@ -7,6 +7,7 @@ import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -108,32 +109,92 @@ object GlyphBundleLogic {
             appendLine("}")
         }
 
+    /** One glyph set: an index file and the directory of its `glyph_<id>.xml` drawables. */
+    data class GlyphSet(
+        val name: String,
+        val index: File,
+        val drawables: File,
+    )
+
+    /** Result of [check]: the bundle version, the referenced ids, and the merged index that is packaged. */
+    data class Checked(
+        val version: String,
+        val ids: List<String>,
+        val mergedIndex: ByteArray,
+    )
+
+    /**
+     * The packaged index: the public index bytes unchanged, followed by the private overlay's when there is one.
+     * Without an overlay the result is byte-identical to the public index, so the bundle version is unchanged.
+     */
+    fun mergeIndex(
+        public: ByteArray,
+        overlay: ByteArray?,
+    ): ByteArray {
+        if (overlay == null) return public
+        val sep = if (public.isEmpty() || public.last() == '\n'.code.toByte()) "" else "\n"
+        return public + "$sep# --- private overlay ---\n".toByteArray() + overlay
+    }
+
     /** Every check of the bundle; returns the version and the referenced ids, or throws with all problems. */
     fun check(
         indexFile: File,
         drawableDir: File,
-    ): Pair<String, List<String>> {
-        val indexBytes = indexFile.readBytes()
-        val (entries, problems) = parse(String(indexBytes, Charsets.UTF_8))
-        val all = problems.toMutableList()
-        val ids = entries.map { it.glyphId }.distinct()
+    ): Pair<String, List<String>> = check(GlyphSet("public", indexFile, drawableDir), null).let { it.version to it.ids }
+
+    /**
+     * Every check of the public set plus an optional private overlay (CONTRIBUTING "Public mirror and CI"): each
+     * index parses strictly, no package appears in both, every id has a single-colour vector in either set, and no
+     * overlay drawable redefines a public glyph id. Throws with all problems.
+     */
+    fun check(
+        public: GlyphSet,
+        overlay: GlyphSet?,
+    ): Checked {
+        val sets = listOfNotNull(public, overlay)
+        val all = mutableListOf<String>()
+        val bytes = sets.associateWith { it.index.readBytes() }
+        val owner = hashMapOf<String, String>()
+        val ids = mutableListOf<String>()
+        for (set in sets) {
+            val (entries, problems) = parse(String(bytes.getValue(set), Charsets.UTF_8))
+            all += problems.map { if (overlay == null) it else "${set.name} index: $it" }
+            for (e in entries) {
+                val first = owner.putIfAbsent(e.packageName, set.name)
+                if (first != null) all += "duplicate package '${e.packageName}' in the $first and ${set.name} indexes"
+                if (e.glyphId !in ids) ids += e.glyphId
+            }
+        }
+        val glyphFiles = sets.map { set -> set.drawables.listFiles { f -> f.isFile && f.name.startsWith("glyph_") } }
+        if (overlay != null) {
+            val publicNames = glyphFiles[0].orEmpty().map { it.name }.toSet()
+            for (f in glyphFiles[1].orEmpty().filter { it.name in publicNames }.sortedBy { it.name }) {
+                all += "${f.name}: the ${overlay.name} set must not redefine a ${public.name} glyph"
+            }
+        }
         val glyphs = linkedMapOf<String, ByteArray>()
         for (id in ids) {
-            val file = File(drawableDir, "glyph_$id.xml")
-            if (!file.isFile) {
-                all += "glyph '$id': missing ${file.name} in ${drawableDir.name}/"
+            val file = sets.map { File(it.drawables, "glyph_$id.xml") }.firstOrNull { it.isFile }
+            if (file == null) {
+                all +=
+                    "glyph '$id': missing glyph_$id.xml in " +
+                    sets.joinToString(" or ") { "${it.name} ${it.drawables.name}/" }
                 continue
             }
-            val bytes = file.readBytes()
-            all += drawableProblems(file.name, String(bytes, Charsets.UTF_8))
-            glyphs[id] = bytes
+            val b = file.readBytes()
+            all += drawableProblems(file.name, String(b, Charsets.UTF_8))
+            glyphs[id] = b
         }
         if (all.isNotEmpty()) throw GradleException("Glyph bundle (T-THEME-55):\n" + all.joinToString("\n"))
-        return version(indexBytes, glyphs) to ids
+        val merged = mergeIndex(bytes.getValue(public), overlay?.let { bytes.getValue(it) })
+        return Checked(version(merged, glyphs), ids, merged)
     }
 }
 
-/** Generates `GlyphBundle.kt` for `:platform:icons` after [GlyphBundleLogic.check]. */
+/**
+ * Generates `GlyphBundle.kt` for `:platform:icons` after [GlyphBundleLogic.check], and the packaged
+ * `res/raw/glyph_index.txt` (the public index merged with the optional private overlay) in [resOutput].
+ */
 @CacheableTask
 abstract class GenerateGlyphBundle : DefaultTask() {
     @get:InputFile
@@ -144,18 +205,47 @@ abstract class GenerateGlyphBundle : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val drawables: DirectoryProperty
 
+    /** Private overlay index (absent on the public mirror). */
+    @get:InputFile
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val overlayIndex: RegularFileProperty
+
+    /** Private overlay drawables (absent on the public mirror). */
+    @get:InputDirectory
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val overlayDrawables: DirectoryProperty
+
     @get:Input
     abstract val packageName: Property<String>
 
     @get:OutputDirectory
     abstract val output: DirectoryProperty
 
+    @get:OutputDirectory
+    abstract val resOutput: DirectoryProperty
+
     @TaskAction
     fun generate() {
-        val (version, ids) = GlyphBundleLogic.check(index.get().asFile, drawables.get().asFile)
+        val public = GlyphBundleLogic.GlyphSet("public", index.get().asFile, drawables.get().asFile)
+        val overlay =
+            if (overlayIndex.isPresent) {
+                GlyphBundleLogic.GlyphSet(
+                    "private",
+                    overlayIndex.get().asFile,
+                    overlayDrawables.orNull?.asFile ?: File(overlayIndex.get().asFile.parentFile, "missing"),
+                )
+            } else {
+                null
+            }
+        val checked = GlyphBundleLogic.check(public, overlay)
         val root = output.get().asFile
         root.deleteRecursively()
         val dir = File(root, packageName.get().replace('.', '/')).apply { mkdirs() }
-        File(dir, "GlyphBundle.kt").writeText(GlyphBundleLogic.source(packageName.get(), version, ids))
+        File(dir, "GlyphBundle.kt").writeText(GlyphBundleLogic.source(packageName.get(), checked.version, checked.ids))
+        val res = resOutput.get().asFile
+        res.deleteRecursively()
+        File(res, "raw").apply { mkdirs() }.resolve("glyph_index.txt").writeBytes(checked.mergedIndex)
     }
 }

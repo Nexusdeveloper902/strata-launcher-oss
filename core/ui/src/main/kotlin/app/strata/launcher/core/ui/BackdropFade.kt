@@ -73,6 +73,12 @@ class BackdropFade internal constructor(initial: Backdrop) {
 
     internal val target: Backdrop get() = to
 
+    /**
+     * No cross-fade is running: the target backdrop is what is drawn. Snapshot state, so a caller can wait for it
+     * (`snapshotFlow { fade.settled }`); it follows the real animation, the system animator scale included.
+     */
+    val settled: Boolean get() = progress >= 1f
+
     /** Starts a fade from what is drawn now ([fade]) or jumps to [target]; runs before the frame is drawn. */
     internal fun retarget(
         target: Backdrop,
