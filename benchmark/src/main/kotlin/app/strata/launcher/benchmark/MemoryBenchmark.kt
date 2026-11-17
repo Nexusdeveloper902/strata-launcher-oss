@@ -34,7 +34,7 @@ class MemoryBenchmark {
     /** T-PERF-07: idle home after scrolling the whole list once; PSS ≤ 150 MB. */
     @Test
     fun tPerf07_pssAfterFullScroll() {
-        device.findOrFail(Strata.ALL_APPS).click()
+        device.clickOrFail(Strata.ALL_APPS)
         device.findOrFail(Strata.LIST)
         device.scrollListToEnd()
         device.pressBack()
@@ -66,7 +66,7 @@ class MemoryBenchmark {
     }
 
     private fun searchCycle() {
-        device.findOrFail(Strata.PILL).click()
+        device.clickOrFail(Strata.PILL)
         device.findOrFail(Strata.SEARCH_FIELD)
         // Back hides the IME and, with an empty query, closes search (INTERACTION_SPEC §5); allow both orders.
         var tries = 0

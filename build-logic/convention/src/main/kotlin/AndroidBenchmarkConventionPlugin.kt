@@ -30,6 +30,14 @@ class AndroidBenchmarkConventionPlugin : Plugin<Project> {
                     apiLevel = 34
                     systemImageSource = "google"
                 }
+                // T-REL-01 monkey (nightly): an ATD image, without the GMS and Google apps that kept the Google APIs
+                // image at load 20 on 2 cores, where a starting window missed the 5 s input timeout (run 43994307244).
+                // The monkey stays inside the target package and needs no keyboard.
+                testOptions.managedDevices.localDevices.create("api34atd") {
+                    device = "Pixel 6"
+                    apiLevel = 34
+                    systemImageSource = "aosp-atd"
+                }
                 buildTypes {
                     // Release-like build of :app (see its `benchmark` build type); this one signs with debug keys.
                     create("benchmark") {

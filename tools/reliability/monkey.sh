@@ -33,13 +33,17 @@ mkdir -p "$out"
 echo "T-REL-01: $pkg, $events events, throttle $throttle ms, seed $seed -> $out/"
 adb logcat -c
 # --pct-syskeys 0: no call/end-call/volume keys (end-call can turn the screen off). Back and Menu stay (major nav).
-adb shell monkey -p "$pkg" -s "$seed" --throttle "$throttle" --pct-syskeys 0 --monitor-native-crashes -v "$events" \
-  > "$out/monkey.txt" 2>&1
+# --ignore-crashes/--ignore-timeouts: keep going past another app's crash or ANR (still reported); only $pkg's fail.
+adb shell monkey -p "$pkg" -s "$seed" --throttle "$throttle" --pct-syskeys 0 --ignore-crashes --ignore-timeouts \
+  --monitor-native-crashes -v "$events" > "$out/monkey.txt" 2>&1
 adb logcat -d -b crash > "$out/logcat-crash.txt" 2>&1 || true
 adb logcat -d -s AndroidRuntime:E ActivityManager:E > "$out/logcat-errors.txt" 2>&1 || true
 
-crashes=$(grep -c -E "// CRASH:|// NATIVE CRASH" "$out/monkey.txt" || true)
-anrs=$(grep -c "// NOT RESPONDING:" "$out/monkey.txt" || true)
+# Reports for $pkg's own processes ($pkg, $pkg:*) fail the run; the same rule as MonkeyVerdict in the benchmark module.
+crashes=$(grep -c -E "// (NATIVE )?CRASH:? ${pkg}[ :]" "$out/monkey.txt" || true)
+anrs=$(grep -c -E "// NOT RESPONDING: ${pkg}[ :]" "$out/monkey.txt" || true)
+others=$(grep -E "// (NATIVE )?CRASH|// NOT RESPONDING" "$out/monkey.txt" | grep -v -E " ${pkg}[ :]" || true)
+[ -n "$others" ] && printf 'other processes (not counted):\n%s\n' "$others"
 fatal=$(grep -c "Process: $pkg, PID" "$out/logcat-crash.txt" || true)
 finished=$(grep -c "// Monkey finished" "$out/monkey.txt" || true)
 echo "finished=$finished crashes=$crashes anrs=$anrs fatal-in-logcat=$fatal (seed $seed)"

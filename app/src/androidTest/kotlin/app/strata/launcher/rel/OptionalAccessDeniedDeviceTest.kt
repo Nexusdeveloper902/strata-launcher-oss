@@ -2,7 +2,6 @@ package app.strata.launcher.rel
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.os.Build
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -26,7 +25,6 @@ import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -87,17 +85,9 @@ class OptionalAccessDeniedDeviceTest {
             ).isFalse()
         val contactsGranted =
             context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-        // Below API 33 a READ_CONTACTS grant cannot be taken back from inside the suite: `pm revoke` kills every process
-        // of Strata's UID, and the instrumentation runs in that process. OptionalAccessDeviceTest (tSearch13) grants it,
-        // and it only revokes on 33+ (revokeSelfPermissionOnKill), so on 26-32 a later class can find it granted (CI
-        // run 43563634680, API 26). There the denied-contacts precondition is shown as skipped, not passed; it is
-        // asserted on API 33+ (GMD 34/36) and in the manual first-run pass (RELEASE_GATE §4.1).
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            assumeFalse(
-                "READ_CONTACTS left granted by an earlier class; cannot revoke in-process below API 33",
-                contactsGranted,
-            )
-        }
+        // The Orchestrator's clearPackageData (`pm clear` before each test) resets runtime permissions, so a grant left by
+        // OptionalAccessDeviceTest (tSearch13; it cannot revoke in-process below API 33) no longer reaches this class
+        // (CI run 43563634680, API 26, before clearPackageData). Asserted on every API level.
         assertWithMessage("READ_CONTACTS must not be granted").that(contactsGranted).isFalse()
     }
 

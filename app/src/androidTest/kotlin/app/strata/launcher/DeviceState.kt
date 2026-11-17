@@ -1,8 +1,12 @@
 package app.strata.launcher
 
 import android.app.Activity
+import android.app.role.RoleManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -11,6 +15,8 @@ import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
@@ -165,8 +171,11 @@ private const val MAX_ONBOARDING_SCREENS = 6
 
 /**
  * Device state for the home device tests, set before the activity starts and restored afterwards:
- * - Strata is the default home (best effort: `cmd package set-home-activity` is absent on some API levels), so
- *   the system launcher does not compete as HOME while ours runs.
+ * - Strata is the default home, so the system launcher does not compete as HOME while ours runs. Verified, not assumed:
+ *   on a stalled emulator `set-home-activity` can fail ("Failed to set default home" after 15 s, nightly run
+ *   43842913826, API 33), and the test then ran against the system launcher and left a stuck Recents transition
+ *   behind for the next test. The rule retries until the platform reports Strata as home, else fails as a
+ *   precondition (see docs/ci/RELIABILITY.md).
  * - System error dialogs are suppressed (`hide_error_dialogs`, as on ATD images): an unresponsive background
  *   app is then killed instead of a dialog taking input focus. Any dialog already showing is closed.
  * - Window, transition and animator scales are 0 (the usual instrumented-test setting). On the software-rendered
@@ -188,7 +197,7 @@ class DeviceStateRule : TestRule {
                         .find(shell("cmd shortcut get-default-launcher"))
                         ?.groupValues
                         ?.get(1)
-                Log.i(TAG, "set-home-activity: " + shell("cmd package set-home-activity $component"))
+                makeStrataDefaultHome(component)
                 val previousHideErrorDialogs = shell("settings get global hide_error_dialogs")
                 shell("settings put global hide_error_dialogs 1")
                 val previousScales = animationScales.associateWith { shell("settings get global $it") }
@@ -235,20 +244,40 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     val overlay =
         NAV_OVERLAYS[wanted] ?: throw IllegalArgumentException("strata.navMode=$wanted: use ${NAV_OVERLAYS.keys}")
     val before = enabledNavOverlays()
+    val settingBefore = navModeSetting()
     if (before == listOf(overlay)) return null
     setNavOverlay(overlay)
     val after = enabledNavOverlays()
     check(overlay in after) { "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)" }
+    awaitNavModeSetting(NAV_MODE_SETTING.getValue(wanted), "strata.navMode=$wanted")
     return {
         if (before.isEmpty()) {
             // No navigation overlay was enabled: the device default. Turn ours off again.
             Log.i(TAG, "nav mode restore: " + shell("cmd overlay disable $overlay"))
-            android.os.SystemClock.sleep(NAV_SETTLE_MS)
         } else {
             before.forEach { setNavOverlay(it) }
         }
         val restored = enabledNavOverlays()
         if (restored != before) Log.e(TAG, "nav mode restore: expected $before, found $restored")
+        if (!pollUntil(DEVICE_TIMEOUT_MS) { navModeSetting() == settingBefore }) {
+            Log.e(TAG, "nav mode restore: navigation_mode is ${navModeSetting()}, was $settingBefore")
+        }
+    }
+}
+
+private fun navModeSetting(): String = shell("settings get secure navigation_mode").trim()
+
+/**
+ * Waits until System UI reports [expected] as `navigation_mode`. Replaces a fixed 3 s sleep, which on a loaded API 29
+ * emulator ended before System UI had re-laid out its bar and gesture handler (nightly runs 43699451179 and
+ * 43842913826, searchClosesWithBackFromTheIndexEdge).
+ */
+private fun awaitNavModeSetting(
+    expected: String,
+    what: String,
+) {
+    check(pollUntil(DEVICE_TIMEOUT_MS) { navModeSetting() == expected }) {
+        "$what: navigation_mode is ${navModeSetting()} after $DEVICE_TIMEOUT_MS ms, expected $expected"
     }
 }
 
@@ -262,9 +291,8 @@ private fun enabledNavOverlays(): List<String> =
         .filter { it.startsWith(NAV_OVERLAY_PREFIX) }
 
 private fun setNavOverlay(overlay: String) {
+    // System UI re-lays out its navigation bar and gesture insets asynchronously; callers wait for navigation_mode.
     Log.i(TAG, "nav mode: " + shell("cmd overlay enable-exclusive --category $overlay"))
-    // System UI re-lays out its navigation bar and gesture insets asynchronously.
-    android.os.SystemClock.sleep(NAV_SETTLE_MS)
 }
 
 private const val NAV_OVERLAY_PREFIX = "com.android.internal.systemui.navbar."
@@ -275,7 +303,108 @@ private val NAV_OVERLAYS =
         "threebutton" to "com.android.internal.systemui.navbar.threebutton",
     )
 
-private const val NAV_SETTLE_MS = 3_000L
+/** Whether the platform reports Strata (the target package) as the default home: the HOME role on API 29+, else `MAIN/HOME`. */
+fun strataIsDefaultHome(): Boolean {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true
+    } else {
+        context.packageManager
+            .resolveActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+                PackageManager.MATCH_DEFAULT_ONLY,
+            )?.activityInfo
+            ?.packageName == context.packageName
+    }
+}
+
+/**
+ * Makes [component] the default home and waits until the platform says so. Re-issues the command while the system is
+ * stalled (a failed `set-home-activity` answers "Error: …"); fails as a precondition after [SET_HOME_TIMEOUT_MS].
+ */
+private fun makeStrataDefaultHome(component: String) {
+    val deadline = SystemClock.uptimeMillis() + SET_HOME_TIMEOUT_MS
+    var answer: String
+    do {
+        answer = shell("cmd package set-home-activity $component")
+        Log.i(TAG, "set-home-activity: $answer")
+        if (pollUntil(SET_HOME_RETRY_MS) { strataIsDefaultHome() }) return
+    } while (SystemClock.uptimeMillis() < deadline)
+    throw AssertionError(
+        "Precondition: Strata is not the default home after $SET_HOME_TIMEOUT_MS ms (last answer: '$answer'). " +
+            "The emulator is stalled or the role is blocked; see docs/ci/RELIABILITY.md. ${focusReport()}",
+    )
+}
+
+/** Polls [condition] off the main thread every [POLL_MS] until it holds or [timeoutMillis] pass; returns the last result. */
+fun pollUntil(
+    timeoutMillis: Long,
+    condition: () -> Boolean,
+): Boolean {
+    val deadline = SystemClock.uptimeMillis() + timeoutMillis
+    while (SystemClock.uptimeMillis() < deadline) {
+        if (condition()) return true
+        SystemClock.sleep(POLL_MS)
+    }
+    return condition()
+}
+
+private const val SET_HOME_TIMEOUT_MS = 2 * DEVICE_TIMEOUT_MS
+private const val SET_HOME_RETRY_MS = 5_000L
+private const val POLL_MS = 100L
+
+/**
+ * Opens Recents and comes back to the rule's own HomeActivity [owned]. Recents is waited for before anything else is
+ * pressed: a Back sent before the Recents transition has started races it (nightly run 43599797441, API 31, tHome07:
+ * Back 40 ms after the Recents key, then Recents opened over the paused activity and its transition never ended, so the
+ * rule's `close()` waited 45 s for DESTROYED and the next test's window never got focus). The return is an explicit
+ * start of the rule's task ([bringHomeToFront]), which also ends the Recents transition.
+ */
+fun ComposeTestRule.visitRecentsAndReturn(
+    owned: app.strata.launcher.home.HomeActivity,
+    device: UiDevice,
+) {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    fun ownedFocused(): Boolean {
+        var focused = false
+        instrumentation.runOnMainSync { focused = owned.window.decorView.hasWindowFocus() }
+        return focused
+    }
+    device.pressRecentApps()
+    try {
+        waitUntil(DEVICE_TIMEOUT_MS) { !ownedFocused() }
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError("Recents did not take focus from home. ${focusReport()}", e)
+    }
+    bringHomeToFront(owned, device)
+}
+
+/**
+ * The navigation mode that `settings get secure navigation_mode` reports once System UI has applied an overlay
+ * (System UI writes it after re-reading the overlaid config): 0 three-button, 2 gestural.
+ */
+private val NAV_MODE_SETTING = mapOf("gestural" to "2", "threebutton" to "0")
+
+/**
+ * Whether [activity]'s window insets match gesture navigation ([gestural]) or not: with gestures the left and right
+ * system-gesture insets (the Back edges) are non-zero, with three buttons they are zero. This is what the app sees, so
+ * it also covers the configuration change the overlay causes (the activity is recreated on API 29).
+ */
+fun windowMatchesNavMode(
+    activity: Activity,
+    gestural: Boolean,
+): Boolean {
+    var matches = false
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        val insets = ViewCompat.getRootWindowInsets(activity.window.decorView)
+        if (insets != null) {
+            val edges = insets.getInsets(WindowInsetsCompat.Type.systemGestures())
+            matches = (edges.left > 0 && edges.right > 0) == gestural
+        }
+    }
+    return matches
+}
 
 private val animationScales = listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
 
