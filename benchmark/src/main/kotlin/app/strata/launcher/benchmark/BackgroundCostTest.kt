@@ -4,8 +4,10 @@ import android.os.Process
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,8 +28,8 @@ class BackgroundCostTest {
 
     @Test
     fun tPerf09_noJobsOrAlarms() {
-        device.executeShellCommand("am force-stop ${Strata.TARGET}")
-        device.executeShellCommand(Strata.HOME_START_COMMAND)
+        device.executeShellCommand("am force-stop --user $userId ${Strata.TARGET}")
+        device.executeShellCommand(homeStartCommand())
         device.passOnboardingAndWaitForHome()
         device.findOrFail(Strata.ALL_APPS).click()
         device.findOrFail(Strata.LIST)
@@ -48,68 +50,131 @@ class BackgroundCostTest {
     /** The numeric user this test runs as (shell commands take it explicitly, never `current`). */
     private val userId = Process.myUid() / PER_USER_RANGE
 
-    /** Home in front, onboarding passed, start-up work (icon fades, deferred housekeeping) settled. */
-    private fun idleHome() {
+    private fun homeStartCommand() =
+        "am start -W --user $userId -a android.intent.action.MAIN -c android.intent.category.HOME " +
+            "-n ${Strata.TARGET}/${Strata.HOME_ACTIVITY}"
+
+    /** Home in front, onboarding passed, start-up work (icon fades, deferred housekeeping) finished. */
+    private fun idleHome(): String {
         device.executeShellCommand("am force-stop --user $userId ${Strata.TARGET}")
-        device.executeShellCommand(
-            "am start -W --user $userId -a android.intent.action.MAIN -c android.intent.category.HOME " +
-                "-n ${Strata.TARGET}/${Strata.HOME_ACTIVITY}",
-        )
+        device.executeShellCommand(homeStartCommand())
         device.passOnboardingAndWaitForHome()
         device.waitForIdle()
-        SystemClock.sleep(SETTLE_MS)
+        val pid = pid()
+        awaitCpuQuiet(pid)
+        return pid
     }
 
-    private fun framesRendered(): Int? = framesOf(device.executeShellCommand("dumpsys gfxinfo ${Strata.TARGET}"))
-
-    private fun cpuTicks(): Long? {
-        val pid =
-            device
-                .executeShellCommand("pidof ${Strata.TARGET}")
-                .trim()
-                .substringBefore(' ')
-        if (pid.isEmpty()) return null
-        return cpuTicksOf(device.executeShellCommand("cat /proc/$pid/stat"))
+    /** Strata's one process; fails when there is none or more than one (the CPU reading would mean nothing). */
+    private fun pid(): String {
+        val pids = pidsOf(device.executeShellCommand("pidof ${Strata.TARGET}"))
+        assertEquals("T-PERF-09: expected exactly one ${Strata.TARGET} process, found $pids", 1, pids.size)
+        return pids.single()
     }
 
-    /** T-PERF-09: home at rest for [IDLE_MS] draws at most a clock tick's worth of frames and uses little CPU. */
+    private fun cpuTicks(pid: String): Long {
+        val ticks = cpuTicksOf(device.executeShellCommand("cat /proc/$pid/stat"))
+        assertNotNull("T-PERF-09: no CPU time readable for pid $pid", ticks)
+        return ticks!!
+    }
+
+    /**
+     * Waits until start-up work is over: the process's CPU time grows by at most [QUIET_TICKS] in each of
+     * [QUIET_SAMPLES] consecutive [QUIET_SAMPLE_MS] samples, or [QUIET_TIMEOUT_MS] passed (then the measurement
+     * itself reports whatever is still running).
+     */
+    private fun awaitCpuQuiet(pid: String) {
+        val deadline = SystemClock.uptimeMillis() + QUIET_TIMEOUT_MS
+        var last = cpuTicks(pid)
+        var quiet = 0
+        while (quiet < QUIET_SAMPLES && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(QUIET_SAMPLE_MS)
+            val now = cpuTicks(pid)
+            quiet = if (now - last <= QUIET_TICKS) quiet + 1 else 0
+            last = now
+        }
+    }
+
+    private fun framesRendered(): Int {
+        val frames = framesOf(device.executeShellCommand("dumpsys gfxinfo ${Strata.TARGET}"))
+        assertNotNull("T-PERF-09: gfxinfo had no frame count", frames)
+        return frames!!
+    }
+
+    private fun assertHomeResumed(whenText: String) {
+        val dump = device.executeShellCommand("dumpsys activity activities")
+        assertTrue(
+            "T-PERF-09: home was not the resumed activity $whenText",
+            resumedIs(dump, "${Strata.TARGET}/${Strata.HOME_ACTIVITY}"),
+        )
+    }
+
+    /** CPU ticks used by [pid] while [block] runs; the process must be the same one afterwards. */
+    private fun cpuDuring(
+        pid: String,
+        block: () -> Unit,
+    ): Long {
+        val before = cpuTicks(pid)
+        block()
+        assertEquals("T-PERF-09: Strata's process changed during the measurement", pid, pid())
+        val used = cpuTicks(pid) - before
+        assertTrue("T-PERF-09: negative CPU time ($used)", used >= 0)
+        return used
+    }
+
+    /**
+     * T-PERF-09: home at rest for [IDLE_MS] draws at most a clock tick's worth of frames and uses little CPU. The
+     * positive control (a list fling afterwards draws frames) shows the frame counter works on this device.
+     */
     @Test
     fun tPerf09_idleHomeDrawsNoFrames() {
-        idleHome()
+        val pid = idleHome()
+        assertHomeResumed("before the idle window")
         device.executeShellCommand("dumpsys gfxinfo ${Strata.TARGET} reset")
-        val cpuBefore = cpuTicks()
-        SystemClock.sleep(IDLE_MS)
+        val cpu = cpuDuring(pid) { SystemClock.sleep(IDLE_MS) }
         val frames = framesRendered()
-        val cpu = cpuTicks()?.let { after -> cpuBefore?.let { after - it } }
+        assertHomeResumed("after the idle window")
         BudgetGate.log("T-PERF-09 idle home ${IDLE_MS / 1000} s: frames=$frames cpuTicks=$cpu")
-        assertTrue("T-PERF-09: gfxinfo had no frame count", frames != null)
-        assertTrue("T-PERF-09: idle home drew $frames frames in ${IDLE_MS / 1000} s", frames!! <= MAX_IDLE_FRAMES)
-        if (cpu != null) assertTrue("T-PERF-09: idle home used $cpu CPU ticks", cpu <= MAX_IDLE_CPU_TICKS)
+        assertTrue("T-PERF-09: idle home drew $frames frames in ${IDLE_MS / 1000} s", frames <= MAX_IDLE_FRAMES)
+        assertTrue("T-PERF-09: idle home used $cpu CPU ticks", cpu <= MAX_IDLE_CPU_TICKS)
+
+        // Positive control: real motion is counted.
+        device.executeShellCommand("dumpsys gfxinfo ${Strata.TARGET} reset")
+        device.findOrFail(Strata.ALL_APPS).click()
+        device.findOrFail(Strata.LIST).fling(Direction.DOWN)
+        device.waitForIdle()
+        val moved = framesRendered()
+        BudgetGate.log("T-PERF-09 control: frames=$moved after opening and flinging the list")
+        assertTrue("T-PERF-09: the control drew no frame, so the idle count proves nothing", moved > 0)
+        device.pressBack()
     }
 
     /** T-PERF-09: a minute with the screen off costs Strata (process alive, home stopped) almost no CPU time. */
     @Test
     fun tPerf09_screenOffMinuteUsesNoCpu() {
-        idleHome()
-        val before = cpuTicks()
-        try {
-            device.executeShellCommand("input keyevent KEYCODE_SLEEP")
-            SystemClock.sleep(SCREEN_OFF_MS)
-        } finally {
-            // Hand the device back as it was: screen on, keyguard (if any) dismissed.
-            device.executeShellCommand("input keyevent KEYCODE_WAKEUP")
-            device.executeShellCommand("wm dismiss-keyguard")
-        }
-        val after = cpuTicks()
-        val cpu = if (before != null && after != null) after - before else null
+        val pid = idleHome()
+        assertHomeResumed("before the screen went off")
+        val cpu =
+            cpuDuring(pid) {
+                try {
+                    device.executeShellCommand("input keyevent KEYCODE_SLEEP")
+                    SystemClock.sleep(SCREEN_OFF_MS)
+                } finally {
+                    // Hand the device back as it was: screen on, keyguard (if any) dismissed.
+                    device.executeShellCommand("input keyevent KEYCODE_WAKEUP")
+                    device.executeShellCommand("wm dismiss-keyguard")
+                }
+            }
         BudgetGate.log("T-PERF-09 screen off ${SCREEN_OFF_MS / 1000} s: cpuTicks=$cpu")
-        assertTrue("T-PERF-09: Strata's process was not found", cpu != null)
-        assertTrue("T-PERF-09: $cpu CPU ticks with the screen off", cpu!! <= MAX_SCREEN_OFF_CPU_TICKS)
+        assertTrue("T-PERF-09: $cpu CPU ticks with the screen off", cpu <= MAX_SCREEN_OFF_CPU_TICKS)
     }
 
     internal companion object {
         private const val PER_USER_RANGE = 100_000
-        private const val SETTLE_MS = 5_000L
+        private const val QUIET_SAMPLE_MS = 1_000L
+        private const val QUIET_SAMPLES = 3
+        private const val QUIET_TICKS = 2L
+        private const val QUIET_TIMEOUT_MS = 30_000L
         private const val IDLE_MS = 20_000L
         private const val SCREEN_OFF_MS = 60_000L
 
@@ -140,6 +205,18 @@ class BackgroundCostTest {
         }
 
         private const val UTIME_INDEX = 11
+
+        /** The pids printed by `pidof` (space-separated; empty when the process is not running). */
+        fun pidsOf(output: String): List<String> = output.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }
+
+        /** Whether `dumpsys activity activities` names [component] as the resumed activity. */
+        fun resumedIs(
+            dump: String,
+            component: String,
+        ): Boolean =
+            dump.lines().any { line ->
+                (line.contains("mResumedActivity") || line.contains("ResumedActivity:")) && line.contains(component)
+            }
 
         /** Registered jobs are listed as `JOB #u0a123/7: … <package>/<service>`. */
         fun jobLines(

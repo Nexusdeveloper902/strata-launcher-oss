@@ -412,11 +412,14 @@ private fun AnalogClock(
     }
 }
 
-/** The day of [millis] in the default time zone (a time-zone change is a tick, so the next read sees it). */
-private fun localDay(millis: Long): Long {
-    val zone = TimeZone.getDefault()
-    return Math.floorDiv(millis + zone.getOffset(millis), DAY_MS)
-}
+/**
+ * The day number of [millis] in [zone] (the default zone: a time-zone change is a tick, so the next read sees it). The
+ * header's date is re-derived when this changes, i.e. at local midnight, never on the other minute ticks.
+ */
+internal fun localDay(
+    millis: Long,
+    zone: TimeZone = TimeZone.getDefault(),
+): Long = Math.floorDiv(millis + zone.getOffset(millis), DAY_MS)
 
 private const val SECOND_MS = 1_000L
 private const val DAY_MS = 86_400_000L

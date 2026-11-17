@@ -322,7 +322,7 @@ class AndroidBadgeSource internal constructor(
         /** The process's source; the listener (created by the system) reports to it. */
         @Volatile
         var instance: AndroidBadgeSource? = null
-            private set
+            internal set
     }
 }
 

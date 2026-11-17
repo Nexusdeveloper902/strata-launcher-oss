@@ -1,27 +1,28 @@
 package app.strata.launcher.home
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.os.StrictMode
 import android.view.Window
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import app.strata.launcher.core.model.IconImage
 import app.strata.launcher.core.model.IconRequest
 import app.strata.launcher.core.model.IconResult
 import app.strata.launcher.core.platformapi.icons.IconProvider
 import app.strata.launcher.core.theme.resolve.ResolvedWallpaper
+import app.strata.launcher.core.ui.BackdropFade
 import app.strata.launcher.core.ui.IconLoader
-import app.strata.launcher.core.ui.SWITCH_FADE_MS
 import app.strata.launcher.core.ui.Strata
-import app.strata.launcher.core.ui.durationMs
-import kotlinx.coroutines.delay
+import app.strata.launcher.core.ui.backdropFade
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 /** Window rules of the home activity (FR-HOME-08), pure for unit tests. */
 object HomeWindow {
@@ -50,46 +51,132 @@ object HomeWindow {
      */
     fun showsWallpaper(wallpaper: ResolvedWallpaper): Boolean = wallpaper.show && wallpaper.backgroundOpacity < 1.0
 
-    /**
-     * Applies [show] to the home window: `FLAG_SHOW_WALLPAPER` and a transparent background while the wallpaper is
-     * shown, otherwise no flag and an opaque [background] (what the content leaves unpainted is the theme's colour,
-     * never black). Only what differs is touched, so an unchanged state costs no relayout.
-     */
-    fun applyWallpaper(
+    /** Adds or clears `FLAG_SHOW_WALLPAPER`; nothing when it already matches (no relayout). */
+    fun setShowsWallpaper(
         window: Window,
         show: Boolean,
-        background: Int,
     ) {
-        val flag = WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER
-        val has = window.attributes.flags and flag != 0
+        val has = showsWallpaper(window)
         when {
-            show && !has -> window.addFlags(flag)
-            !show && has -> window.clearFlags(flag)
+            show && !has -> window.addFlags(FLAG)
+            !show && has -> window.clearFlags(FLAG)
         }
-        val color = if (show) Color.TRANSPARENT else background or OPAQUE
-        val current = (window.decorView.background as? ColorDrawable)?.color
-        if (current != color) window.setBackgroundDrawable(ColorDrawable(color))
     }
 
+    fun showsWallpaper(window: Window): Boolean = window.attributes.flags and FLAG != 0
+
+    /** Sets the window background to [color] unless it already is that colour. */
+    fun setBackground(
+        window: Window,
+        color: Int,
+    ) {
+        val current = (window.peekDecorView()?.background ?: window.decorView.background) as? ColorDrawable
+        if (current?.color != color) window.setBackgroundDrawable(ColorDrawable(color))
+    }
+
+    /** The window background while the wallpaper is hidden: the theme's `background`, opaque. */
+    fun opaque(background: Int): Int = background or OPAQUE
+
+    /**
+     * The state to start in, applied in `onCreate` before `setContent` (before the window is added), so a start never
+     * composes a wallpaper it then drops: the wallpaper flag and an opaque or transparent background.
+     */
+    fun applyInitial(
+        window: Window,
+        state: WallpaperWindowState,
+    ) {
+        setShowsWallpaper(window, state.show)
+        setBackground(window, if (state.show) Color.TRANSPARENT else opaque(state.background))
+    }
+
+    private const val FLAG = WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER
     private const val OPAQUE = 0xFF000000.toInt()
 }
 
+/** What the home window needs from the theme before anything is composed. */
+data class WallpaperWindowState(
+    val show: Boolean,
+    val background: Int,
+)
+
 /**
- * Keeps the home window's wallpaper flag on [HomeWindow.showsWallpaper] for the current theme (battery: the default
- * theme covers the wallpaper, so the system need not compose it behind home). Showing it takes effect at once; hiding it
- * on a theme switch waits for the backdrop cross-fade (§12 step 1), so the fade never runs over a vanished wallpaper.
+ * The last [WallpaperWindowState] home applied, for the next cold start (the theme is not loaded yet then). One small
+ * preference file, read once per home `onCreate`; not backed up (it is outside every backup include).
+ */
+class HomeWindowMemory(context: Context) {
+    private val app = context.applicationContext
+
+    private fun prefs() = app.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    /** Synchronous by design (the window must be set before it is added); one tiny read, allowed explicitly. */
+    fun read(): WallpaperWindowState? {
+        val policy = StrictMode.allowThreadDiskReads()
+        return try {
+            val p = prefs()
+            if (!p.contains(KEY_SHOW)) null else WallpaperWindowState(p.getBoolean(KEY_SHOW, true), p.getInt(KEY_BG, 0))
+        } catch (e: RuntimeException) {
+            null
+        } finally {
+            StrictMode.setThreadPolicy(policy)
+        }
+    }
+
+    /** Off the calling thread ([SharedPreferences.Editor.apply]). */
+    fun save(state: WallpaperWindowState) {
+        val policy = StrictMode.allowThreadDiskReads()
+        try {
+            prefs()
+                .edit()
+                .putBoolean(KEY_SHOW, state.show)
+                .putInt(KEY_BG, state.background)
+                .apply()
+        } catch (e: RuntimeException) {
+            Unit
+        } finally {
+            StrictMode.setThreadPolicy(policy)
+        }
+    }
+
+    private companion object {
+        const val FILE = "home_window"
+        const val KEY_SHOW = "shows_wallpaper"
+        const val KEY_BG = "background"
+    }
+}
+
+/**
+ * Keeps the home window on [HomeWindow.showsWallpaper] for the current theme (battery: the default theme covers the
+ * wallpaper, so the system need not compose it, or keep a live wallpaper rendering, behind home). Home is the only
+ * writer of its window background ([app.strata.launcher.theme.ThemeHost] is built with `ownsWindowBackground = false`).
+ * - Showing: the flag first; the opaque background stays until the window has drawn twice with the wallpaper behind it,
+ *   then turns transparent, so the cross-fade never runs over an empty (black) window.
+ * - Hiding: waits until the backdrop cross-fade has settled ([BackdropFade.settled], system animator scale included),
+ *   then paints the opaque background and only then drops the flag.
  */
 @Composable
-internal fun HomeWallpaperWindow(window: Window) {
+internal fun HomeWallpaperWindow(
+    window: Window,
+    memory: HomeWindowMemory?,
+) {
     val theme = Strata.theme
     val show = HomeWindow.showsWallpaper(theme.wallpaper)
     val background = theme.colors.background
-    val fadeMs = theme.animation.durationMs(SWITCH_FADE_MS)
-    var shown by remember { mutableStateOf<Boolean?>(null) }
+    val fade: BackdropFade? = Strata.backdropFade
     LaunchedEffect(show, background) {
-        if (!show && shown == true && fadeMs > 0) delay(fadeMs.toLong())
-        HomeWindow.applyWallpaper(window, show, background)
-        shown = show
+        val flagged = HomeWindow.showsWallpaper(window)
+        if (show) {
+            HomeWindow.setShowsWallpaper(window, true)
+            if (!flagged) {
+                withFrameNanos { }
+                withFrameNanos { }
+            }
+            HomeWindow.setBackground(window, Color.TRANSPARENT)
+        } else {
+            if (flagged && fade != null) snapshotFlow { fade.settled }.first { it }
+            HomeWindow.setBackground(window, HomeWindow.opaque(background))
+            HomeWindow.setShowsWallpaper(window, false)
+        }
+        memory?.save(WallpaperWindowState(show, background))
     }
 }
 

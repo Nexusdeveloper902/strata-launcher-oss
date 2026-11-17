@@ -37,8 +37,15 @@ class FakePackSource : IconPackSource {
     var discoveries = 0
         private set
 
+    /** Runs inside the next discovery, then is cleared (a broadcast arriving mid-pass). */
+    var duringDiscovery: (() -> Unit)? = null
+
     override fun discover(): List<PackCandidate>? {
         discoveries++
+        duringDiscovery?.let {
+            duringDiscovery = null
+            it()
+        }
         return if (failDiscovery) null else packs.values.map { it.first }
     }
 
@@ -160,6 +167,27 @@ class IconPackRegistryTest {
         queued.refresh()
         scheduler.advanceUntilIdle()
         assertThat(source.discoveries).isEqualTo(after + 1)
+        assertThat(queued.packs.value.usable).containsExactly(FakePackSource.PACK_OK)
+    }
+
+    /**
+     * T-PERF-14: a broadcast that arrives while a discovery is running is not lost: it gets one more pass, which sees
+     * the pack installed meanwhile; and no further pass follows.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun tPerf14_refreshDuringDiscoveryRunsOnceMore() {
+        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+        val worker = kotlinx.coroutines.test.StandardTestDispatcher(scheduler)
+        val queued = IconPackRegistry(source, worker, CoroutineScope(worker), RecordingLogger())
+        source.duringDiscovery = {
+            source.install(FakePackSource.PACK_OK, FakePackSource.OK_FILTER)
+            queued.refresh()
+            queued.refresh()
+        }
+        queued.refresh()
+        scheduler.advanceUntilIdle()
+        assertThat(source.discoveries).isEqualTo(2)
         assertThat(queued.packs.value.usable).containsExactly(FakePackSource.PACK_OK)
     }
 }

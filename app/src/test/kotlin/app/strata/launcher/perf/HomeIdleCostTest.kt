@@ -171,7 +171,22 @@ class HomeIdleCostTest {
         assertThat((activity.window.decorView.background as? ColorDrawable)?.alpha).isEqualTo(255)
     }
 
-    /** T-PERF-13: a theme that lets the wallpaper through keeps it; an opaque background over it does not. */
+    private fun background(activity: HomeActivity) = (activity.window.decorView.background as? ColorDrawable)?.color
+
+    /** Lets the repository's new state reach the composition and runs [frames] frames, the clock held. */
+    private fun frames(frames: Int) {
+        repeat(frames) {
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeByFrame()
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    /**
+     * T-PERF-13: hiding the wallpaper (to an opaque theme) keeps the flag while the backdrop cross-fade runs and drops
+     * it, with an opaque background, once the fade has settled; showing it again adds the flag at once and keeps the
+     * opaque background until the window has drawn with the wallpaper, then turns transparent.
+     */
     @Test
     fun tPerf13_wallpaperFlagFollowsTheTheme() {
         val repo = FakeThemeRepository(ThemeState(themes = withWallpaper(show = true, opacity = 0.4), loaded = true))
@@ -180,17 +195,49 @@ class HomeIdleCostTest {
         graph(repo)
         val activity = start().get()
         assertThat(showsWallpaper(activity)).isTrue()
+        assertThat(background(activity)).isEqualTo(android.graphics.Color.TRANSPARENT)
+
+        compose.mainClock.autoAdvance = false
         repo.apply("opaque")
-        compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(1_000) // the backdrop cross-fade ends before the wallpaper goes
-        compose.waitForIdle()
-        assertThat(showsWallpaper(activity)).isFalse()
-        repo.apply("see-through")
-        compose.waitForIdle()
+        frames(5) // ~80 ms into the 300 ms fade
         assertThat(showsWallpaper(activity)).isTrue()
+        assertThat(background(activity)).isEqualTo(android.graphics.Color.TRANSPARENT)
+        frames(60) // the fade has settled
+        assertThat(showsWallpaper(activity)).isFalse()
+        assertThat(background(activity)).isEqualTo(ThemePair.DEFAULT.light.colors.background or OPAQUE)
+
+        repo.apply("see-through")
+        frames(1)
+        assertThat(showsWallpaper(activity)).isTrue()
+        assertThat(background(activity)).isEqualTo(ThemePair.DEFAULT.light.colors.background or OPAQUE)
+        frames(5)
+        assertThat(showsWallpaper(activity)).isTrue()
+        assertThat(background(activity)).isEqualTo(android.graphics.Color.TRANSPARENT)
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * T-PERF-13: the next start applies what the last run applied in `onCreate`, before anything is composed or the
+     * window is added, so an opaque theme never has the wallpaper composed at start (the manifest default shows it).
+     */
+    @Test
+    fun tPerf13_startAppliesTheRememberedWallpaperState() {
+        graph(FakeThemeRepository(ThemeState(themes = withWallpaper(show = false), loaded = true)))
+        start().pause().stop().destroy()
+        shadowOf(Looper.getMainLooper()).idle()
+        // Cold start: the theme is not loaded yet when onCreate runs.
+        graph(FakeThemeRepository(ThemeState(themes = withWallpaper(show = false), loaded = false)))
+        val intent =
+            Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .setComponent(ComponentName(context, HomeActivity::class.java))
+        val created = Robolectric.buildActivity(HomeActivity::class.java, intent).create().get()
+        assertThat(showsWallpaper(created)).isFalse()
+        assertThat((created.window.decorView.background as? ColorDrawable)?.alpha).isEqualTo(255)
     }
 
     private companion object {
         const val FRAME_MS = 16L
+        const val OPAQUE = 0xFF000000.toInt()
     }
 }

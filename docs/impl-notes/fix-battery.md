@@ -22,7 +22,7 @@ Line numbers refer to `main` at a1c7f47.
 | Widgets | `HomeActivity.kt:349, 357`, `HostedWidget.kt`, `AndroidWidgetHost.kt:282–301` | **Fine.** `startListening` runs in `onStart` and `stopListening` in `onStop` (T-PERF-13 asserts it). The widget area has a fixed height, so a size update cannot feed back into a remeasure. |
 | Wakelocks, alarms, jobs, sensors, location | — | **None** in the code. T-PERF-09 already asserts no jobs or alarms. It now also measures frames and CPU on the device (below). |
 | Accessibility service (double-tap lock) | `platform/system/src/main/res/xml/lock_accessibility_service.xml` | **Fine.** The service has no `accessibilityEventTypes` (that means 0: no event from any app is delivered), no window content and only `flagDefault`. `onAccessibilityEvent` is a no-op. `notificationTimeout` was 0, which is harmless without event types. It is now 10 s in case event types are ever added. T-PERF-14 guards the whole config. One cost remains that the code cannot remove: any enabled accessibility service turns `AccessibilityManager.isEnabled()` on for every app, and some apps then do extra work. |
-| Rendering: wallpaper | `app/src/main/res/values/themes.xml:7` (`windowShowWallpaper` always on) + `spec/theme.schema.json` `wallpaper.show` default **false** | **Real.** The default theme, like Harbor, Midnight OLED and Paper, draws an opaque `background` over the whole window. The window still asked for the wallpaper, so the system kept the wallpaper window visible behind it. SurfaceFlinger then composited a full-screen layer nobody can see, and a **live or animated wallpaper kept rendering the whole time home was on screen**. Home now sets `FLAG_SHOW_WALLPAPER` only while the wallpaper can be seen (`show` true and `backgroundOpacity` < 1). Otherwise it paints an opaque window background. On a theme switch, hiding waits for the 300 ms backdrop cross-fade. |
+| Rendering: wallpaper | `app/src/main/res/values/themes.xml:7` (`windowShowWallpaper` always on) + `spec/theme.schema.json` `wallpaper.show` default **false** | **Real.** The default theme, like Harbor, Midnight OLED and Paper, draws an opaque `background` over the whole window. The window still asked for the wallpaper, so the system kept the wallpaper window visible behind it. SurfaceFlinger then composited a full-screen layer nobody can see, and a **live or animated wallpaper kept rendering the whole time home was on screen**. Home now sets `FLAG_SHOW_WALLPAPER` only while the wallpaper can be seen (`show` true and `backgroundOpacity` < 1). Otherwise it paints an opaque window background. See "Wallpaper window: how it switches" below. |
 | Theme engine re-resolving | `DefaultThemeRepository.kt:188–219`, `PlatformThemeInputs.kt` | **No loop.** Inputs are `distinctUntilChanged`, so equal results do not re-emit. Not confirmed: a live wallpaper that calls `notifyColorsChanged` often would trigger a full re-resolution each time (CPU only, plus a recomposition if the colours really differ). |
 | Logging | `RingLogger`, `RotatingFileLogSink`, `LogcatSink` | **No hot path.** Nothing logs per frame or per notification. The debug build logs DEBUG to logcat and the file. |
 | Debug build | `README.md:57–61` tells the owner to install `app-debug.apk` | **Likely a large share of the reported number.** In the debug build, StrictMode `detectAll` with `penaltyLog` and a listener captures a stack trace for every violation. The VM policy's `detectLeakedClosableObjects` turns on CloseGuard, which records a stack trace for every cursor, file and parcel descriptor opened. The code is not shrunk (no R8), not AOT-compiled from a Baseline Profile, and runs as debuggable. Each frame and each event costs several times what it costs in the release build. Pseudo-locales cost nothing at runtime. |
@@ -47,21 +47,55 @@ Only the generated `spec/REQUIREMENTS_TRACEABILITY.md` conflicted; it was regene
 ## Changes
 | Change | Files |
 |---|---|
-| Wallpaper flag follows the theme. An opaque backdrop gets an opaque window background instead. | `app/.../home/HomeWindow.kt` (`HomeWindow.showsWallpaper`, `applyWallpaper`, `HomeWallpaperWindow`), `HomeActivity.kt`, `spec/ANDROID_PLATFORM.md` P-7 |
+| Wallpaper flag follows the theme. An opaque backdrop gets an opaque window background instead. Home is the only writer of its window background; `ThemeHost(ownsWindowBackground = false)` for home | `app/.../home/HomeWindow.kt` (`HomeWindow`, `WallpaperWindowState`, `HomeWindowMemory`, `HomeWallpaperWindow`), `HomeActivity.kt`, `theme/ThemeHost.kt`, `core/ui/.../BackdropFade.kt` (`settled`), `spec/ANDROID_PLATFORM.md` P-7 |
 | Badge bursts coalesced: one publication per burst, none when the counts did not change | `platform/notifications/.../AndroidBadgeSource.kt` |
 | Icon-pack discoveries coalesced across broadcast bursts | `platform/icons/.../packs/IconPackRegistry.kt` |
 | Header date derived once a day | `feature/home/.../HomeHeader.kt` |
 | Lock service: long notification timeout, config documented | `platform/system/src/main/res/xml/lock_accessibility_service.xml` |
 
+### Wallpaper window: how it switches
+- **Start:** `onCreate` applies the flag and the window background before `setContent`, so the window is added in the
+  right state and a start under an opaque theme never composes the wallpaper and then drops it. On a recreate it uses
+  the loaded theme. On a cold start the theme is not loaded yet, so it uses what the last run applied (`HomeWindowMemory`:
+  one small preference file, read once per `onCreate` with an explicit StrictMode allowance, and not backed up). The very
+  first start uses the manifest default (wallpaper shown).
+- **Hiding** (a switch to an opaque theme): the flag stays while the backdrop cross-fades. Once `BackdropFade.settled`
+  is true, the opaque background is painted and then the flag is dropped. `settled` follows the real animation, so the
+  system animator scale is included, unlike a fixed delay.
+- **Showing** (a switch from an opaque theme): the flag is added at once; the opaque background stays until the window
+  has drawn two frames with the wallpaper requested, then turns transparent. While the cross-fade starts, the window
+  never shows an empty (black) area.
+- **One writer:** `ThemeHost.SystemBarTint` sets the background of other non-wallpaper windows (settings, themes);
+  home's `ThemeHost` is built with `ownsWindowBackground = false`.
+
+### A56 manual check: transitions under an opaque theme
+With an opaque theme (the default, Harbor, Midnight OLED, Paper), home no longer has the wallpaper behind it. The system
+transitions that involve home therefore show home's own background where they used to show the wallpaper. This is
+intended, not a regression, but check that it looks right:
+1. With Strata Default, open an app from the list, then swipe home. Then open Recents and go back to home. Then open an
+   app from a favourite and press Back. Look for a black or wrong-coloured flash, and for the wallpaper showing through
+   during the animation.
+2. Repeat with Dusk or Graphite, which show the wallpaper: the transitions should look as they did before this fix.
+3. To compare with the old behaviour, install the build before this fix (or 1.0.0-rc.1) and repeat step 1. Screen-record
+   both (`adb shell screenrecord /sdcard/home.mp4`, then `adb pull /sdcard/home.mp4`) and compare frame by frame. The
+   only expected difference is wallpaper versus theme background behind home during the animation.
+4. Switch themes Paper → Dusk → Paper in Settings → Themes, with animations on and with "Animation duration scale" set to
+   5× in Developer options: no black frame during the fade, and the wallpaper disappears only after the fade ends.
+5. Kill Strata (`adb shell am force-stop --user 0 app.strata.launcher`, user 0 being the owner's main user) and press Home
+   under Paper: home should come up without the wallpaper appearing for a moment first.
+
 ## Tests
 | ID | Test | Before the fix | After |
 |---|---|---|---|
-| T-PERF-13 | `app` `perf/HomeIdleCostTest`: idle at rest and in the list (no recomposition, recomposer `Idle` over 59 s; one tick → idle again); stopped home has no clock collector and no widget listening; wallpaper flag per theme | Wallpaper tests fail (`FLAG_SHOW_WALLPAPER` set under an opaque theme). The idle and stop tests pass on `main`: no defect there, they are regression guards. With an injected `withFrameNanos` loop every test fails ("Compose did not get idle") | pass |
+| T-PERF-13 | `app` `perf/HomeIdleCostTest`: idle at rest and in the list (no recomposition, recomposer `Idle` over 59 s; one tick → idle again); stopped home has no clock collector and no widget listening; wallpaper flag per theme: kept during the hide fade, opaque background once settled, opaque → show keeps the opaque background for the first frame and turns transparent after; the next start applies the remembered state in `onCreate` | Wallpaper tests fail (flag set under an opaque theme; the background turned transparent in the first frame of a show; the flag was set at `onCreate`). The idle and stop tests pass on `main`: regression guards. With an injected `withFrameNanos` loop every test fails ("Compose did not get idle") | pass |
+| T-PERF-13 | `core:ui` `BackdropFadeSettledTest`: with a 3× animator scale, `settled` is still false 400 ms into a 300 ms fade and true after 900 ms | new signal; it shows the old fixed `delay(300 ms)` would have dropped the wallpaper mid-fade | pass |
+| T-PERF-13 | `feature:home` `LocalDayTest`: the date key changes at local midnight only, follows a time-zone change, and a 23 h DST day is one day | new function | pass |
 | T-PERF-13 | `feature:home` `ClockTickTest`: minutes mode reads the time only on ticks (0 reads in 10 min without one), seconds mode about 1/s, nothing while not resumed | pass (guards) | pass |
-| T-PERF-14 | `platform:notifications` `BadgeBurstTest`: 100 updates of one notification, and 100 new ones with ranking updates, give ≤ 2 main-thread publications and no log entry; unchanged counts give 0 | 100, 100 and 10 hops: fail | pass |
+| T-PERF-14 | `platform:notifications` `BadgeBurstTest`: 100 updates of one notification, and 100 new ones with ranking updates, give ≤ 2 main-thread publications and no log entry; unchanged counts give 0; removing all publishes the empty map once; events during an in-flight publication are applied after it (worker and main on separate clocks); `AndroidBadgeSource.instance` reset in `tearDown` | 100, 100 and 10 hops: fail | pass |
 | T-PERF-14 | `platform:icons` `IconPackRegistryTest.tPerf14_burstOfRefreshesDiscoversOnce`: 50 refreshes → ≤ 2 discoveries | 50: fail | pass |
+| T-PERF-14 | `IconPackRegistryTest.tPerf14_refreshDuringDiscoveryRunsOnceMore`: refreshes during a running discovery give exactly one more pass, which sees the pack installed meanwhile | 3 passes on `main` (one per call): fail | pass |
 | T-PERF-14 | `platform:system` `LockServiceConfigTest`: no event types, no window content, default flags only, timeout ≥ 1 s | fails on the timeout only (0) | pass |
-| T-PERF-09 | `:benchmark` `BackgroundCostTest`: on the release-like build, idle home ≤ 10 frames in 20 s (`dumpsys gfxinfo`) and ≤ 1.5 s CPU; a screen-off minute ≤ 2 s CPU (`/proc/<pid>/stat`) | not run here (no emulator); runs in CI (GMD) and on the phone | — |
+| T-PERF-09 | `:benchmark` `BackgroundCostTest`: on the release-like build, idle home ≤ 10 frames in 20 s (`dumpsys gfxinfo`) and ≤ 1.5 s CPU; a screen-off minute ≤ 2 s CPU (`/proc/<pid>/stat`). The baseline is taken once the process's CPU time has been flat for 3 s (30 s cap), not after a fixed sleep. Not vacuous: exactly one pid, the same before and after; CPU readable and ≥ 0; home is the resumed activity before and after the idle window (`dumpsys activity activities`); positive control: opening and flinging the list draws > 0 frames. Every `am` command passes `--user <numeric>` | not run here (no emulator); runs in CI (GMD) and on the phone | — |
 
 The device thresholds are generous on purpose. A frame loop draws 1 200–2 400 frames in 20 s and uses close to 20 s of
 CPU, two orders of magnitude above them, while a minute tick is one or two frames. Shell commands use the numeric user.

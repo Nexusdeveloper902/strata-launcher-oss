@@ -72,9 +72,11 @@ class BadgeBurstTest {
         }
     }
 
+    /** The worker and the main thread run on separate clocks, so a publication can be held "in flight". */
     private val scheduler = TestCoroutineScheduler()
+    private val mainScheduler = TestCoroutineScheduler()
     private val worker = StandardTestDispatcher(scheduler)
-    private val main = Counting(StandardTestDispatcher(scheduler))
+    private val main = Counting(StandardTestDispatcher(mainScheduler))
     private val scope = CoroutineScope(SupervisorJob() + worker)
     private val logger = CountingLogger()
     private val source =
@@ -90,14 +92,26 @@ class BadgeBurstTest {
     private val service = object : NotificationListenerService() {}
 
     @After
-    fun tearDown() = scope.cancel()
+    fun tearDown() {
+        scope.cancel()
+        // The process-wide hook the listener reports to: no source of this test may outlive it.
+        if (AndroidBadgeSource.instance === source) AndroidBadgeSource.instance = null
+    }
+
+    /** Runs the worker and the main thread in turn until the hand-offs between them are done. */
+    private fun drain() {
+        repeat(MAX_ROUNDS) {
+            scheduler.advanceUntilIdle()
+            mainScheduler.advanceUntilIdle()
+        }
+    }
 
     private fun raw(id: String) = RawNotification(id, "fixture.chat", Process.myUserHandle(), false, false, 3, true)
 
     private fun connected() {
         source.setActive(true)
         source.onConnected(service)
-        scheduler.advanceUntilIdle()
+        drain()
         main.dispatches = 0
         logger.entries = 0
     }
@@ -107,7 +121,7 @@ class BadgeBurstTest {
     fun tPerf14_hundredUpdatesOfOneNotificationPublishOnce() {
         connected()
         repeat(100) { source.onPosted(raw("conversation")) }
-        scheduler.advanceUntilIdle()
+        drain()
         assertThat(source.badges.value).containsExactly(BadgeKey("fixture.chat", 0L), 1)
         assertThat(main.dispatches).isAtMost(MAX_PUBLISHES)
         assertThat(logger.entries).isEqualTo(0)
@@ -121,7 +135,7 @@ class BadgeBurstTest {
             source.onPosted(raw("n$i"))
             source.onRanking(mapOf("n$i" to (3 to true)))
         }
-        scheduler.advanceUntilIdle()
+        drain()
         assertThat(source.badges.value).containsExactly(BadgeKey("fixture.chat", 0L), 100)
         assertThat(main.dispatches).isAtMost(MAX_PUBLISHES)
         assertThat(logger.entries).isEqualTo(0)
@@ -132,16 +146,50 @@ class BadgeBurstTest {
     fun tPerf14_unchangedCountsAreNotRepublished() {
         connected()
         source.onPosted(raw("a"))
-        scheduler.advanceUntilIdle()
+        drain()
         main.dispatches = 0
         repeat(10) {
             source.onPosted(raw("a"))
-            scheduler.advanceUntilIdle()
+            drain()
         }
         assertThat(main.dispatches).isEqualTo(0)
     }
 
+    /** T-PERF-14: a burst that removes every notification publishes the empty map once (badges back to zero). */
+    @Test
+    fun tPerf14_removalBackToZero() {
+        connected()
+        repeat(3) { source.onPosted(raw("n$it")) }
+        drain()
+        assertThat(source.badges.value).containsExactly(BadgeKey("fixture.chat", 0L), 3)
+        main.dispatches = 0
+        repeat(3) { source.onRemoved("n$it") }
+        drain()
+        assertThat(source.badges.value).isEmpty()
+        assertThat(main.dispatches).isEqualTo(1)
+    }
+
+    /**
+     * T-PERF-14: events that arrive while a publication is still on its way to main are not lost: once it lands, the
+     * worker applies them and publishes the newer counts.
+     */
+    @Test
+    fun tPerf14_eventDuringPublishIsApplied() {
+        connected()
+        source.onPosted(raw("a"))
+        scheduler.advanceUntilIdle() // the worker is now suspended in the hop to main, which has not run
+        assertThat(source.badges.value).isEmpty()
+        source.onPosted(raw("b"))
+        source.onPosted(raw("c"))
+        mainScheduler.advanceUntilIdle() // the first publication lands: one alert
+        assertThat(source.badges.value).containsExactly(BadgeKey("fixture.chat", 0L), 1)
+        drain()
+        assertThat(source.badges.value).containsExactly(BadgeKey("fixture.chat", 0L), 3)
+        assertThat(main.dispatches).isEqualTo(2)
+    }
+
     private companion object {
         const val MAX_PUBLISHES = 2
+        const val MAX_ROUNDS = 10
     }
 }
