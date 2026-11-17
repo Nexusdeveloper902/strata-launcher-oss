@@ -140,7 +140,7 @@ class BackgroundCostTest {
 
         // Positive control: real motion is counted.
         device.executeShellCommand("dumpsys gfxinfo ${Strata.TARGET} reset")
-        device.findOrFail(Strata.ALL_APPS).click()
+        device.clickOrFail(Strata.ALL_APPS)
         device.findOrFail(Strata.LIST).fling(Direction.DOWN)
         device.waitForIdle()
         val moved = framesRendered()
