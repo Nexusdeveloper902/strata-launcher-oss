@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.os.StrictMode
 import android.view.Window
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
@@ -23,6 +22,8 @@ import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.backdropFade
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 
 /** Window rules of the home activity (FR-HOME-08), pure for unit tests. */
 object HomeWindow {
@@ -100,47 +101,82 @@ data class WallpaperWindowState(
 )
 
 /**
- * The last [WallpaperWindowState] home applied, for the next cold start (the theme is not loaded yet then). One small
- * preference file, read once per home `onCreate`; not backed up (it is outside every backup include).
+ * The last [WallpaperWindowState] home applied, for the next cold start (the theme is not loaded yet then). Every disk
+ * access runs on [io], never on the calling thread: the process prefetches the value from `Application.onCreate`
+ * ([start]), and home's `onCreate` only [peek]s at what has arrived. Not ready (or a first run) = null: the window
+ * keeps the manifest default. One small preference file, outside every backup include.
  */
-class HomeWindowMemory(context: Context) {
-    private val app = context.applicationContext
+class HomeWindowMemory(
+    private val prefs: () -> SharedPreferences,
+    private val io: Executor,
+) {
+    @Volatile private var state: WallpaperWindowState? = null
 
-    private fun prefs() = app.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    @Volatile private var ready = false
 
-    /** Synchronous by design (the window must be set before it is added); one tiny read, allowed explicitly. */
-    fun read(): WallpaperWindowState? {
-        val policy = StrictMode.allowThreadDiskReads()
-        return try {
-            val p = prefs()
-            if (!p.contains(KEY_SHOW)) null else WallpaperWindowState(p.getBoolean(KEY_SHOW, true), p.getInt(KEY_BG, 0))
-        } catch (e: RuntimeException) {
-            null
-        } finally {
-            StrictMode.setThreadPolicy(policy)
+    /** Starts the read on [io]; returns at once. */
+    fun prefetch() {
+        io.execute {
+            val read =
+                try {
+                    val p = prefs()
+                    if (p.contains(KEY_SHOW)) {
+                        WallpaperWindowState(p.getBoolean(KEY_SHOW, true), p.getInt(KEY_BG, 0))
+                    } else {
+                        null
+                    }
+                } catch (e: RuntimeException) {
+                    null
+                }
+            // A save made meanwhile is newer than the file.
+            if (!ready) state = read
+            ready = true
         }
     }
 
-    /** Off the calling thread ([SharedPreferences.Editor.apply]). */
-    fun save(state: WallpaperWindowState) {
-        val policy = StrictMode.allowThreadDiskReads()
-        try {
-            prefs()
-                .edit()
-                .putBoolean(KEY_SHOW, state.show)
-                .putInt(KEY_BG, state.background)
-                .apply()
-        } catch (e: RuntimeException) {
-            Unit
-        } finally {
-            StrictMode.setThreadPolicy(policy)
+    /** The remembered state if the prefetch has finished; no I/O, safe on main. */
+    fun peek(): WallpaperWindowState? = if (ready) state else null
+
+    /** Remembers [value] at once for this process and writes it on [io]. */
+    fun save(value: WallpaperWindowState) {
+        if (ready && state == value) return
+        state = value
+        ready = true
+        io.execute {
+            try {
+                prefs()
+                    .edit()
+                    .putBoolean(KEY_SHOW, value.show)
+                    .putInt(KEY_BG, value.background)
+                    .apply()
+            } catch (e: RuntimeException) {
+                Unit
+            }
         }
     }
 
-    private companion object {
-        const val FILE = "home_window"
-        const val KEY_SHOW = "shows_wallpaper"
-        const val KEY_BG = "background"
+    companion object {
+        private const val FILE = "home_window"
+        private const val KEY_SHOW = "shows_wallpaper"
+        private const val KEY_BG = "background"
+
+        /** The process's memory, created and prefetched by [start]; null before it. */
+        @Volatile
+        var process: HomeWindowMemory? = null
+            internal set
+
+        /** From `Application.onCreate`: one daemon thread does the prefetch and the writes. */
+        fun start(context: Context): HomeWindowMemory {
+            val app = context.applicationContext
+            val io =
+                Executors.newSingleThreadExecutor { r ->
+                    Thread(r, "strata-home-window").apply { isDaemon = true }
+                }
+            return HomeWindowMemory({ app.getSharedPreferences(FILE, Context.MODE_PRIVATE) }, io).also {
+                process = it
+                it.prefetch()
+            }
+        }
     }
 }
 

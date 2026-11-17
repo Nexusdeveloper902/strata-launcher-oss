@@ -22,6 +22,7 @@ import app.strata.launcher.core.theme.store.ThemePair
 import app.strata.launcher.core.theme.store.ThemeState
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.home.HomeActivity
+import app.strata.launcher.home.HomeWindowMemory
 import app.strata.launcher.testing.fakes.FakeAppListSource
 import app.strata.launcher.testing.fakes.FakeRoleController
 import app.strata.launcher.testing.fakes.FakeThemeRepository
@@ -35,6 +36,8 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
+import java.io.File
+import java.util.concurrent.Executor
 
 /**
  * T-PERF-13 (NFR-PERF-05, battery): what idle home costs between clock ticks, at the composition level (Robolectric).
@@ -216,24 +219,81 @@ class HomeIdleCostTest {
         compose.mainClock.autoAdvance = true
     }
 
+    /** Holds [HomeWindowMemory]'s disk work until the test runs it, on a thread that is not main. */
+    private class HeldIo : Executor {
+        private val tasks = ArrayDeque<Runnable>()
+
+        override fun execute(command: Runnable) {
+            tasks.addLast(command)
+        }
+
+        fun runOffMain() {
+            val t = Thread { while (tasks.isNotEmpty()) tasks.removeFirst().run() }
+            t.start()
+            t.join()
+        }
+    }
+
+    private var prefsOnMain = 0
+    private var prefsOffMain = 0
+
+    private fun memory(io: Executor) =
+        HomeWindowMemory(
+            prefs = {
+                if (Looper.myLooper() == Looper.getMainLooper()) prefsOnMain++ else prefsOffMain++
+                context.getSharedPreferences("home_window", Context.MODE_PRIVATE)
+            },
+            io = io,
+        )
+
+    private fun homeIntent() =
+        Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_HOME)
+            .setComponent(ComponentName(context, HomeActivity::class.java))
+
     /**
-     * T-PERF-13: the next start applies what the last run applied in `onCreate`, before anything is composed or the
-     * window is added, so an opaque theme never has the wallpaper composed at start (the manifest default shows it).
+     * T-PERF-13: a fresh install (no `shared_prefs` directory yet; its first use is a `mkdir`, a disk write that
+     * killed home under StrictMode death on API 36) touches no preference on the main thread, neither in `onCreate`
+     * nor when home saves its state: all of it runs on the memory's own thread. Until the prefetch is in, the window
+     * keeps the manifest default.
+     */
+    @Test
+    fun tPerf13_freshInstallTouchesNoDiskOnMain() {
+        File(context.applicationInfo.dataDir, "shared_prefs").deleteRecursively()
+        val io = HeldIo()
+        HomeWindowMemory.process = memory(io).also { it.prefetch() }
+        graph(FakeThemeRepository(ThemeState(themes = withWallpaper(show = false), loaded = false)))
+        val created = Robolectric.buildActivity(HomeActivity::class.java, homeIntent()).create().get()
+        assertThat(prefsOnMain).isEqualTo(0)
+        assertThat(showsWallpaper(created)).isTrue() // prefetch not in: manifest default
+        io.runOffMain()
+        assertThat(HomeWindowMemory.process!!.peek()).isNull() // nothing remembered on a first run
+        assertThat(prefsOnMain).isEqualTo(0)
+        assertThat(prefsOffMain).isEqualTo(1)
+    }
+
+    /**
+     * T-PERF-13: the next start applies what the last run applied in `onCreate`, from the application's prefetch,
+     * before anything is composed or the window is added, so an opaque theme never has the wallpaper composed at start.
      */
     @Test
     fun tPerf13_startAppliesTheRememberedWallpaperState() {
+        val io = HeldIo()
+        HomeWindowMemory.process = memory(io).also { it.prefetch() }
         graph(FakeThemeRepository(ThemeState(themes = withWallpaper(show = false), loaded = true)))
         start().pause().stop().destroy()
         shadowOf(Looper.getMainLooper()).idle()
-        // Cold start: the theme is not loaded yet when onCreate runs.
+        io.runOffMain() // the prefetch and the save
+        assertThat(prefsOnMain).isEqualTo(0)
+        // A new process: its application prefetches what the last one saved.
+        val nextIo = HeldIo()
+        HomeWindowMemory.process = memory(nextIo).also { it.prefetch() }
+        nextIo.runOffMain()
         graph(FakeThemeRepository(ThemeState(themes = withWallpaper(show = false), loaded = false)))
-        val intent =
-            Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_HOME)
-                .setComponent(ComponentName(context, HomeActivity::class.java))
-        val created = Robolectric.buildActivity(HomeActivity::class.java, intent).create().get()
+        val created = Robolectric.buildActivity(HomeActivity::class.java, homeIntent()).create().get()
         assertThat(showsWallpaper(created)).isFalse()
         assertThat((created.window.decorView.background as? ColorDrawable)?.alpha).isEqualTo(255)
+        assertThat(prefsOnMain).isEqualTo(0)
     }
 
     private companion object {

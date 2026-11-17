@@ -172,7 +172,8 @@ class HomeActivity : ComponentActivity() {
     /** Home's window background belongs to [HomeWallpaperWindow], not to the theme host. */
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository, ownsWindowBackground = false) }
 
-    private val windowMemory by lazy { HomeWindowMemory(this) }
+    /** Prefetched off main by the application (no disk access in `onCreate`). */
+    private val windowMemory: HomeWindowMemory? get() = HomeWindowMemory.process
 
     /** Debug builds only: the search layer's Back/IME close decisions (booleans, no query), as `Strata/SearchClose`. */
     private val searchCloseLog: (String) -> Unit =
@@ -201,7 +202,8 @@ class HomeActivity : ComponentActivity() {
             systemScreens.bind(setDefaultViewModel.flow)
             themeHost.holdFirstFrame(window.decorView)
             // Battery: start with the wallpaper flag the theme needs, before the window is added (no wallpaper
-            // composed and then dropped). The loaded theme on a recreate, else what the last run applied.
+            // composed and then dropped). The loaded theme on a recreate, else what the last run applied, if the
+            // application's prefetch has it already; otherwise the manifest default stands.
             initialWallpaperState()?.let { HomeWindow.applyInitial(window, it) }
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -283,7 +285,7 @@ class HomeActivity : ComponentActivity() {
 
     private fun initialWallpaperState(): WallpaperWindowState? {
         val state = appGraph.themeRepository.state.value
-        if (!state.loaded) return windowMemory.read()
+        if (!state.loaded) return windowMemory?.peek()
         val night = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         val dark = night == Configuration.UI_MODE_NIGHT_YES
         val theme = state.themes.forSystemDark(dark)

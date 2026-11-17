@@ -56,9 +56,14 @@ Only the generated `spec/REQUIREMENTS_TRACEABILITY.md` conflicted; it was regene
 ### Wallpaper window: how it switches
 - **Start:** `onCreate` applies the flag and the window background before `setContent`, so the window is added in the
   right state and a start under an opaque theme never composes the wallpaper and then drops it. On a recreate it uses
-  the loaded theme. On a cold start the theme is not loaded yet, so it uses what the last run applied (`HomeWindowMemory`:
-  one small preference file, read once per `onCreate` with an explicit StrictMode allowance, and not backed up). The very
-  first start uses the manifest default (wallpaper shown).
+  the loaded theme. On a cold start the theme is not loaded yet, so it uses what the last run applied
+  (`HomeWindowMemory`: one small preference file, not backed up). **No disk access happens on the main thread:**
+  `StrataApplication.onCreate` starts a prefetch on its own thread, and home's `onCreate` only looks at what has
+  arrived. If the prefetch is not in yet, or on the very first start, the manifest default (wallpaper shown) stands.
+  Saves are written on the same thread. An earlier version read the file in `onCreate` under
+  `allowThreadDiskReads`. On a fresh install the first use creates `shared_prefs/` (a `mkdir`, i.e. a disk write),
+  and that killed home under StrictMode death on GMD API 36 (mirror CI run 44127724869, `HomeSmokeTest`). It also
+  cost cold start about 143 ms.
 - **Hiding** (a switch to an opaque theme): the flag stays while the backdrop cross-fades. Once `BackdropFade.settled`
   is true, the opaque background is painted and then the flag is dropped. `settled` follows the real animation, so the
   system animator scale is included, unlike a fixed delay.
@@ -87,7 +92,7 @@ intended, not a regression, but check that it looks right:
 ## Tests
 | ID | Test | Before the fix | After |
 |---|---|---|---|
-| T-PERF-13 | `app` `perf/HomeIdleCostTest`: idle at rest and in the list (no recomposition, recomposer `Idle` over 59 s; one tick → idle again); stopped home has no clock collector and no widget listening; wallpaper flag per theme: kept during the hide fade, opaque background once settled, opaque → show keeps the opaque background for the first frame and turns transparent after; the next start applies the remembered state in `onCreate` | Wallpaper tests fail (flag set under an opaque theme; the background turned transparent in the first frame of a show; the flag was set at `onCreate`). The idle and stop tests pass on `main`: regression guards. With an injected `withFrameNanos` loop every test fails ("Compose did not get idle") | pass |
+| T-PERF-13 | `app` `perf/HomeIdleCostTest`: idle at rest and in the list (no recomposition, recomposer `Idle` over 59 s; one tick → idle again); stopped home has no clock collector and no widget listening; wallpaper flag per theme: kept during the hide fade, opaque background once settled, opaque → show keeps the opaque background for the first frame and turns transparent after; the next start applies the remembered state in `onCreate` (from the application's prefetch); a fresh install with no `shared_prefs` directory touches no preference on main (in `onCreate` or when saving) | Wallpaper tests fail (flag set under an opaque theme; the background turned transparent in the first frame of a show; the flag was set at `onCreate`). The idle and stop tests pass on `main`: regression guards. With an injected `withFrameNanos` loop every test fails ("Compose did not get idle") | pass |
 | T-PERF-13 | `core:ui` `BackdropFadeSettledTest`: with a 3× animator scale, `settled` is still false 400 ms into a 300 ms fade and true after 900 ms | new signal; it shows the old fixed `delay(300 ms)` would have dropped the wallpaper mid-fade | pass |
 | T-PERF-13 | `feature:home` `LocalDayTest`: the date key changes at local midnight only, follows a time-zone change, and a 23 h DST day is one day | new function | pass |
 | T-PERF-13 | `feature:home` `ClockTickTest`: minutes mode reads the time only on ticks (0 reads in 10 min without one), seconds mode about 1/s, nothing while not resumed | pass (guards) | pass |
