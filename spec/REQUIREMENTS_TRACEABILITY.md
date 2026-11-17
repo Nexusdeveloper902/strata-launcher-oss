@@ -197,7 +197,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-THEME-32 | — | Migration framework with fixtures and backup copy | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-40 | M4 |
 | FR-THEME-33 | — | Theme data in Auto Backup, revalidated on restore | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-41, T-BACKUP-09, T-BACKUP-11 | M8 |
 | FR-THEME-34 | — | Wallpaper image applied only after user confirmation | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §13 | THEME_SYSTEM §15.1 | T-THEME-42, T-CI-01 | M5 |
-| FR-THEME-35 | — | Strata glyph set and icon source precedence | Proposed (D-014, owner request) | D-014 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9.1 | THEME_SYSTEM §15.1 | T-SET-10^, T-THEME-54^, T-THEME-55^ | M8 |
+| FR-THEME-35 | — | Strata glyph set and icon source precedence | Proposed (D-014, owner request; order revised 2026-11-14, see docs/impl-notes/icon-source-order.md) | D-014 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9.1 | THEME_SYSTEM §15.1 | T-SET-10^, T-THEME-54^, T-THEME-55^ | M8 |
 
 ## NFR-PERF (PRODUCT_SPEC §5)
 
