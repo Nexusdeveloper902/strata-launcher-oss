@@ -57,3 +57,53 @@ unchanged (median 0.05 ms).
 
 **Manual check on the A56.** Type "ytm", "music", "swiftkey", "camara", "spotfy", "instgram", "whatsap": the
 expected app is in the first rows; "map" still gives Maps first.
+
+## 3–4. Not built on this branch: swipe-to-call and the permission checklist
+
+Stopped after items 1 and 2 (coordinator's option: each remaining item is at least as large as both together).
+Findings for whoever picks them up:
+
+**Swipe to call (owner request).**
+- `CALL_PHONE` must be added in three places at once: `app/src/main/AndroidManifest.xml`,
+  `config/approved-permissions.txt` (`checkPermissions`, T-CI-01, and `:app:checkReleaseApk` reads the same list)
+  and the ANDROID_PLATFORM §23 table (row "Optional (opt-in, runtime)"); T-CI-01's text lists the approved set
+  too. `ACTION_DIAL` needs no permission and no `<queries>` entry to start (only to resolve).
+- New setting: ARCHITECTURE §4.2 field 25 `swipe_to_call` enum `{OFF, DIAL, CALL}`, default `DIAL`; touch
+  `settings.proto`, `SettingsMapper` (read and `applyChanges`), `Settings`, `backup/.../SettingsCodec.kt` (enum
+  entry; decide Export yes/no) and `SettingsRepositoryTest`. Effective mode = `CALL` only while the permission is
+  granted, else `DIAL` (same "effective only while granted" pattern as fields 13 and 15).
+- `ContactHit` has only the lookup URI, name and photo. The number needs a second, on-demand query
+  (`ContactsContract.CommonDataKinds.Phone` by `LOOKUP_KEY`, `IS_SUPER_PRIMARY`/`IS_PRIMARY` first) when the
+  swipe passes the threshold, on IO, never logged (use the redacted logger, ARCHITECTURE §11). Several numbers and
+  no primary → a small chooser. Put it behind `ContactsSource` (`numbers(hit)`), with `FakeContactsSource` support.
+- The permission request belongs in `HomeActivity` (the search layer is hosted there); keep the in-flight flag in
+  the view model like `SettingsViewModel.contactsRequestInFlight`.
+- Gesture: `SearchScreen.ContactRow` is a merged `clickable` row. Use `anchoredDraggable` / `draggable` with a
+  horizontal-dominance check and the threshold in dp, mirrored under RTL; the right-edge back exclusion and the
+  alphabet index live in home's layers, not in the search layer, so a drag starting inside the row does not
+  reach them. Haptics through the `Haptics` interface (`HapticKind.GESTURE_END`), gated like elsewhere.
+
+**Permission checklist (owner request).**
+- Existing pieces to reuse: `SettingsViewModel` already re-reads lock, badges, contacts and role on
+  `SettingsAction.Resume` (off main for the role and the listener), `OptionalAccessUi.restrictedSettingsHint`
+  (today simply "API ≥ 33"), `SystemIntents.strataAppDetails()`, `BadgeSource.openGrantScreen()` (already tries
+  the listener detail page with the component on API 30+, then the list).
+- Accessibility deep link to add in `AndroidSystemIntents.accessibilitySettings()`: API 33+
+  `ACTION_ACCESSIBILITY_DETAILS_SETTINGS` + `EXTRA_COMPONENT_NAME` if it resolves, else
+  `ACTION_ACCESSIBILITY_SETTINGS` with `:settings:fragment_args_key` and a `:settings:show_fragment_args`
+  bundle holding the flattened `LockAccessibilityService` component; resolve before starting. Robolectric can
+  register handlers per test (`ShadowPackageManager.addActivityIfNotPresent` + intent filter) as
+  `AndroidSystemIntentsTest` does.
+- FR-ONBOARD-01 says "No optional permission is requested here" and "≤ 4 screens": the checklist fits on the
+  Done step, showing only features already on (e.g. after a restore) plus the default-home status, with
+  user-initiated actions only. The Privacy & permissions page is already in the a11y and contrast scenarios
+  (`AccessibilityScenarios.settingsPrivacy`, `ContrastTest`), so a checklist there is covered automatically.
+
+## Verification on this branch
+
+Full check (`--max-workers=1`, CONTRIBUTING.md command): every task passed except that the `:app:testDebugUnitTest`
+JVM was killed twice by the kernel (exit 137): the container's memory is shared with two other agents' builds.
+Each time the test then running was `ContrastTest.themeEditorJsonAndEnd` (editor not yet rendered); its 24
+preset runs pass alone. The app unit tests were then run in package chunks, each started with at least 4.5 GB
+free; every chunk passed first time (a11y incl. large text, pseudo-locale and bidi layouts, diagnostics, home,
+i18n, onboarding, pin, settings, startup, theme, widget).
