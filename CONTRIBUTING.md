@@ -40,11 +40,27 @@ where Actions minutes are free.
   `research/UNRESOLVED.md` U-001, U-003, U-004). Never add those files, or content from them,
   to anything that is mirrored.
 - `tools/mirror/sync-public.sh <branch>...` (needs `pip install git-filter-repo`) filters and
-  pushes branches. The filter is deterministic, so syncs are fast-forwards; never force-push
-  the mirror.
-- Flow per change: push the branch here, run `tools/mirror/sync-public.sh <branch>`, open a PR
-  on the mirror to run CI, squash-merge the PR **here** once the mirror's CI is green, then run
-  `tools/mirror/sync-public.sh main` and close the mirror PR. Nothing is merged on the mirror.
+  pushes branches, and always brings the mirror's `main` up to date too (a mirror PR's CI tests the
+  branch merged into the *mirror's* `main`). The filter is deterministic, so syncs are
+  fast-forwards; never force-push the mirror.
+- Flow per change:
+  1. Push the branch here and run `tools/mirror/sync-public.sh <branch>`. Open a PR on the mirror
+     to run CI.
+  2. If the change touches device tests (`app/src/androidTest`, `DeviceState.kt`), the benchmark
+     module, test options in `build-logic`, or `nightly.yml`, also run the nightly matrix on the
+     branch: `gh workflow run nightly.yml -R Nexusdeveloper902/strata-launcher-oss --ref <branch>`.
+     PR CI covers only API 26/34/36. The nightly matrix is not a merge gate, but a new failure there is
+     fixed before the merge.
+  3. Before merging, run `tools/mirror/check-pr-fresh.sh <branch>`. It passes only when the newest PR
+     run is green, ran on the branch's current head, and started after the mirror's current `main` was
+     pushed. Otherwise sync again and wait for the new run.
+  4. Squash-merge the PR **here**, run `tools/mirror/sync-public.sh main`, close the mirror PR.
+     Nothing is merged on the mirror.
+  5. Re-check `main`: the sync starts CI on the mirror's `main` (a `push` run). Watch it
+     (`gh run watch -R Nexusdeveloper902/strata-launcher-oss <id>`). If it is red, `main` is broken
+     until it is fixed or reverted. Follow `docs/ci/RELIABILITY.md` to tell a flake from a real
+     failure. CI can also be re-run on `main` by hand (`gh workflow run ci.yml --ref main`).
+- Flaky tests, the re-run rule and how failures are classified: `docs/ci/RELIABILITY.md`.
 - This repository stays the source of truth.
 
 ## Clean room
