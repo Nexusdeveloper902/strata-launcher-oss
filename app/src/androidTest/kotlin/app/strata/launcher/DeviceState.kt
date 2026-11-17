@@ -143,6 +143,38 @@ fun ComposeTestRule.openAllApps(timeoutMillis: Long = 10_000) {
  * set-default step (Continue while Strata is home, else "Not now") → Done. The Orchestrator clears app data before
  * every test, so each HomeActivity test starts with it. Returns the number of screens passed.
  */
+
+/**
+ * Waits until a RESUMED activity of [type] has window focus, i.e. WindowManager shows it and input goes to it. Compose
+ * finds nodes as soon as they are composed, which can be well before that: CI run 44068284763 (API 34, tSearch13)
+ * clicked onboarding 1.3 s before HomeActivity was displayed, the touch landed on the window below (another app) and
+ * injection was refused ("Failed to inject touch input"). Fails with who holds focus instead.
+ */
+fun ComposeTestRule.awaitFocusedActivity(
+    type: Class<out Activity>,
+    timeoutMillis: Long = DEVICE_TIMEOUT_MS,
+) {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    fun focused(): Boolean {
+        var f = false
+        instrumentation.runOnMainSync {
+            f =
+                ActivityLifecycleMonitorRegistry
+                    .getInstance()
+                    .getActivitiesInStage(Stage.RESUMED)
+                    .any { type.isInstance(it) && it.window.decorView.hasWindowFocus() }
+        }
+        return f
+    }
+    val device = UiDevice.getInstance(instrumentation)
+    try {
+        waitUntil(timeoutMillis) { focused().also { if (!it) closeSystemErrorDialog(device) } }
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError("No focused ${type.simpleName} within $timeoutMillis ms. ${focusReport()}", e)
+    }
+}
+
 fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
     fun count(tag: String) = onAllNodesWithTag(tag).fetchSemanticsNodes().size
 
@@ -155,6 +187,8 @@ fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
             count(OnboardingTestTags.CONTINUE) > 0 -> OnboardingTestTags.CONTINUE
             else -> ""
         }
+    // Touches go to the focused window only: wait until home (or onboarding's own activity) is shown and focused.
+    awaitFocusedActivity(ComponentActivity::class.java)
     var screens = 0
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()

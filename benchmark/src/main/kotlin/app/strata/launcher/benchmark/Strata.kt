@@ -2,6 +2,7 @@ package app.strata.launcher.benchmark
 
 import android.content.Intent
 import android.os.SystemClock
+import android.util.Log
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
@@ -75,9 +76,46 @@ internal fun MacrobenchmarkScope.openSearch(): UiObject2 {
     return device.waitOrFail(Strata.SEARCH_FIELD)
 }
 
-internal fun UiDevice.findOrFail(res: String): UiObject2 =
-    wait(Until.findObject(By.res(res)), Strata.TIMEOUT_MS)
-        ?: error("'$res' not on screen after ${Strata.TIMEOUT_MS} ms (is the benchmark build of :app installed?)")
+/**
+ * Waits for [res] on screen, answering a system error dialog of ANOTHER process meanwhile. On a loaded emulator System
+ * UI can raise an ANR dialog that covers home (Macrobenchmark, run 44068284763: "Application Not Responding:
+ * com.android.systemui", then 'home_all_apps' not found). System UI's is answered "Wait" (closing it restarts System UI
+ * with the keyguard up), other apps' "Close". A dialog about the target itself is left alone, so its ANR still fails.
+ */
+internal fun UiDevice.findOrFail(res: String): UiObject2 {
+    val end = SystemClock.uptimeMillis() + Strata.TIMEOUT_MS
+    while (true) {
+        wait(Until.findObject(By.res(res)), FIND_SLICE_MS)?.let { return it }
+        answerForeignErrorDialog()
+        if (SystemClock.uptimeMillis() >= end) {
+            error(
+                "'$res' not on screen after ${Strata.TIMEOUT_MS} ms (is the benchmark build of :app installed?) " +
+                    focusedWindow(),
+            )
+        }
+    }
+}
+
+private fun UiDevice.focusedWindow(): String =
+    executeShellCommand("dumpsys window")
+        .lineSequence()
+        .map(String::trim)
+        .firstOrNull { it.startsWith("mCurrentFocus") }
+        .orEmpty()
+
+/** Answers a showing "isn't responding" / "keeps stopping" dialog unless it is about [Strata.TARGET]. */
+private fun UiDevice.answerForeignErrorDialog() {
+    val wait = findObject(By.res("android", "aerr_wait"))
+    val close = findObject(By.res("android", "aerr_close"))
+    if (wait == null && close == null) return
+    val focus = focusedWindow()
+    if (Strata.TARGET in focus) return
+    val button = if ("com.android.systemui" in focus) wait ?: close else close ?: wait
+    Log.w("Strata", "Answering a system error dialog of another process: $focus")
+    button?.click()
+}
+
+private const val FIND_SLICE_MS = 1_000L
 
 internal fun UiDevice.waitOrFail(res: String): UiObject2 = findOrFail(res)
 

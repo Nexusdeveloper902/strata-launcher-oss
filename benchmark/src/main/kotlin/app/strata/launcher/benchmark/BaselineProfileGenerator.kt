@@ -40,6 +40,13 @@ class BaselineProfileGenerator {
             }
             val b = device.onFresh(Strata.INDEX) { it.visibleBounds }
             device.swipe(b.centerX(), b.top + b.height() / 10, b.centerX(), b.bottom - b.height() / 10, 60)
+            // The list's search field is the list's first item: the scrub left the list at its end (nightly run
+            // 44068284763: field not on screen). Scrub back up and fling to the top before opening search.
+            device.swipe(b.centerX(), b.bottom - b.height() / 10, b.centerX(), b.top + b.height() / 10, 60)
+            device.onFresh(Strata.LIST) {
+                it.setGestureMargin(device.displayWidth / 5)
+                it.fling(Direction.UP)
+            }
             device.clickOrFail(Strata.SEARCH_FIELD_IN_LIST)
             device.waitOrFail(Strata.SEARCH_FIELD)
             for (q in listOf("a", "ma", "map")) {
