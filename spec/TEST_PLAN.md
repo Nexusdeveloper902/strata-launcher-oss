@@ -55,6 +55,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-HOME-11 | Phone rotation lock | phone (< 600 dp), "Allow rotation" off then on | Rotate the device | Off: stays portrait. On: layout rotates. The search query survives | I | FR-HOME-08 |
 | T-HOME-13 | Launcher-icon routing | fresh install, another launcher default; then `onboarding_done` = true; then Strata default | Tap the Strata icon in the other launcher in each state. Separately, start `SettingsActivity` with `APPLICATION_PREFERENCES` | Not onboarded: onboarding opens. Onboarded, not default: HomeActivity in APP_MODE (explicit intent, the entry activity finishes). Default: HomeActivity. `APPLICATION_PREFERENCES`: settings root, no routing. Strata's own icon is absent from its app list | I | FR-HOME-01, FR-ONBOARD-01 |
 | T-HOME-12 | Tablet always rotates | API 36 tablet, sw ≥ 600 dp, setting off | Rotate | Layout re-flows to two-column per VISUAL_SPEC §8. No letterboxing | I | FR-HOME-08, NFR-COMPAT-03 |
+| T-HOME-15 | Arrival is not a Home press (FB-008) | setting "Home press opens search" on; another app in front | Return to home with the Home gesture or button. Then press Home again on resting home | The arrival resets home to rest and search stays closed. The second press, made while home is in front, opens search | C + I | FR-HOME-05 |
 
 ## 3. LIST
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -138,6 +139,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-GEST-07 | Keep-back option | "Keep back gesture on index side" on | Touch letter M, read the rects | Exclusion limited to 200 dp around M + 16 dp inward extension | I | FR-GEST-05 |
 | T-GEST-08 | Alternatives audit | INTERACTION_SPEC §4.1 table parsed by a test | Assert the "Alternative" column is non-empty for every used gesture. Assert the home-root custom actions (Search, All apps, Widgets, Themes, Settings) exist | All present | U + C | FR-GEST-06 |
 | T-GEST-09 | Three-button navigation | 3-button nav, API 29/34 | Scrub the full index height. Press Back/Home buttons | Index works on its full height. Buttons behave per INTERACTION_SPEC §6 | I | FR-GEST-05, NFR-COMPAT-02 |
+| T-GEST-10 | Home gesture does not carry into home (FB-008) | gesture nav, API 29+; another app in front | Swipe up from the bottom edge to go home. Inject a pointer stream whose `ACTION_DOWN` time is before home's resume, then a fresh swipe up on resting home | The arrival and the stale stream open nothing (search stays closed). The fresh swipe opens search | C + I | FR-GEST-01, FR-HOME-05 |
 
 ## 8. NOTIF
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |

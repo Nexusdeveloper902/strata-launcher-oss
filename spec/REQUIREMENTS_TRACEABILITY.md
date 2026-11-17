@@ -21,7 +21,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-HOME-02 | P0 | Home layout order: header, favourites, search pill, insets | Corroborated (list home); Proposed (bottom anchoring) | PUB-008, PUB-034, APK-026 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-03, T-HOME-04 | M3 [spec Rel: v1] |
 | FR-HOME-03 | P1 | Clock tap opens alarms, date opens calendar, toast fallback | Inferred | PUB-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-05, T-HOME-06 | M3 [spec Rel: v1] |
 | FR-HOME-04 | P1 | Hide status bar, clock, date and alphabet index | Corroborated | APK-026, PUB-063 | :feature:home, :app (area); cited ARCH §4.2 | PRODUCT_SPEC §4.1 | T-HOME-07, T-HOME-08 | M3 [spec Rel: v1] |
-| FR-HOME-05 | P0 | Home press resets overlays; optional open-search setting | Inferred (reset); Proposed (default off) | PUB-051 | :feature:home, :app (area); cited ARCH §4.2, §5 | PRODUCT_SPEC §4.1 | T-HOME-09, T-HOME-10 | M3 [spec Rel: v1] |
+| FR-HOME-05 | P0 | Home press resets overlays; optional open-search setting | Inferred (reset); Proposed (default off) | PUB-051 | :feature:home, :app (area); cited ARCH §4.2, §5 | PRODUCT_SPEC §4.1 | T-HOME-09, T-HOME-10, T-HOME-15^, T-GEST-10^ | M3 [spec Rel: v1] |
 | FR-HOME-06 | P2 | Up to three suggested frequent apps, off by default | Corroborated | PUB-006, APK-026, APK-027 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | NONE | v1.x [spec Rel: v1.x] |
 | FR-HOME-07 | P2 | Restore list scroll position when returning within 3 s | Inferred (capability); Proposed (3 s value) | PUB-051 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | NONE | v1.x [spec Rel: v1.x] |
 | FR-HOME-08 | P1 | Rotation setting on phones; tablets follow orientation | Corroborated | PUB-053, APK-026, DOC-052 | :feature:home, :app (area); cited ARCH §4.2 | PRODUCT_SPEC §4.1 | T-HOME-11, T-HOME-12 | M3 [spec Rel: v1] |
@@ -82,7 +82,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-GEST-01 | P0 | Swipe up on home opens search | Corroborated | APK-028, PUB-013 | :feature:home, :platform:system (area); not cited in ARCH | PRODUCT_SPEC §4.6 | T-GEST-01, T-GEST-02, T-SEARCH-01, T-FAV-05 | M3 [spec Rel: v1] |
+| FR-GEST-01 | P0 | Swipe up on home opens search | Corroborated | APK-028, PUB-013 | :feature:home, :platform:system (area); not cited in ARCH | PRODUCT_SPEC §4.6 | T-GEST-01, T-GEST-02, T-SEARCH-01, T-FAV-05, T-GEST-10^ | M3 [spec Rel: v1] |
 | FR-GEST-02 | P0 | Long-press opens app sheet or home menu | Inferred (app sheet); Proposed (home menu) | PUB-008, PUB-023 | :feature:home, :platform:system (area); not cited in ARCH | PRODUCT_SPEC §4.6 | T-GEST-03, T-APPS-05 | M3 [spec Rel: v1] |
 | FR-GEST-03 | P1 | Double-tap locks screen via opt-in accessibility service | Corroborated (capability); Proposed (free, location) | APK-007, APK-029, PUB-030, DOC-039, DOC-041 | :feature:home, :platform:system (area); cited ARCH §4.2, §17 | PRODUCT_SPEC §4.6 | T-GEST-04 | v1.x [spec Rel: v1.x] |
 | FR-GEST-04 | P2 | Optional swipe-down action opens notifications | Inferred (capability); Proposed | PUB-014, DOC-039, P-8 | :feature:home, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.6 | NONE | v1.x [spec Rel: v1.x] |
@@ -281,15 +281,15 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
 - Requirements with at least one test: 145; without: 11.
 - Requirements with a roadmap milestone: 152; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 260; §22 rows: 144.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 262; §22 rows: 144.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
 - Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
-- §22-only pairs (~): none. Covers-only pairs (^): FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PRIV-01/T-SET-09.
-- §22/Covers disagreements in total: 0 §22-only pairs, 6 Covers-only pairs (suffixes in the matrix).
+- §22-only pairs (~): none. Covers-only pairs (^): FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PRIV-01/T-SET-09.
+- §22/Covers disagreements in total: 0 §22-only pairs, 9 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria
