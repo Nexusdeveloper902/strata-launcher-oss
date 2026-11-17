@@ -46,6 +46,7 @@ import app.strata.launcher.feature.home.HomeModal
 import app.strata.launcher.feature.home.HomeRoute
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.home.HomeWidgetSlot
+import app.strata.launcher.feature.home.LocalWallClock
 import app.strata.launcher.feature.home.rememberAppActions
 import app.strata.launcher.feature.onboarding.OnboardingAction
 import app.strata.launcher.feature.onboarding.OnboardingRoute
@@ -221,7 +222,10 @@ class HomeActivity : ComponentActivity() {
             }
             setContent {
                 themeHost.Content(window) {
-                    CompositionLocalProvider(LocalIconLoader provides iconLoader) {
+                    CompositionLocalProvider(
+                        LocalIconLoader provides iconLoader,
+                        LocalWallClock provides appGraph.timeTicks::nowMillis,
+                    ) {
                         val state by viewModel.state.collectAsStateWithLifecycle()
                         // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                         ReportDrawnWhen { state.listReady }
