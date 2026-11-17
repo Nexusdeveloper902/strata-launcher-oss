@@ -30,15 +30,16 @@ search field showed the keyboard, the IME insets arrived, and the guard hid it o
 focused fields, provided per window as `LocalImeFields`), `Modifier.imeField()` (registers a field while it has
 focus, unregisters on blur or disposal) and `StrayImeGuard`, which hides only when the IME is visible, the screen
 state does not expect a field **and** no `imeField` is focused. Search, rename and `AppPicker` carry
-`imeField()`. `imeAllowed` also lists the favourites picker, and home passes `imeAllowed || showOnboarding`, so
-both mechanisms agree. The T-HOME-09 behaviour is kept: once a field is gone (search closed), a keyboard that
+`imeField()`. `imeAllowed` stays search and rename only: the pickers keep their keyboard through their focused
+field alone, so the end-to-end test exercises `imeField` (review of PR #35; removing `.imeField()` from `AppPicker`
+makes both picker cases fail with one hide). The T-HOME-09 behaviour is kept: once a field is gone (search closed), a keyboard that
 still shows is hidden.
 
 **Tests (T-HOME-14).** `StrayImeGuardTest` (`:core:ui`, Compose): `BasicTextField`, `OutlinedTextField` and
 `AppPicker` with the screen state saying "no field": focus, IME visible, no hide, focus kept; removing the field
 hides. `KeyboardStaysTest` (`:app`, Robolectric `HomeActivity`): favourites picker, onboarding picker, search
-field, rename field each focused and IME insets dispatched to the Compose view: focus kept, zero hides; at rest
-and after closing search a visible keyboard is still hidden once.
+field, rename field each focused and IME insets dispatched to the Compose view: focus kept, zero hides; at rest,
+after closing search and after cancelling the favourites picker a visible keyboard is still hidden once.
 
 **Manual check on the A56.** Home menu → Edit favourites → Add apps → tap the search field: the keyboard stays,
 type "ma", list filters. Same in a fresh onboarding run started from Home. Rename an app from the sheet. Open
@@ -49,10 +50,18 @@ search and press Home: the keyboard does not stay over home.
 See FR-SEARCH-02 (amended) and ARCHITECTURE §8. Tests T-SEARCH-17…22 and the T-PERF-05 typo set
 (`:core:search`). JVM: median 0.18 ms, p95 0.67 ms for the typo set over 500 apps; the original query set is
 unchanged (median 0.05 ms).
-- Camel-case and letter/digit word boundaries for word prefixes and initials ("tube", "ytm").
-- Package name as a substring-tier form; generic segments (`com`, `android`, …) never match alone.
+- Camel-case and letter/digit word boundaries: the split label is matched by every tier but fuzzy ("tube",
+  "ptm", "play tub").
+- Package name in its own tier (150), below every label match: the last two segments that are not generic or a
+  vendor prefix (`google`, `samsung`, `sec`…), so "goo" no longer lists every app of a vendor. Package hits do not
+  count toward the fuzzy gate. Results sort by tier first, so no bonus or usage crosses tiers.
 - Fuzzy: OSA distance, 1 edit at 4–7 chars, 2 from 8, against the label or any label word, +10 at the label
-  start; only when the other tiers found fewer than 5 apps.
+  start; only when the label tiers found fewer than 5 apps and the query has a letter; lengths in code points.
+- The fuzzy perf test reports its timings with loose ceilings (16 ms median, 64 ms p95): the 8 / 16 ms budget is
+  for the device trace, and a shared CI host must not fail it on load.
+- `SearchViewModel.translitCache` is a `ConcurrentHashMap` (review of PR #35). `mapLatest` already cancels and
+  joins a running build before starting the next, so builds did not overlap; the concurrent map keeps it safe if
+  the pipeline changes.
 - Not built: English labels on a non-English system (a resource load per app per catalog change).
 
 **Manual check on the A56.** For apps on the phone, type a word from the middle of a name, the initials of a

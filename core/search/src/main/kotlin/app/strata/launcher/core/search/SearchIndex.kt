@@ -10,6 +10,9 @@ enum class MatchTier(val base: Int) {
     WORD_PREFIX(400),
     INITIALS(300),
     SUBSTRING(200),
+
+    /** A package-name match (D-016): below every label match, above fuzzy. */
+    PACKAGE(150),
     FUZZY(100),
 }
 
@@ -41,10 +44,12 @@ class SearchIndex private constructor(
 
     /**
      * Ranks [query] (FR-SEARCH-02). Hidden apps are included only when [includeHidden]
-     * (FR-SEARCH-03). Order: score desc, then collation of the display label.
+     * (FR-SEARCH-03). Order: tier (one lower for a transliterated form), then score, then collation of the display
+     * label, so usage and bonuses never move a result across tiers.
      *
-     * Two passes: tiers T1–T5 over every entry, then T6 (fuzzy) over the entries that did not match, but only when
-     * the first pass found fewer than [FUZZY_WHEN_FEWER_THAN] results and the query is long enough (FR-SEARCH-02).
+     * Two passes: tiers T1–T5 and the package tier over every entry, then T6 (fuzzy) over the entries that did not
+     * match, but only when the first pass found fewer than [FUZZY_WHEN_FEWER_THAN] label matches (package-only hits do
+     * not count) and the query is long enough and contains a letter (FR-SEARCH-02).
      */
     fun rank(
         query: String,
@@ -53,6 +58,7 @@ class SearchIndex private constructor(
         val q = SearchFold.fold(query)
         if (q.isEmpty()) return emptyList()
         val matches = ArrayList<Match>()
+        var labelMatches = 0
         var unmatched: BooleanArray? = null
         for (index in entries.indices) {
             val entry = entries[index]
@@ -64,13 +70,15 @@ class SearchIndex private constructor(
             }
             if (best != null) {
                 matches += best
+                if (best.tier != MatchTier.PACKAGE) labelMatches++
             } else {
                 if (unmatched == null) unmatched = BooleanArray(entries.size)
                 unmatched[index] = true
             }
         }
-        val edits = Fuzzy.maxEdits(q.length)
-        if (edits > 0 && matches.size < FUZZY_WHEN_FEWER_THAN && unmatched != null) {
+        // Lengths in code points: an emoji or another supplementary character is one character, not two.
+        val edits = if (Fuzzy.hasLetter(q)) Fuzzy.maxEdits(q.codePointCount(0, q.length)) else 0
+        if (edits > 0 && labelMatches < FUZZY_WHEN_FEWER_THAN && unmatched != null) {
             val scratch = Fuzzy.Scratch(q.length + edits + 1)
             for (index in entries.indices) {
                 if (!unmatched[index]) continue
@@ -113,13 +121,15 @@ class SearchIndex private constructor(
     ): Match? {
         val base = if (form.transliterated) tier.base - TIER_GAP else tier.base
         val score = base + bonus + (if (form.display) DISPLAY_BONUS else 0) + entry.boost
-        return if (current == null || score > current.score) Match(entry, score, tier, form) else current
+        val better = current == null || base > current.base || (base == current.base && score > current.score)
+        return if (better) Match(entry, base, score, tier, form) else current
     }
 
     /** Apps by key (recents of FR-SEARCH-05 are resolved through the same set). */
     fun appFor(key: AppKey): VisibleApp? = entries.firstOrNull { it.app.key == key }?.app
 
-    private class Match(val entry: Entry, val score: Int, val tier: MatchTier, val form: Form)
+    /** [base] = the tier's base, one tier lower for a transliterated form: the first sort key. */
+    private class Match(val entry: Entry, val base: Int, val score: Int, val tier: MatchTier, val form: Form)
 
     private class Entry(
         val app: VisibleApp,
@@ -135,10 +145,13 @@ class SearchIndex private constructor(
         /** The folded label: every tier. */
         LABEL,
 
-        /** The label split at camel-case boundaries ("play tube music"): word-prefix and initials only. */
+        /** The label split at camel-case boundaries ("play tube music"): every tier but fuzzy ("play tub" → PlayTube). */
         CAMEL,
 
-        /** The package name ("com example chatty"): word-prefix of a non-generic segment, scored as a substring (T5). */
+        /**
+         * The last two meaningful package segments ("chatty", "stream music"; generic and vendor segments dropped): a
+         * word prefix of one of them, or a dotted query inside the whole name ([full]), gives [MatchTier.PACKAGE].
+         */
         PACKAGE,
     }
 
@@ -148,6 +161,8 @@ class SearchIndex private constructor(
         val display: Boolean,
         val transliterated: Boolean,
         val kind: FormKind = FormKind.LABEL,
+        /** [FormKind.PACKAGE] only: the whole folded package name ("com example chatty"). */
+        val full: String = folded,
     ) {
         /** Start offsets of words after the first (the first is the label prefix). */
         private val wordStarts: IntArray
@@ -158,8 +173,7 @@ class SearchIndex private constructor(
             val init = StringBuilder()
             for (i in folded.indices) {
                 if (i == 0 || folded[i - 1] == ' ') {
-                    val generic = kind == FormKind.PACKAGE && isGenericSegment(folded, i)
-                    if (i > 0 && !generic) starts += i
+                    if (i > 0) starts += i
                     init.appendCodePoint(folded.codePointAt(i))
                 }
             }
@@ -169,12 +183,9 @@ class SearchIndex private constructor(
 
         fun match(q: String): MatchTier? {
             val f = folded
+            if (kind == FormKind.PACKAGE) return matchPackage(f, q)
             if (f.length < q.length) return null
-            return when (kind) {
-                FormKind.LABEL -> matchLabel(f, q)
-                FormKind.CAMEL -> matchCamel(q)
-                FormKind.PACKAGE -> matchPackage(f, q)
-            }
+            return matchLabel(f, q)
         }
 
         private fun matchLabel(
@@ -188,19 +199,13 @@ class SearchIndex private constructor(
             return null
         }
 
-        private fun matchCamel(q: String): MatchTier? {
-            if (wordPrefix(q)) return MatchTier.WORD_PREFIX
-            if (initialsMatch(q)) return MatchTier.INITIALS
-            return null
-        }
-
         private fun matchPackage(
             f: String,
             q: String,
         ): MatchTier? {
             if (q.length < PACKAGE_MIN) return null
-            val first = !isGenericSegment(f, 0) && f.startsWith(q)
-            return if (first || wordPrefix(q) || (q.indexOf(' ') >= 0 && f.contains(q))) MatchTier.SUBSTRING else null
+            val segment = f.length >= q.length && (f.startsWith(q) || wordPrefix(q))
+            return if (segment || (q.indexOf(' ') >= 0 && full.contains(q))) MatchTier.PACKAGE else null
         }
 
         private fun wordPrefix(q: String): Boolean {
@@ -257,23 +262,56 @@ class SearchIndex private constructor(
 
         val EMPTY: SearchIndex = SearchIndex(emptyArray())
 
-        /** Package segments that say nothing about the app ("com", "android"…); never matched on their own. */
+        /**
+         * Package segments that say nothing about the app: domains and platform words ("com", "android"…) and the
+         * prefixes of large vendors, which would otherwise match every app they ship ("goo" → all of them).
+         */
         private val GENERIC_SEGMENTS: Set<String> =
-            setOf("com", "org", "net", "io", "de", "co", "uk", "app", "apps", "android", "mobile", "client")
+            setOf(
+                "com",
+                "org",
+                "net",
+                "io",
+                "de",
+                "co",
+                "uk",
+                "app",
+                "apps",
+                "android",
+                "mobile",
+                "client",
+                "google",
+                "samsung",
+                "sec",
+                "microsoft",
+                "huawei",
+                "xiaomi",
+                "miui",
+                "oneplus",
+                "oppo",
+                "vivo",
+                "motorola",
+                "sony",
+                "lge",
+                "htc",
+                "nokia",
+                "amazon",
+                "meta",
+                "facebook",
+            )
 
-        internal fun isGenericSegment(
-            f: String,
-            start: Int,
-        ): Boolean {
-            var end = f.indexOf(' ', start)
-            if (end < 0) end = f.length
-            val len = end - start
-            for (g in GENERIC_SEGMENTS) if (g.length == len && f.regionMatches(start, g, 0, len)) return true
-            return false
+        /** At most this many meaningful package segments, from the end, are matched. */
+        private const val PACKAGE_SEGMENTS = 2
+
+        /** The last [PACKAGE_SEGMENTS] segments of a folded package name that are not generic, joined by spaces. */
+        internal fun meaningfulSegments(foldedPackage: String): String {
+            val kept = foldedPackage.split(' ').filter { it.isNotEmpty() && it !in GENERIC_SEGMENTS }
+            return kept.takeLast(PACKAGE_SEGMENTS).joinToString(" ")
         }
 
         private val ORDER: Comparator<Match> =
-            compareByDescending<Match> { it.score }
+            compareByDescending<Match> { it.base }
+                .thenByDescending { it.score }
                 .thenBy { it.entry.collationRank }
 
         /**
@@ -300,7 +338,16 @@ class SearchIndex private constructor(
                         addForms(forms, app.systemLabel, display = false, transliterate, translitCache)
                     }
                     val pkg = SearchFold.fold(app.packageName)
-                    if (pkg.isNotEmpty()) forms += Form(pkg, display = false, transliterated = false, FormKind.PACKAGE)
+                    if (pkg.isNotEmpty()) {
+                        forms +=
+                            Form(
+                                meaningfulSegments(pkg),
+                                display = false,
+                                transliterated = false,
+                                FormKind.PACKAGE,
+                                pkg,
+                            )
+                    }
                     Entry(
                         app = app,
                         forms = forms.toTypedArray(),
@@ -359,7 +406,18 @@ class SearchIndex private constructor(
  * a prefix of a label word. Allowed edits: 1 for queries of 4–7 characters, 2 from 8 (FR-SEARCH-02, Proposed).
  */
 internal object Fuzzy {
-    /** Edits allowed for a folded query of [length] characters; 0 = no fuzzy matching. */
+    /** True when [q] contains a letter: queries of digits, symbols or emoji are never matched fuzzily. */
+    fun hasLetter(q: String): Boolean {
+        var i = 0
+        while (i < q.length) {
+            val cp = q.codePointAt(i)
+            if (Character.isLetter(cp)) return true
+            i += Character.charCount(cp)
+        }
+        return false
+    }
+
+    /** Edits allowed for a folded query of [length] characters (code points); 0 = no fuzzy matching. */
     fun maxEdits(length: Int): Int =
         when {
             length < SearchIndex.FUZZY_MIN -> 0

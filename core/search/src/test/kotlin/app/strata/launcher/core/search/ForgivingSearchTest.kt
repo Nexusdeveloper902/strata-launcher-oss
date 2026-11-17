@@ -58,6 +58,11 @@ class ForgivingSearchTest {
         assertThat(idx.hit("tube", tube)!!.tier).isEqualTo(MatchTier.WORD_PREFIX)
         assertThat(idx.hit("type", keyboard)!!.tier).isEqualTo(MatchTier.WORD_PREFIX)
         assertThat(idx.hit("key", keyboard)!!.tier).isEqualTo(MatchTier.WORD_PREFIX)
+        // A camel-case first word typed with a space: the split label matches like the label itself.
+        assertThat(idx.labels("play tube").take(2)).containsExactly("PlayTube", "PlayTube Music").inOrder()
+        assertThat(idx.hit("play tube", tube)!!.tier).isEqualTo(MatchTier.EXACT)
+        assertThat(idx.labels("play tub").take(2)).containsExactly("PlayTube", "PlayTube Music").inOrder()
+        assertThat(idx.hit("play tub", tubeMusic)!!.tier).isEqualTo(MatchTier.PREFIX)
     }
 
     /** T-SEARCH-18: initials and acronyms over spaces and camel-case boundaries. */
@@ -80,8 +85,8 @@ class ForgivingSearchTest {
         assertThat(idx.labels("fotografo")).containsExactly("Fotógrafo")
         assertThat(idx.hit("FOTOGRAFO", fotografo)!!.tier).isEqualTo(MatchTier.EXACT)
         assertThat(idx.labels("typecraft")).containsExactly("Northwind QuickType Keyboard")
-        assertThat(idx.hit("typecraft", keyboard)!!.tier).isEqualTo(MatchTier.SUBSTRING)
-        assertThat(idx.hit("typecraft", keyboard)!!.score).isEqualTo(MatchTier.SUBSTRING.base)
+        assertThat(idx.hit("typecraft", keyboard)!!.tier).isEqualTo(MatchTier.PACKAGE)
+        assertThat(idx.hit("typecraft", keyboard)!!.score).isEqualTo(MatchTier.PACKAGE.base)
         assertThat(idx.labels("com.example.chatty")).containsExactly("ChattyApp")
         // Soundify's package ends in ".music": a package match, below every label match.
         val musicHits = idx.labels("music")
@@ -89,6 +94,54 @@ class ForgivingSearchTest {
         assertThat(idx.labels("com")).isEmpty()
         assertThat(idx.labels("android")).isEmpty()
         assertThat(idx.labels("app")).containsExactly("ChattyApp") // label substring only
+    }
+
+    /**
+     * T-SEARCH-19: package matches have their own tier below every label match, use only the last two meaningful
+     * segments (vendor prefixes never match), and do not count toward the fuzzy gate.
+     */
+    @Test
+    fun tSearch19_packageTierAndVendors() {
+        val vendorApps =
+            listOf("Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta").map {
+                visible("$it Clock", pkg = "com.google.fixture.${it.lowercase()}")
+            }
+        val goose = visible("Goose Notes", pkg = "com.example.goose")
+        val withVendor = index(vendorApps + goose)
+        assertThat(withVendor.labels("goo")).containsExactly("Goose Notes")
+        assertThat(withVendor.labels("samsung")).isEmpty()
+        assertThat(SearchIndex.meaningfulSegments("com google fixture alpha")).isEqualTo("fixture alpha")
+        assertThat(SearchIndex.meaningfulSegments("com sec android app music")).isEqualTo("music")
+        // Six package-only hits for "planer" do not switch off the typo match for "Garden Planner".
+        val planners =
+            listOf("One", "Two", "Three", "Four", "Five", "Six").map {
+                visible("$it Tool", pkg = "com.example.planer.${it.lowercase()}")
+            }
+        val garden = visible("Garden Planner", pkg = "com.example.garden")
+        val hits = index(planners + garden).rank("planer", includeHidden = true)
+        assertThat(hits.filter { it.tier == MatchTier.PACKAGE }).hasSize(6)
+        assertThat(hits.last().app.key).isEqualTo(garden.key)
+        assertThat(hits.last().tier).isEqualTo(MatchTier.FUZZY)
+        // Usage never lifts a package hit above a label match, nor a fuzzy match above a package hit.
+        val boosted = index(planners + garden, counts = mapOf(garden.key to 10_000, planners[0].key to 10_000))
+        assertThat(boosted.rank("planer", true).map { it.tier.ordinal }).isInOrder()
+        assertThat(
+            boosted
+                .rank("planer", true)
+                .first()
+                .app.key,
+        ).isEqualTo(planners[0].key)
+    }
+
+    /** T-SEARCH-20: queries without letters are never fuzzy; lengths count code points, not UTF-16 units. */
+    @Test
+    fun tSearch20_digitsAndEmojiNotFuzzy() {
+        val numbers = index(listOf(visible("2048 Tiles"), visible("2049 Planner")))
+        assertThat(numbers.labels("2048")).containsExactly("2048 Tiles")
+        val emoji = index(listOf(visible("\uD83C\uDFB5\uD83C\uDFB5 Mix"), visible("ab\uD83C\uDFB6 Mix")))
+        assertThat(emoji.labels("\uD83C\uDFB5\uD83C\uDFB6")).isEmpty() // one emoji off, no letters
+        assertThat(emoji.labels("ab\uD83C\uDFB5")).isEmpty() // 3 characters (4 UTF-16 units): too short for fuzzy
+        assertThat(emoji.labels("\uD83C\uDFB5\uD83C\uDFB5")).containsExactly("\uD83C\uDFB5\uD83C\uDFB5 Mix")
     }
 
     /** T-SEARCH-20: typo tolerance: 1 edit for 4–7 characters, 2 from 8, OSA (transpositions count once). */

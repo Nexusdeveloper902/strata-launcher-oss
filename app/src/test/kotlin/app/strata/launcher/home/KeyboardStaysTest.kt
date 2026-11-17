@@ -105,7 +105,14 @@ class KeyboardStaysTest {
         compose.onNodeWithTag(FavEditTestTags.ADD_APPS).performClick()
         idle()
         focus(FavEditTestTags.PICKER_SEARCH)
+        // The screen state does not list the picker (imeAllowed is false, no onboarding): only the focused imeField
+        // keeps the keyboard.
         assertKept(activity, FavEditTestTags.PICKER_SEARCH)
+        // Closing the picker removes the field: the keyboard still reported up is stray and is hidden, once.
+        compose.onNodeWithTag(FavEditTestTags.PICKER_CANCEL).performClick()
+        idle()
+        compose.onNodeWithTag(FavEditTestTags.PICKER_SEARCH).assertDoesNotExist()
+        assertThat(activity.strayImeHides).isEqualTo(1)
     }
 
     @Test

@@ -214,7 +214,7 @@ class HomeActivity : ComponentActivity() {
                         // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                         ReportDrawnWhen { state.listReady }
                         WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
-                        HideStrayIme(state.imeAllowed || state.showOnboarding)
+                        HideStrayIme(state.imeAllowed)
                         val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
                         HomeRoute(
                             state = state,
