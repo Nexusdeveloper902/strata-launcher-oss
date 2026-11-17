@@ -50,7 +50,6 @@ import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.resumedHomeActivity
 import app.strata.launcher.shell
-import app.strata.launcher.switchNavMode
 import app.strata.launcher.visitRecentsAndReturn
 import app.strata.launcher.windowMatchesNavMode
 import com.google.common.truth.Truth.assertThat
@@ -76,7 +75,11 @@ class HomeDeviceTest {
 
     /** Strata as HOME, no system error dialogs, animations off; set before the activity starts (DeviceState.kt). */
     @get:Rule
-    val rules: RuleChain = RuleChain.outerRule(DeviceStateRule()).around(compose)
+    val rules: RuleChain =
+        RuleChain
+            .outerRule(
+                DeviceStateRule(navModeFor = { if (it.methodName == EDGE_BACK_TEST) "gestural" else null }),
+            ).around(compose)
 
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
@@ -310,16 +313,13 @@ class HomeDeviceTest {
     @Test
     fun searchClosesWithBackFromTheIndexEdge() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-        val restoreNav = runCatching { switchNavMode("gestural") }
-        assumeTrue("gesture navigation is not available: ${restoreNav.exceptionOrNull()}", restoreNav.isSuccess)
-        try {
+        // DeviceStateRule switched to gesture navigation before the activity started (EDGE_BACK_TEST) and restores
+        // the previous mode afterwards.
+        run {
             assumeTrue(
                 "navigation_mode is not gestural",
                 shell("settings get secure navigation_mode").trim() == GESTURAL_NAV_MODE,
             )
-            // The overlay switch is a configuration change: on API 29 the activity is recreated, sometimes twice, and is
-            // briefly stopped (nightly run 43699451179: "No compose hierarchies found" while waiting for the index).
-            // Wait for a resumed, focused home whose insets show the gesture edges, without touching Compose meanwhile.
             awaitResumedHomeIn(gestural = true)
             awaitHomeIndex()
             compose.onNodeWithTag(HomeTestTags.PILL).performClick()
@@ -347,8 +347,6 @@ class HomeDeviceTest {
             // From the very edge inward, at the index's height: the system back gesture.
             device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
             compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) == 0 }
-        } finally {
-            restoreNav.getOrNull()?.invoke()
         }
     }
 
@@ -601,6 +599,7 @@ class HomeDeviceTest {
         const val TAG = "HomeDeviceTest"
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
+        const val EDGE_BACK_TEST = "searchClosesWithBackFromTheIndexEdge"
         const val EDGE_SWIPE_STEPS = 10
 
         /** `settings get secure navigation_mode`: 0 three-button, 1 two-button, 2 gestural. */
