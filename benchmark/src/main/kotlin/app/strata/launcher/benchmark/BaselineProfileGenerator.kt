@@ -28,7 +28,7 @@ class BaselineProfileGenerator {
         rule.collect(packageName = Strata.TARGET, includeInStartupProfile = true) {
             pressHome()
             homeReady()
-            device.onFresh(Strata.ALL_APPS) { it.click() }
+            device.clickOrFail(Strata.ALL_APPS)
             device.waitOrFail(Strata.LIST)
             device.onFresh(Strata.LIST) {
                 it.setGestureMargin(device.displayWidth / 5)
@@ -40,7 +40,7 @@ class BaselineProfileGenerator {
             }
             val b = device.onFresh(Strata.INDEX) { it.visibleBounds }
             device.swipe(b.centerX(), b.top + b.height() / 10, b.centerX(), b.bottom - b.height() / 10, 60)
-            device.onFresh(Strata.SEARCH_FIELD_IN_LIST) { it.click() }
+            device.clickOrFail(Strata.SEARCH_FIELD_IN_LIST)
             device.waitOrFail(Strata.SEARCH_FIELD)
             for (q in listOf("a", "ma", "map")) {
                 device.onFresh(Strata.SEARCH_FIELD) { it.text = q }

@@ -175,7 +175,7 @@ class ThemeBenchmark {
             startupMode = StartupMode.COLD,
             setupBlock = {
                 openLibrary()
-                device.findOrFail("theme_row_$PAPER").click()
+                device.clickOrFail("theme_row_$PAPER")
                 device.waitForIdle()
             },
         ) {
