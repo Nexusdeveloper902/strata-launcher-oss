@@ -17,9 +17,9 @@ Status values: `queued`, `in progress (<branch>)`, `in review (#PR)`, `done (#PR
 | FB-004 | P2 | Smarter search: typing the exact name is annoying | Word prefixes, initials, substrings, typo tolerance; exact and prefix matches still first | in progress (search-contacts-permissions) |
 | FB-005 | P2 | Swipe a contact search result sideways to call it | CALL_PHONE opt-in; falls back to the dialer | in progress (search-contacts-permissions) |
 | FB-006 | P2 | One-tap permission setup: no digging through Accessibility and other menus | Deep links to the exact switch; Android 13+ "Allow restricted settings" guide | in progress (search-contacts-permissions) |
-| FB-007 | P2 | The clock that should be centred is off-centre in some themes | Check every preset and clock alignment option | queued |
-| FB-008 | P1 | Swiping up with the home gesture from inside an app opens search on arrival | The home gesture's swipe must not carry into home as a search swipe | queued |
-| FB-009 | P1 | Uninstalling an app freezes the launcher | The uninstall and catalog update must run in the background | queued |
+| FB-007 | P2 | The clock that should be centred is off-centre in some themes | Check every preset and clock alignment option | in review |
+| FB-008 | P1 | Swiping up with the home gesture from inside an app opens search on arrival | The home gesture's swipe must not carry into home as a search swipe | in review |
+| FB-009 | P1 | Uninstalling an app freezes the launcher | The uninstall and catalog update must run in the background | in review |
 | FB-010 | P3 | Use platform features up to Android 17 where useful (personal build) | Raise compileSdk/targetSdk to the newest available; minSdk stays unless a feature needs it (decision) | queued |
 | FB-011 | P3 | Glyph tweaks the owner may ask for later | The current set is approved | queued |
 

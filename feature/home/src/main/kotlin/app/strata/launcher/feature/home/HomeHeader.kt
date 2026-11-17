@@ -5,7 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
@@ -13,15 +13,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -29,8 +36,14 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextPainter
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -47,6 +60,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.roundToInt
 import app.strata.launcher.core.theme.model.Alignment as ThemeAlignment
 
 /**
@@ -250,12 +264,7 @@ fun HomeHeader(
             HourFormat.H24 -> true
             HourFormat.H12 -> false
         }
-    val horizontal =
-        when (clock.alignment) {
-            ThemeAlignment.START -> Alignment.Start
-            ThemeAlignment.CENTER -> Alignment.CenterHorizontally
-            ThemeAlignment.END -> Alignment.End
-        }
+    val horizontal = horizontalOf(clock.alignment)
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = horizontal,
@@ -296,7 +305,7 @@ fun HomeHeader(
                 text = date,
                 style = Strata.typography.label.copy(fontSize = clock.dateSizeSp.sp, fontWeight = FontWeight.Normal),
                 color = Strata.colors.textSecondary,
-                textAlign = TextAlign.Start,
+                textAlign = textAlignOf(clock.alignment),
                 modifier =
                     Modifier
                         .heightIn(min = 48.dp)
@@ -329,8 +338,21 @@ private fun Clock(
     when (style) {
         // `words` falls back to `numeric`: there is no words formatter (VISUAL_SPEC §9.4).
         ClockStyle.NUMERIC, ClockStyle.WORDS -> {
-            Row(modifier = modifier, verticalAlignment = Alignment.Bottom) {
-                val period: @Composable () -> Unit = {
+            // FB-007: centred, the time itself is centred and the day period hangs beside it.
+            TimeWithPeriod(
+                centred = theme.clock.alignment == ThemeAlignment.CENTER,
+                periodFirst = text.periodFirst,
+                modifier = modifier,
+                time = {
+                    InkText(
+                        text = text.time,
+                        style = base,
+                        color = colors.textPrimary,
+                        centreInk = theme.clock.alignment == ThemeAlignment.CENTER,
+                        modifier = Modifier.testTag(HomeTestTags.CLOCK_TIME),
+                    )
+                },
+                period = {
                     if (text.period != null) {
                         Text(
                             text = text.period,
@@ -340,24 +362,16 @@ private fun Clock(
                             modifier = Modifier.testTag(HomeTestTags.CLOCK_PERIOD),
                         )
                     }
-                }
-                if (text.periodFirst) period()
-                Text(
-                    text = text.time,
-                    style = base,
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    modifier = Modifier.testTag(HomeTestTags.CLOCK_TIME),
-                )
-                if (!text.periodFirst) period()
-            }
+                },
+            )
         }
 
         ClockStyle.NUMERIC_STACKED -> {
             val stacked = base.copy(lineHeight = (size * STACKED_LINE_HEIGHT).sp)
-            Column(modifier = modifier) {
-                Text(text = text.hours, style = stacked, color = colors.textPrimary, maxLines = 1)
-                Text(text = text.minutes, style = stacked, color = colors.textSecondary, maxLines = 1)
+            Column(modifier = modifier, horizontalAlignment = horizontalOf(theme.clock.alignment)) {
+                val centreInk = theme.clock.alignment == ThemeAlignment.CENTER
+                InkText(text = text.hours, style = stacked, color = colors.textPrimary, centreInk = centreInk)
+                InkText(text = text.minutes, style = stacked, color = colors.textSecondary, centreInk = centreInk)
             }
         }
 
@@ -371,6 +385,128 @@ private fun Clock(
         }
     }
 }
+
+/**
+ * The time and the day period side by side, bottoms aligned (period after the time, or before it when the locale puts
+ * it first; mirrored in RTL). When [centred], the box reserves the period's width on both sides, so a parent that
+ * centres the box centres the time itself (FB-007).
+ */
+@Composable
+private fun TimeWithPeriod(
+    centred: Boolean,
+    periodFirst: Boolean,
+    modifier: Modifier,
+    time: @Composable () -> Unit,
+    period: @Composable () -> Unit,
+) {
+    Layout(contents = listOf(time, period), modifier = modifier) { (timeMeasurables, periodMeasurables), constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val t = timeMeasurables.firstOrNull()?.measure(loose)
+        val p = periodMeasurables.firstOrNull()?.measure(loose)
+        val tw = t?.width ?: 0
+        val pw = p?.width ?: 0
+        val height = maxOf(t?.height ?: 0, p?.height ?: 0).coerceIn(constraints.minHeight, constraints.maxHeight)
+        val width = (if (centred) tw + 2 * pw else tw + pw).coerceIn(constraints.minWidth, constraints.maxWidth)
+        layout(width, height) {
+            val timeX =
+                when {
+                    centred -> (width - tw) / 2
+                    periodFirst -> pw
+                    else -> 0
+                }
+            t?.placeRelative(timeX, height - t.height)
+            p?.placeRelative(if (periodFirst) timeX - pw else timeX + tw, height - p.height)
+        }
+    }
+}
+
+/**
+ * One line of clock text. With [centreInk], the drawn glyphs (not the advance box) are centred: digits have unequal
+ * side bearings ("1" has wide ones), which put a centred box's ink up to a few dp off-centre (FB-007). Only the first
+ * and the last glyph decide where the ink starts and ends, so their side bearings are measured once per character and
+ * style ([GlyphBearings]); a tick costs two map reads. The shift is applied at placement, so it recomposes nothing.
+ */
+@Composable
+private fun InkText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    centreInk: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var shift by remember { mutableIntStateOf(0) }
+    val measurer = rememberTextMeasurer(cacheSize = 0)
+    val density = LocalDensity.current
+    val bearings = remember(style, density) { GlyphBearings(measurer, style) }
+    Text(
+        text = text,
+        style = style,
+        color = color,
+        maxLines = 1,
+        onTextLayout = { shift = if (centreInk) bearings.inkShift(it) else 0 },
+        modifier = modifier.absoluteOffset { IntOffset(-shift, 0) },
+    )
+}
+
+/** Left and right side bearings (px, from the advance box to the ink) of single characters in one style. */
+internal class GlyphBearings(
+    private val measurer: TextMeasurer,
+    private val style: TextStyle,
+) {
+    private val cache = HashMap<Char, IntArray>()
+
+    /** Pixels by which the ink's centre lies right of the box's centre for [layout] (one line, 0 without ink). */
+    fun inkShift(layout: TextLayoutResult): Int {
+        val text = layout.layoutInput.text.text
+        if (text.isEmpty()) return 0
+        // The visually leftmost glyph: digits run left to right even in a right-to-left paragraph, so ask the layout.
+        val rtl = layout.getBoundingBox(0).left > layout.getBoundingBox(text.length - 1).left
+        val left = of(if (rtl) text.last() else text.first()) ?: return 0
+        val right = of(if (rtl) text.first() else text.last()) ?: return 0
+        val inkLeft = left[0]
+        val inkRight = layout.size.width - right[1]
+        return ((inkLeft + inkRight) / 2f - layout.size.width / 2f).roundToInt()
+    }
+
+    private fun of(c: Char): IntArray? = cache.getOrPut(c) { measure(c) }.takeIf { it[0] >= 0 }
+
+    private fun measure(c: Char): IntArray {
+        val glyph = measurer.measure(c.toString(), style.copy(color = Color.Black), maxLines = 1)
+        val w = glyph.size.width
+        val h = glyph.size.height
+        if (w <= 0 || h <= 0) return intArrayOf(-1, -1)
+        val image = ImageBitmap(w, h)
+        TextPainter.paint(Canvas(image), glyph)
+        val pixels = image.toPixelMap()
+        var first = -1
+        var last = -1
+        for (x in 0 until w) {
+            if ((0 until h).any { y -> pixels[x, y].alpha > INK_ALPHA }) {
+                if (first < 0) first = x
+                last = x
+            }
+        }
+        return if (first < 0) intArrayOf(-1, -1) else intArrayOf(first, w - 1 - last)
+    }
+
+    private companion object {
+        const val INK_ALPHA = 0.25f
+    }
+}
+
+private fun horizontalOf(alignment: ThemeAlignment): Alignment.Horizontal =
+    when (alignment) {
+        ThemeAlignment.START -> Alignment.Start
+        ThemeAlignment.CENTER -> Alignment.CenterHorizontally
+        ThemeAlignment.END -> Alignment.End
+    }
+
+private fun textAlignOf(alignment: ThemeAlignment): TextAlign =
+    when (alignment) {
+        ThemeAlignment.START -> TextAlign.Start
+        ThemeAlignment.CENTER -> TextAlign.Center
+        ThemeAlignment.END -> TextAlign.End
+    }
 
 /** `analogMinimal` (VISUAL_SPEC §9.4): circle, one accent dot at 12, hour hand 4 dp, minute hand 2 dp, round caps. */
 @Composable

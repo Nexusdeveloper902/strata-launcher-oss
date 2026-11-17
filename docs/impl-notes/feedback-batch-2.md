@@ -109,3 +109,47 @@ The two T-LIST-14 tests are guards that record the measured facts above (increme
 `main` by design; the failing-first tests for this fix are the T-LIST-13 pair. StrictMode `penaltyDeath` was not used
 in Robolectric: on the JVM, file I/O does not go through BlockGuard, so it would detect nothing. The watchdog is the
 LauncherApps shadow that records main-thread calls, plus, on the device, a main-looper latency probe (≤ 200 ms).
+
+## 3. FB-007 "The clock that should be centred is off-centre in some themes"
+
+### Audit
+THEME_SYSTEM §4.7: `clock.alignment` is `start | center | end` (mirrored in RTL); the date follows it. Of the presets,
+graphite ships `center`, and any theme can be switched to it. Index visibility on home (§4.x `alphabetIndex`):
+`always` in Strata Default/harbor, dusk and graphite; `listOnly` in midnight-oled and paper.
+
+### Root causes (measured: inked pixels, `ClockCentreTest`, 411×891 dp at xxhdpi)
+1. **Index reserve.** In portrait the home column is padded by the 48 dp alphabet-index reserve on the index side.
+   A "centred" clock was centred in that column, so it sat about 24 dp off the screen centre in every preset that
+   shows the index on home: Strata Default/harbor, dusk and graphite (graphite is the preset that ships centred).
+   One-sided display-cutout insets (`safeDrawingPadding`) did the same.
+2. **Day period in the same Row.** In 12 h the time and AM/PM were one `Row`, centred as a whole, so the digits were
+   about 14 dp off-centre.
+3. **Stacked lines.** `numericStacked` hours and minutes sat start-aligned in a centred `Column` (midnight-oled:
+   1.7–4 dp).
+4. **Glyph side bearings.** Even a centred box leaves the ink 1–5 dp off: digits have unequal bearings ("1"), and
+   seconds make it vary each second.
+5. The date used `TextAlign.Start` (visible only when it wraps).
+
+### Fix
+- `HomeScreen`: in portrait with `center`, the header uses `Modifier.centredOnWindow(start, end)`. It gets a span
+  symmetric about the window: the larger of the two insets on both sides, so it still never covers the index or a
+  cutout. Landscape keeps centring in its own pane (VISUAL_SPEC §8.1 split).
+- `HomeHeader`:
+  - `TimeWithPeriod` centres the time itself and hangs the period beside it (the box reserves the period's width on
+    both sides when centred; start/end layouts are unchanged).
+  - Stacked lines and the date follow the alignment.
+  - `InkText` centres the drawn glyphs: `GlyphBearings` measures a character's side bearings once (rendered into a
+    small bitmap, cached per style), and the ink span is taken from the visually first and last glyph. The shift is
+    applied at placement, so a tick costs two map reads and no recomposition. (`getPathForRange` was tried first: it
+    returns the advance box under Robolectric, so it could not be verified.)
+- No schema or theme change.
+
+### Test
+T-THEME-56 `ClockCentreTest` (C, native graphics) runs every preset (Strata Default + `spec/sample-themes/`) forced to
+`center`: 12 h/24 h × seconds off/on × LTR/RTL = 48 cases. It adds a 120 px left-only cutout fixture per preset,
+96 runs in all. It measures the inked columns of the clock time (period node and index strip excluded) and of the
+date against the window centre, ±1 dp.
+- On `main`: 43–50 of 96 fail (which ones depends on the digits of the current time). Every preset fails in some
+  case, e.g. graphite 24 h −22.3 dp, Strata Default 12 h −36.5 dp, paper 12 h −14.8 dp, midnight-oled up to 4 dp,
+  and the cutout fixture.
+- With the fix: 96 of 96 pass. The other home, a11y (contrast) and theme suites still pass.
