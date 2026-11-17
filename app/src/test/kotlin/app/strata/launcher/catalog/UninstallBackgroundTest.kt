@@ -141,6 +141,8 @@ class UninstallBackgroundTest {
         pumpUntil { context.appGraph.appCatalog.catalog.value.entries.size == APPS }
         compose.onNodeWithTag(HomeTestTags.ALL_APPS).performClick()
         compose.waitForIdle()
+        // The assembled list reaches the screen a little after the catalog (slower on a loaded test JVM).
+        pumpUntil { shown(0) }
     }
 
     @After
