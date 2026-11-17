@@ -314,10 +314,12 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-PERF-06 | Search with contacts | `CONTACTS2000`, contacts on | Type 5 queries ×20 | Complete results ≤ 50 ms p95. App results are not delayed by contacts | M | NFR-PERF-03 |
 | T-PERF-07 | Memory | idle home after a full list scroll | `dumpsys meminfo` PSS; icon cache size via debug probe | PSS ≤ 150 MB. Cache ≤ memoryClass/8 | M | NFR-PERF-04 |
 | T-PERF-08 | Leak check | — | 50 open/close cycles of search (+ LeakCanary in debug) | PSS growth ≤ 5 MB. 0 leaks | M | NFR-PERF-04 |
-| T-PERF-09 | Background cost | screen off 1 h, NLS granted | `dumpsys batterystats` + `dumpsys jobscheduler/alarm` | 0 jobs, alarms or wakelocks owned by Strata. 0 wakeups attributable | I | NFR-PERF-05 |
+| T-PERF-09 | Background cost | screen off 1 h, NLS granted; for the CI half, idle home | `dumpsys batterystats` + `dumpsys jobscheduler/alarm`; CI half: `dumpsys gfxinfo` frames over 20 s of idle home, `/proc/<pid>/stat` CPU time over that and over 60 s of screen off | 0 jobs, alarms or wakelocks owned by Strata. 0 wakeups attributable. CI half: ≤ 10 frames in 20 s idle (a minute tick at most), ≤ 1.5 s CPU in 20 s idle, ≤ 2 s CPU in a screen-off minute; one process throughout, home resumed during the idle window, and a list fling (control) draws > 0 frames | I | NFR-PERF-05 |
 | T-PERF-10 | Change propagation | list open | Install/remove the fixture ×10 with timestamps from the `onPackageAdded` trace to the row-composed trace | ≤ 1 s each | M | NFR-PERF-06, FR-LIST-04 |
 | T-PERF-11 | 120 Hz frame timing | RD-2 at 120 Hz | Run T-PERF-03/04 | Janky frames ≤ 1 % / ≤ 3 % against the 8.3 ms budget | M | NFR-PERF-02 |
 | T-PERF-12 | Baseline Profile effect | with and without the profile | T-PERF-01 both ways | The profile improves the median (recorded). The gate is T-PERF-01 | M | NFR-PERF-01 |
+| T-PERF-13 | Idle home cost | default theme (`wallpaper.show` false), minutes clock, a few apps | Settle home at rest, then the list; run the clock 59 s with no input; send one minute tick; stop and restart the activity; switch to a theme that lets the wallpaper through and back | No recomposition and no pending frame between ticks (one recomposition per tick); stopped: no clock receiver and the widget host not listening; `FLAG_SHOW_WALLPAPER` only while the wallpaper can be seen (opaque backdrop: flag cleared, opaque window background) | R | NFR-PERF-05 |
+| T-PERF-14 | Event bursts | badges on, listener connected; icon pack registry started; lock service config | 100 updates of alerting notifications in one burst; 50 package broadcasts in one burst; read the lock service's accessibility config | Badge counts published at most twice, nothing logged; at most 2 pack discoveries; the lock service subscribes to no event type, reads no window content and asks for no flags beyond the default | U + R | NFR-PERF-05 |
 
 ## 17. PRIV
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -496,7 +498,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | NFR-PERF-02 | T-PERF-03, T-PERF-04, T-PERF-11 |
 | NFR-PERF-03 | T-PERF-05, T-PERF-06 |
 | NFR-PERF-04 | T-PERF-07, T-PERF-08 |
-| NFR-PERF-05 | T-PERF-09 |
+| NFR-PERF-05 | T-PERF-09, T-PERF-13, T-PERF-14 |
 | NFR-PERF-06 | T-PERF-10, T-LIST-08, T-THEME-53 |
 | NFR-PERF-07 | T-CI-07 |
 | NFR-A11Y-01 | T-A11Y-08, T-A11Y-07 |
