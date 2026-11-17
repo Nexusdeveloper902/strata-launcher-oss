@@ -28,6 +28,9 @@ import java.io.File
 /** Shared device-state helpers for the HomeActivity device tests (search, home). */
 private const val TAG = "DeviceState"
 
+/** Longest wait for one state change in a device test (a role grant, a layer, a stored value); waits end on the state. */
+const val DEVICE_TIMEOUT_MS = 15_000L
+
 /** The focused window is a crash dialog ("Application Error: <package>"). */
 private val CRASH_DIALOG_FOCUS = Regex("mCurrentFocus=Window\\{[^}]*Application Error: ")
 
@@ -220,6 +223,14 @@ class DeviceStateRule : TestRule {
  */
 private fun applyNavMode(): (() -> Unit)? {
     val wanted = InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
+    return switchNavMode(wanted)
+}
+
+/**
+ * Switches the navigation mode to [wanted] (`gestural` or `threebutton`, API 29+) for one test; returns how to restore
+ * the overlays enabled before, or null when nothing changed. Fails when the overlay is not active afterwards.
+ */
+fun switchNavMode(wanted: String): (() -> Unit)? {
     if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return null
     val overlay =
         NAV_OVERLAYS[wanted] ?: throw IllegalArgumentException("strata.navMode=$wanted: use ${NAV_OVERLAYS.keys}")

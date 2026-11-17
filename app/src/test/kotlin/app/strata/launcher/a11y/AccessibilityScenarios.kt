@@ -19,6 +19,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.TestAppGraph
 import app.strata.launcher.core.theme.store.ThemeState
+import app.strata.launcher.feature.home.FavEditTestTags
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
@@ -186,6 +187,20 @@ abstract class AccessibilityScenarios {
         compose.onNodeWithTag(SheetTestTags.MENU_EDIT).performClick()
         idle()
         check("edit favourites")
+    }
+
+    /** Edit favourites → "Add apps": the favourites picker (FR-FAV-01/02). */
+    @Test
+    fun favouritesPicker() {
+        home()
+        compose.onNodeWithTag(HomeTestTags.PILL_MENU).performClick()
+        idle()
+        compose.onNodeWithTag(SheetTestTags.MENU_EDIT).performClick()
+        idle()
+        compose.onNodeWithTag(FavEditTestTags.ADD_APPS).performClick()
+        idle()
+        compose.onNodeWithTag(FavEditTestTags.PICKER).assertExists()
+        check("favourites picker", listOf(FavEditTestTags.PICKER_CONFIRM))
     }
 
     @Test
@@ -488,4 +503,4 @@ class PseudoBidiLayoutTest : AccessibilityScenarios() {
  * Screens drawn as a layer over home (INTERACTION_SPEC §1): home stays composed underneath, so its texts sit under the
  * layer by design and the overlap check does not apply; clipping is still checked.
  */
-private val LAYERS = setOf("list", "search", "app sheet", "home menu", "edit favourites")
+private val LAYERS = setOf("list", "search", "app sheet", "home menu", "edit favourites", "favourites picker")

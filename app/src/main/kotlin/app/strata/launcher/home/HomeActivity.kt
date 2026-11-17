@@ -189,6 +189,10 @@ class HomeActivity : ComponentActivity() {
             appGraph.startTheme()
             appGraph.startCatalog()
             appGraph.attachWindow(window.decorView)
+            // Settings → Favourites (FR-FAV-02); a recreation keeps whatever layer the user is on.
+            if (savedInstanceState == null && HomeIntents.isEditFavorites(intent?.action)) {
+                viewModel.onAction(HomeAction.EditFavorites)
+            }
             val iconLoader = ProviderIconLoader(appGraph.iconProvider)
             systemScreens.bind(onboardingViewModel.setDefault)
             systemScreens.bind(setDefaultViewModel.flow)
@@ -225,6 +229,7 @@ class HomeActivity : ComponentActivity() {
                                 val area by widgetArea.state.collectAsStateWithLifecycle()
                                 WidgetMenu(area, widgetArea::onAction)
                             },
+                            overlayModal = widgetMenuOpen(),
                             searchLayer = { session ->
                                 val searchState by searchViewModel.state.collectAsStateWithLifecycle()
                                 SearchRoute(
@@ -262,6 +267,12 @@ class HomeActivity : ComponentActivity() {
         } finally {
             AndroidTracer.end()
         }
+    }
+
+    @Composable
+    private fun widgetMenuOpen(): Boolean {
+        val area by widgetArea.state.collectAsStateWithLifecycle()
+        return area.menuOpen
     }
 
     /** The header widget (FR-WIDGET-01): null without a placement and in safe mode (the clock is shown). */
@@ -466,6 +477,7 @@ class HomeActivity : ComponentActivity() {
         if (HomeIntents.isHomePress(intent.action, intent.categories)) {
             viewModel.onAction(HomeAction.HomePressed)
         }
+        if (HomeIntents.isEditFavorites(intent.action)) viewModel.onAction(HomeAction.EditFavorites)
     }
 }
 

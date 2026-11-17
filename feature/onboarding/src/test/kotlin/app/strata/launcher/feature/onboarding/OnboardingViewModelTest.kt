@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.AppList
 import app.strata.launcher.core.model.AppSection
+import app.strata.launcher.core.model.OnboardingProgress
 import app.strata.launcher.core.model.ProfileKind
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.VisibleApp
@@ -153,6 +154,81 @@ class OnboardingViewModelTest {
         val second = viewModel(SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
         assertThat(second.state.value.step).isEqualTo(OnboardingStep.FAVORITES)
         assertThat(second.state.value.picked).containsExactly(apps[2].key)
+    }
+
+    /** Owner report: the step lives in the settings store, so a new host without saved state resumes it. */
+    @Test
+    fun stepPersistsInStore_newHostWithoutSavedState() {
+        val first = viewModel()
+        first.onAction(OnboardingAction.Continue)
+        assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.FAVORITES)
+        val second = viewModel(SavedStateHandle())
+        assertThat(second.state.value.loaded).isTrue()
+        assertThat(second.state.value.step).isEqualTo(OnboardingStep.FAVORITES)
+    }
+
+    /** J-01 step 4 across hosts: a system screen was opened, the role is now held → the next host shows Done. */
+    @Test
+    fun roleRequestedThenHeld_newHostShowsDone() =
+        runTest(dispatcher) {
+            val first = viewModel()
+            first.onAction(OnboardingAction.Continue)
+            first.onAction(OnboardingAction.SkipFavorites)
+            first.setDefault.requests.test {
+                first.onAction(OnboardingAction.SetAsDefault)
+                awaitItem()
+            }
+            assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.ROLE_REQUESTED)
+            role.defaultHome = true
+            assertThat(viewModel(SavedStateHandle()).state.value.step).isEqualTo(OnboardingStep.DONE)
+        }
+
+    /** Without an opened system screen a held role keeps the "Strata is your home app" step (T-ONBOARD-09). */
+    @Test
+    fun heldWithoutRequest_staysOnSetDefault() {
+        role.defaultHome = true
+        settings.set(settings.value.copy(onboardingProgress = OnboardingProgress.SET_DEFAULT))
+        val vm = viewModel()
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.SET_DEFAULT)
+        assertThat(vm.state.value.setDefault.held).isTrue()
+    }
+
+    /**
+     * Review of PR #32: the saved state says a role screen was opened, the store is behind (its write was lost). The
+     * saved step wins, and with the role held the flow moves on to Done; the store is never lowered.
+     */
+    @Test
+    fun savedRoleRequested_storeBehind_keepsSavedStep() {
+        settings.set(settings.value.copy(onboardingProgress = OnboardingProgress.FAVORITES))
+        role.defaultHome = true
+        val handle = SavedStateHandle(mapOf("onboarding_step" to "SET_DEFAULT", "onboarding_role_requested" to true))
+        val vm = viewModel(handle)
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.DONE)
+        assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.DONE)
+    }
+
+    /** Persist is monotonic: a forward step never lowers a store another host moved on; Back does. */
+    @Test
+    fun persistNeverLowersExceptBack() {
+        val vm = viewModel()
+        settings.set(settings.value.copy(onboardingProgress = OnboardingProgress.ROLE_REQUESTED))
+        vm.onAction(OnboardingAction.Continue) // Welcome → Favourites, stale relative to the store
+        assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.ROLE_REQUESTED)
+        vm.onAction(OnboardingAction.Back)
+        assertThat(settings.value.onboardingProgress).isEqualTo(OnboardingProgress.WELCOME)
+    }
+
+    /** Resume adopts progress another host made, never an older one. */
+    @Test
+    fun resumeAdoptsProgressFromTheOtherHost() {
+        val vm = viewModel()
+        vm.onAction(OnboardingAction.Continue)
+        settings.set(settings.value.copy(onboardingProgress = OnboardingProgress.DONE))
+        vm.onAction(OnboardingAction.Resume)
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.DONE)
+        settings.set(settings.value.copy(onboardingProgress = OnboardingProgress.WELCOME))
+        vm.onAction(OnboardingAction.Resume)
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.DONE)
     }
 }
 

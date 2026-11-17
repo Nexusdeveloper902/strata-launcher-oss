@@ -9,6 +9,10 @@ option java_outer_classname = "SettingsProtos";
 enum BadgeStyle { BADGE_STYLE_DOT = 0; BADGE_STYLE_COUNT = 1; }
 enum AppearanceOverride { APPEARANCE_FOLLOW_THEME = 0; APPEARANCE_SYSTEM = 1; APPEARANCE_LIGHT = 2; APPEARANCE_DARK = 3; }
 enum SwipeDownAction { SWIPE_DOWN_NONE = 0; SWIPE_DOWN_NOTIFICATIONS = 1; }
+enum OnboardingProgress {
+  ONBOARDING_WELCOME = 0; ONBOARDING_FAVORITES = 1; ONBOARDING_SET_DEFAULT = 2;
+  ONBOARDING_ROLE_REQUESTED = 3; ONBOARDING_DONE = 4;
+}
 
 message Settings {
   optional int32 catalogue_version = 1;
@@ -34,4 +38,5 @@ message Settings {
   optional bool list_sort_by_usage = 21;
   optional SwipeDownAction swipe_down_action = 22;
   optional bool lock_gesture_enabled = 23;
+  optional OnboardingProgress onboarding_progress = 24;
 }
