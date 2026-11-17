@@ -402,7 +402,8 @@ adopted later without changing the interfaces.
 (500 apps < 5 ms on RD-1, off main):
 ```
 SearchEntry(key, displayLabel, systemLabel, folded: [display, system], words: [start offsets],
-            initials: String, translit: String?, launchCount30d: Int, collationKey, flags{hidden, profile})
+            initials: String, translit: String?, launchCount30d: Int, collationKey, flags{hidden, profile},
+            camel: [folded camel-case splits] (D-016), package: folded package name (D-016))
 ```
 **Normalisation `fold(s)`** (deterministic, same for queries and labels):
 1. Unicode NFKD (`java.text.Normalizer`), then remove combining marks (`\p{Mn}`): "Café" → "Cafe".
@@ -422,7 +423,8 @@ SearchEntry(key, displayLabel, systemLabel, folded: [display, system], words: [s
 | T3 word-prefix | any word start begins with `q` ("maps" in "Google Maps") | 400 |
 | T4 initials | `q` (≥ 2 chars) is a prefix of `initials` ("gm" → Google Maps) | 300 |
 | T5 substring | label contains `q` | 200 |
-| T6 fuzzy | `q.length ≥ 4` and optimal-string-alignment distance ≤ 1 to a label prefix of length `q.length` ±1 ("mpas" → maps) | 100 |
+| T6 fuzzy | `q.length ≥ 4` and optimal-string-alignment distance ≤ 1 to a label prefix of length `q.length` ±1 ("mpas" → maps). **Amended (Proposed, D-016):** ≤ 1 edit for 4–7 chars, ≤ 2 from 8 chars, against a prefix of the label or of any label word (length `q.length` ± edits); +10 when the match is at the label start (20 + 50 + 10 < 100); runs only when T1–T5 found fewer than 5 apps | 100 |
+| (D-016) | Word starts and initials also come from the label split at camel-case and letter/digit boundaries ("YouTube Music" → "you tube music": "tube" is T3, "ytm" is T4). The package name (folded, segments split on `.`/`_`) gives at most T5 with no display bonus: a query of ≥ 3 chars that begins a segment other than the generic ones (`com`, `org`, `net`, `io`, `de`, `co`, `uk`, `app`, `apps`, `android`, `mobile`, `client`) | — |
 Within a tier the score is **additive**: `score = tierBase + (20 if the match is on the display
 label, else 0) + min(launchCount30d, 50)`. The boost is local-only and is 0 while the launch log
 is paused or after it is cleared. The largest addition (20 + 50 = 70) is below the 100-point gap

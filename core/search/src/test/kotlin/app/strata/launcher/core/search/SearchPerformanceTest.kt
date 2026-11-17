@@ -36,6 +36,31 @@ class SearchPerformanceTest {
         assertThat(p95Ms).isAtMost(16.0)
     }
 
+    /**
+     * T-PERF-05 with typo queries (FR-SEARCH-02 T6, Proposed): queries with no or few exact matches make the fuzzy pass
+     * run over the whole index. Same budget.
+     */
+    @Test
+    fun tPerf05_fuzzyQueriesLatency500Apps() {
+        val idx = index(apps, counts)
+        val queries = listOf("mpas", "instgram", "whtasapp", "kalkulator", "zzqx", "calender")
+        repeat(WARMUP) { queries.forEach { q -> idx.rank(q, includeHidden = true) } }
+        val samples = ArrayList<Long>()
+        repeat(RUNS) {
+            for (q in queries) {
+                val t0 = System.nanoTime()
+                idx.rank(q, includeHidden = true)
+                samples += System.nanoTime() - t0
+            }
+        }
+        samples.sort()
+        val medianMs = samples[samples.size / 2] / 1e6
+        val p95Ms = samples[(samples.size * 95) / 100] / 1e6
+        println("T-PERF-05 JVM fuzzy: median=%.3f ms p95=%.3f ms (n=%d)".format(medianMs, p95Ms, samples.size))
+        assertThat(medianMs).isAtMost(8.0)
+        assertThat(p95Ms).isAtMost(16.0)
+    }
+
     @Test
     fun indexBuild500Apps() {
         val cache = HashMap<String, String>()
