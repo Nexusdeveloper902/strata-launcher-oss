@@ -236,10 +236,8 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
         NAV_OVERLAYS[wanted] ?: throw IllegalArgumentException("strata.navMode=$wanted: use ${NAV_OVERLAYS.keys}")
     val before = enabledNavOverlays()
     if (before == listOf(overlay)) return null
-    setNavOverlay(overlay)
-    val after = enabledNavOverlays()
-    check(overlay in after) { "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)" }
-    return {
+    // Built before the switch, so a switch that fails its check still puts back what was enabled.
+    val restore = {
         if (before.isEmpty()) {
             // No navigation overlay was enabled: the device default. Turn ours off again.
             Log.i(TAG, "nav mode restore: " + shell("cmd overlay disable $overlay"))
@@ -250,6 +248,17 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
         val restored = enabledNavOverlays()
         if (restored != before) Log.e(TAG, "nav mode restore: expected $before, found $restored")
     }
+    try {
+        setNavOverlay(overlay)
+        val after = enabledNavOverlays()
+        check(overlay in after) {
+            "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)"
+        }
+    } catch (e: Throwable) {
+        runCatching(restore).onFailure { Log.e(TAG, "nav mode not restored after a failed switch", it) }
+        throw e
+    }
+    return restore
 }
 
 /** Enabled overlays of the `com.android.internal.systemui.navbar.*` family, from `cmd overlay list android`. */

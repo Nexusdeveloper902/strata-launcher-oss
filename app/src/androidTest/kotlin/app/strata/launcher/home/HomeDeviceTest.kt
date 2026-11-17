@@ -4,7 +4,6 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Rect
 import android.os.Build
-import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import androidx.compose.ui.semantics.SemanticsActions
@@ -368,9 +367,10 @@ class HomeDeviceTest {
                 if (front != null && focused) home = front
                 front != null && focused
             }
-            // Leave time for a late fling or a delayed intent to act before checking.
-            SystemClock.sleep(ARRIVAL_SETTLE_MS)
+            // Let the arrival finish: the Home intent, the resume and any pointer events are all handled on the main
+            // thread, then composed. Waits on state, not on time.
             instrumentation.waitForIdleSync()
+            compose.waitForIdle()
             assertThat(vm(home).state.value.layer).isNotEqualTo(HomeLayer.SEARCH)
             assertThat(imeVisible(home)).isFalse()
         } finally {
@@ -590,7 +590,6 @@ class HomeDeviceTest {
 
         /** `settings get secure navigation_mode`: 0 three-button, 1 two-button, 2 gestural. */
         const val GESTURAL_NAV_MODE = "2"
-        const val ARRIVAL_SETTLE_MS = 1_000L
     }
 }
 
