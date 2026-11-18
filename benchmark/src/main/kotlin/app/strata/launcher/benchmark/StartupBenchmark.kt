@@ -22,7 +22,7 @@ import org.junit.runner.RunWith
  * - T-PERF-01: cold start via the Home intent, 10 iterations, `timeToFullDisplay` median ≤ 700 ms, p90 ≤ 1 100 ms.
  *   The `strata.*` sections (Application, graph, HomeActivity.onCreate, theme boot) are reported for diagnosis.
  * - T-PERF-02: warm return. Strata is in the background behind Settings; the Home intent brings it back.
- *   `timeToInitialDisplay` median ≤ 150 ms.
+ *   [WarmReturnMetric] (launch to the first frame drawn) median ≤ 150 ms.
  * - T-PERF-12: T-PERF-01 without AOT (`CompilationMode.None`) and with the shipped Baseline Profile; the effect is
  *   recorded (the gate is T-PERF-01).
  */
@@ -60,7 +60,7 @@ class StartupBenchmark {
     fun tPerf02_warmReturn() {
         rule.measureRepeated(
             packageName = Strata.TARGET,
-            metrics = listOf(StartupTimingMetric()),
+            metrics = listOf(WarmReturnMetric()),
             iterations = 10,
             startupMode = null,
             setupBlock = {
@@ -68,6 +68,8 @@ class StartupBenchmark {
                 // Put Strata in the background behind another app (T-PERF-02 "behind a fixture app").
                 device.executeShellCommand("am start -W -a android.settings.SETTINGS")
                 device.waitForIdle()
+                // Measure a return from the background: Strata must be stopped, not merely covered.
+                device.awaitTargetStopped()
             },
         ) {
             startHome()
@@ -75,7 +77,7 @@ class StartupBenchmark {
         BudgetGate.check(
             javaClass,
             test.methodName,
-            BudgetGate.medianAtMost("timeToInitialDisplayMs", PerfBudgets.WARM_RETURN_MEDIAN_MS, "T-PERF-02"),
+            BudgetGate.medianAtMost(WarmReturnMetric.NAME, PerfBudgets.WARM_RETURN_MEDIAN_MS, "T-PERF-02"),
         )
     }
 

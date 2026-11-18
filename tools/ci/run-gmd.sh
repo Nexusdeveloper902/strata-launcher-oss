@@ -13,6 +13,7 @@ case "$task" in
   *) task_path=":app:${task}" ;;
 esac
 log="$(mktemp)"
+stamp="$(mktemp)" # touched when an attempt starts: results newer than it belong to that attempt
 infra_pattern='Unable to start Android emulator|Unable to find device serial|Failed to start emulator|emulator.*(timed out|did not boot|crash)|Timed out waiting for .*(device|emulator|boot)|device offline|device .* not found|adb server|INSTALL_FAILED_(INSUFFICIENT_STORAGE|USER_RESTRICTED)|Unable to connect to adb|System image .*(download|unzip)|Connection reset|Read timed out|Failed to install the following SDK components|Archive is not a ZIP archive|Error reading Zip content'
 
 # AGP reports "Error message from emulator process = []" when the emulator dies at once; print what the host knows.
@@ -45,6 +46,7 @@ dump_emulator_diagnostics() {
 attempt=1
 while true; do
   echo "::group::GMD ${task} attempt ${attempt}"
+  touch "$stamp"
   ./gradlew "${task_path}" --no-daemon --stacktrace \
     -Pstrata.strictModeDeath=true \
     -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
@@ -53,7 +55,20 @@ while true; do
     2>&1 | tee "$log"
   status=${PIPESTATUS[0]}
   echo "::endgroup::"
-  [ "$status" -eq 0 ] && exit 0
+  if [ "$status" -eq 0 ]; then
+    # AGP can report success for a run the Orchestrator recorded as failed: PR #21 run 44227087271 (API 34) had
+    # "Test run failed to complete. Expected 85 tests, received 84" (an instrumentation process crashed) in its XML
+    # and BUILD SUCCESSFUL, exit code 0. Fail closed: any <failure> or <error> in this attempt's results fails the job.
+    module="${task_path#:}"; module="${module%%:*}"
+    failed="$(find "$module/build/outputs/androidTest-results" -name 'TEST-*.xml' -newer "$stamp" \
+      -exec grep -lE '<(failure|error)[ >]' {} + 2>/dev/null || true)"
+    if [ -n "$failed" ]; then
+      echo "::error::${task}: Gradle reported success, but the test results record failures: ${failed}"
+      grep -hoE '<(failure|error) message="[^"]{0,200}' $failed | head -5 || true
+      exit 1
+    fi
+    exit 0
+  fi
   dump_emulator_diagnostics
 
   if [ "$attempt" -ge 2 ]; then
@@ -72,6 +87,13 @@ while true; do
     # A truncated system-image download (run 41670711767: "Archive is not a ZIP archive") must not be reused.
     sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
     rm -rf "$sdk/.temp" "$sdk/.downloadIntermediates" 2>/dev/null || true
+    # A failed emulator-package install leaves $sdk/emulator without its binary; the retry then failed with "Cannot
+    # query the value of this property" instead of installing again (flake hunt run 44190179756, API 26). Remove it so
+    # AGP installs it afresh.
+    if [ -d "$sdk/emulator" ] && [ ! -x "$sdk/emulator/emulator" ]; then
+      echo "::warning::removing the half-installed emulator package at $sdk/emulator before the retry"
+      rm -rf "$sdk/emulator"
+    fi
     continue
   fi
   echo "::error::${task}: failed for a reason that is not a known infrastructure failure"

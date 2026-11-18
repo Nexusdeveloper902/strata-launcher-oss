@@ -118,7 +118,8 @@ jobs:
 
   monkey:
     # T-REL-01 on API 34 (the TEST_PLAN environment) against the release-like benchmark build: 70 000 events, ~1 h.
-    name: T-REL-01 monkey (GMD API 34, 70 000 events)
+    # ATD image (api34atd): see AndroidBenchmarkConventionPlugin and docs/ci/RELIABILITY.md.
+    name: T-REL-01 monkey (GMD API 34 ATD, 70 000 events)
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -145,7 +146,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Monkey
         run: >-
-          tools/ci/run-gmd.sh :benchmark:api34BenchmarkAndroidTest
+          tools/ci/run-gmd.sh :benchmark:api34atdBenchmarkAndroidTest
           -Pandroid.testInstrumentationRunnerArguments.class=app.strata.launcher.benchmark.MonkeyTest
           -Pandroid.testInstrumentationRunnerArguments.strata.monkeyEvents=70000
           -Pandroid.testInstrumentationRunnerArguments.strata.monkeyThrottle=50
@@ -203,3 +204,15 @@ jobs:
             benchmark/build/outputs/**/*-startup-prof.txt
           if-no-files-found: warn
           retention-days: 30
+      - name: Upload reports
+        # The Gradle log only says "There were failing tests"; the report and the per-test logcat say which and why.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-baseline-profile-reports
+          path: |
+            benchmark/build/reports/androidTests/
+            benchmark/build/outputs/androidTest-results/
+            benchmark/build/outputs/managed_device_android_test_additional_output/
+          if-no-files-found: ignore
+          retention-days: 14

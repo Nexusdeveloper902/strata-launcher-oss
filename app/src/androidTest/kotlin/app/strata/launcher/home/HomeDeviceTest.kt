@@ -48,8 +48,10 @@ import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.focusReport
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
+import app.strata.launcher.resumedHomeActivity
 import app.strata.launcher.shell
-import app.strata.launcher.switchNavMode
+import app.strata.launcher.visitRecentsAndReturn
+import app.strata.launcher.windowMatchesNavMode
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -73,7 +75,11 @@ class HomeDeviceTest {
 
     /** Strata as HOME, no system error dialogs, animations off; set before the activity starts (DeviceState.kt). */
     @get:Rule
-    val rules: RuleChain = RuleChain.outerRule(DeviceStateRule()).around(compose)
+    val rules: RuleChain =
+        RuleChain
+            .outerRule(
+                DeviceStateRule(navModeFor = { if (it.methodName == EDGE_BACK_TEST) "gestural" else null }),
+            ).around(compose)
 
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
@@ -227,9 +233,13 @@ class HomeDeviceTest {
     fun tHome07_hideStatusBar() {
         runBlocking { appGraph().settingsRepository.update { it.copy(hideStatusBar = true) } }
         compose.waitUntil(5_000) { !statusBarVisible() }
-        device.pressRecentApps()
-        device.waitForIdle()
-        device.pressBack()
+        compose.visitRecentsAndReturn(ownedActivity(), device)
+    }
+
+    private fun ownedActivity(): HomeActivity {
+        lateinit var owned: HomeActivity
+        compose.activityRule.scenario.onActivity { owned = it }
+        return owned
     }
 
     /** T-HOME-09: one Home press from sheet / search / list returns to rest (INTERACTION_SPEC §6). */
@@ -291,9 +301,7 @@ class HomeDeviceTest {
         var width = 0
         compose.activityRule.scenario.onActivity { width = it.window.decorView.width }
         rects.forEach { assertThat(it.left).isAtLeast(width / 2) } // index on the end side (LTR)
-        device.pressRecentApps()
-        device.waitForIdle()
-        device.pressBack()
+        compose.visitRecentsAndReturn(ownedActivity(), device)
     }
 
     /**
@@ -305,25 +313,56 @@ class HomeDeviceTest {
     @Test
     fun searchClosesWithBackFromTheIndexEdge() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-        val restoreNav = runCatching { switchNavMode("gestural") }
-        assumeTrue("gesture navigation is not available: ${restoreNav.exceptionOrNull()}", restoreNav.isSuccess)
-        try {
+        // DeviceStateRule switched to gesture navigation before the activity started (EDGE_BACK_TEST) and restores
+        // the previous mode afterwards.
+        run {
             assumeTrue(
                 "navigation_mode is not gestural",
                 shell("settings get secure navigation_mode").trim() == GESTURAL_NAV_MODE,
             )
+            awaitResumedHomeIn(gestural = true)
             awaitHomeIndex()
             compose.onNodeWithTag(HomeTestTags.PILL).performClick()
             compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) > 0 }
+            // Search opens with the IME. Swipe only once it is shown: a Back gesture sent while the IME window is still
+            // coming in was lost on API 29 (nightly run 43842913826: swipe at +0.2 s, IME shown 0.3 s later, no Back
+            // reached the app). In every passing run the Back hid the IME and that closed search (blank query).
+            compose.waitUntil(DEVICE_TIMEOUT_MS) { imeVisible() }
             compose.waitForIdle()
             assertThat(exclusionRects()).isEmpty()
             val w = device.displayWidth
             val h = device.displayHeight
+            // The app's rects clear at once, but the system's copy (what the back-gesture handler checks) follows on a
+            // later traversal: with home's index exclusion still there, the swipe is not a Back (glyphs-private run
+            // 44067816635, API 34: swipe 18 ms after the IME started showing, frames at 0.5-2 s, no Back reached the
+            // app). Wait until WindowManager no longer excludes the swipe's start point; never clearing is the
+            // owner-reported bug and fails here.
+            try {
+                compose.waitUntil(DEVICE_TIMEOUT_MS) {
+                    systemExclusion().none { it.contains(w - 1, h / 2) }
+                }
+            } catch (e: ComposeTimeoutException) {
+                throw AssertionError("The system still excludes the right edge at y=${h / 2}: ${systemExclusion()}", e)
+            }
             // From the very edge inward, at the index's height: the system back gesture.
             device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
             compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) == 0 }
-        } finally {
-            restoreNav.getOrNull()?.invoke()
+        }
+    }
+
+    /** Waits until a HomeActivity is resumed and focused and its insets match the navigation mode ([gestural]). */
+    private fun awaitResumedHomeIn(gestural: Boolean) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        try {
+            compose.waitUntil(DEVICE_TIMEOUT_MS) {
+                val home = resumedHomeActivity()
+                var focused = false
+                if (home != null) instrumentation.runOnMainSync { focused = home.window.decorView.hasWindowFocus() }
+                if (!focused) closeSystemErrorDialog(device)
+                home != null && focused && windowMatchesNavMode(home, gestural)
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("No focused home with gestural=$gestural insets. ${focusReport()}", e)
         }
     }
 
@@ -416,26 +455,29 @@ class HomeDeviceTest {
     /** T-FAV-02 (I): reorder survives a process restart (the Room half runs on the JVM). */
     @Test
     fun tFav02_reorderSurvivesRestart() {
-        val list = vm().state.value.list ?: return
+        // Not `?: return`: a list that has not loaded yet made the test pass without checking anything.
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { vm().state.value.list != null }
+        val list = checkNotNull(vm().state.value.list)
         val three = list.sections.flatMap { it.apps }.take(3)
-        assumeTrue(three.size == 3)
+        assumeTrue("needs three launchable apps, found ${three.size}", three.size == 3)
+        val expected = listOf(three[2].key, three[0].key, three[1].key)
         runBlocking {
             val repo = appGraph().favorites
             three.forEach { repo.add(it.key) { true } }
-            repo.reorder(listOf(three[2].key, three[0].key, three[1].key))
+            repo.reorder(expected)
         }
         compose.activityRule.scenario.recreate()
-        compose.waitUntil(5_000) {
-            vm()
-                .state.value.favorites.size >= 3
-        }
-        assertThat(
+
+        fun shown() =
             vm()
                 .state.value.favorites
                 .take(3)
-                .map { it.key },
-        ).containsExactly(three[2].key, three[0].key, three[1].key)
-            .inOrder()
+                .map { it.key }
+        // recreate() keeps the ViewModel, so its state can still be an earlier emission: CI run 43599000906 (API 36)
+        // waited for "3 favourites", got the adds' [a, b, c] before the reorder had arrived, and asserted on that.
+        // Wait for the stored order to be shown; if it never is, the assertion below reports what was shown instead.
+        runCatching { compose.waitUntil(DEVICE_TIMEOUT_MS) { shown() == expected } }
+        assertThat(shown()).containsExactlyElementsIn(expected).inOrder()
     }
 
     /** T-APPS-08 / T-APPS-11 / T-LIFE-05…07 with the "Zz Test" fixture: rename, uninstall, suspend. */
@@ -515,6 +557,28 @@ class HomeDeviceTest {
             .getRootWindowInsets(activity.window.decorView)
             ?.isVisible(WindowInsetsCompat.Type.ime()) == true
 
+    /**
+     * The display's system-gesture exclusion as WindowManager holds and forwards it to System UI's back-gesture
+     * handler (`mSystemGestureExclusion=` of `dumpsys window displays`, API 29+). No listener registered
+     * (`<no lstnrs>`) means nothing is excluded. Fails when the line is missing, so a changed dump format is visible.
+     */
+    private fun systemExclusion(): List<Rect> {
+        val line =
+            shell("dumpsys window displays")
+                .lineSequence()
+                .map(String::trim)
+                .firstOrNull { it.startsWith("mSystemGestureExclusion=") }
+                ?: throw AssertionError("no mSystemGestureExclusion line in `dumpsys window displays`")
+        return Regex("""\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)""")
+            .findAll(line)
+            .map { m ->
+                m.groupValues
+                    .drop(1)
+                    .map(String::toInt)
+                    .let { (l, t, r, b) -> Rect(l, t, r, b) }
+            }.toList()
+    }
+
     private fun exclusionRects(): List<Rect> {
         val rects = mutableListOf<Rect>()
         compose.activityRule.scenario.onActivity { activity ->
@@ -535,6 +599,7 @@ class HomeDeviceTest {
         const val TAG = "HomeDeviceTest"
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
+        const val EDGE_BACK_TEST = "searchClosesWithBackFromTheIndexEdge"
         const val EDGE_SWIPE_STEPS = 10
 
         /** `settings get secure navigation_mode`: 0 three-button, 1 two-button, 2 gestural. */

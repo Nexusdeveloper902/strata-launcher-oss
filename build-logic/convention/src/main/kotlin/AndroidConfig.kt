@@ -47,12 +47,14 @@ internal val COMPAT_NIGHTLY_APIS = listOf(28, 29, 31, 33, 35)
 
 /**
  * Gradle Managed Devices for the per-PR smoke matrix (ARCHITECTURE 14.3: API 26, 34, 36 phones, x86_64) and the
- * AndroidX Test Orchestrator (each test in its own process, state cleared).
- * All three use the regular Google APIs image: ATD images ship without a soft keyboard, which T-SEARCH-10 needs.
+ * AndroidX Test Orchestrator (each test in its own process; `clearPackageData` in the application plugin clears the
+ * app's state before each test). Window and transition animations are off for every test, not only the classes that
+ * use `DeviceStateRule`. All use the regular Google APIs image: ATD images ship without a soft keyboard, which
+ * T-SEARCH-10 needs.
  */
-
 internal fun TestOptions.configureStrataManagedDevices() {
     execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    animationsDisabled = true
     managedDevices.localDevices.apply {
         create("api26") {
             device = "Pixel 6"

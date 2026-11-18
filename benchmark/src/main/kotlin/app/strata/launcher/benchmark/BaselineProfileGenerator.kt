@@ -2,9 +2,7 @@ package app.strata.launcher.benchmark
 
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
-import androidx.test.uiautomator.Until
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,43 +19,41 @@ class BaselineProfileGenerator {
     @get:Rule
     val rule = BaselineProfileRule()
 
+    /**
+     * Every step fails loudly when its screen does not appear (as in the benchmark journeys, Strata.kt): a profile
+     * collected from a journey that silently stopped half-way would look valid and miss the list and search code.
+     */
     @Test
     fun generate() =
-        rule.collect(packageName = TARGET, includeInStartupProfile = true) {
+        rule.collect(packageName = Strata.TARGET, includeInStartupProfile = true) {
             pressHome()
             homeReady()
-            device.findObject(By.res(ALL_APPS))?.click()
-            if (device.wait(Until.hasObject(By.res(LIST)), TIMEOUT_MS)) {
-                val list =
-                    device.findObject(By.res(LIST))
-                        ?: error("Resource '$LIST' vanished right after it appeared; is the A-Z list open?")
-                list.setGestureMargin(device.displayWidth / 5)
-                list.fling(Direction.DOWN)
-                list.fling(Direction.UP)
-                device.findObject(By.res(INDEX))?.let { index ->
-                    val b = index.visibleBounds
-                    device.swipe(b.centerX(), b.top + b.height() / 10, b.centerX(), b.bottom - b.height() / 10, 60)
-                }
-                device.findObject(By.res(SEARCH_FIELD_IN_LIST))?.click()
-                if (device.wait(Until.hasObject(By.res(FIELD)), TIMEOUT_MS)) {
-                    val field = device.findObject(By.res(FIELD))
-                    for (q in listOf("a", "ma", "map")) {
-                        field.text = q
-                        device.waitForIdle()
-                    }
-                }
+            device.clickOrFail(Strata.ALL_APPS)
+            device.waitOrFail(Strata.LIST)
+            device.onFresh(Strata.LIST) {
+                it.setGestureMargin(device.displayWidth / 5)
+                it.fling(Direction.DOWN)
+            }
+            device.onFresh(Strata.LIST) {
+                it.setGestureMargin(device.displayWidth / 5)
+                it.fling(Direction.UP)
+            }
+            val b = device.onFresh(Strata.INDEX) { it.visibleBounds }
+            device.swipe(b.centerX(), b.top + b.height() / 10, b.centerX(), b.bottom - b.height() / 10, 60)
+            // The list's search field is the list's first item: the scrub left the list at its end (nightly run
+            // 44068284763: field not on screen). Scrub back up and fling to the top before opening search.
+            device.swipe(b.centerX(), b.bottom - b.height() / 10, b.centerX(), b.top + b.height() / 10, 60)
+            device.onFresh(Strata.LIST) {
+                it.setGestureMargin(device.displayWidth / 5)
+                it.fling(Direction.UP)
+            }
+            device.clickOrFail(Strata.SEARCH_FIELD_IN_LIST)
+            device.waitOrFail(Strata.SEARCH_FIELD)
+            for (q in listOf("a", "ma", "map")) {
+                device.onFresh(Strata.SEARCH_FIELD) { it.text = q }
+                device.waitForIdle()
             }
             device.pressBack()
             device.pressBack()
         }
-
-    private companion object {
-        const val TARGET = "app.strata.launcher.benchmark"
-        const val ALL_APPS = "home_all_apps"
-        const val LIST = "app_list"
-        const val INDEX = "alphabet_index"
-        const val SEARCH_FIELD_IN_LIST = "app_list_search_field"
-        const val FIELD = "search_field"
-        const val TIMEOUT_MS = 5_000L
-    }
 }

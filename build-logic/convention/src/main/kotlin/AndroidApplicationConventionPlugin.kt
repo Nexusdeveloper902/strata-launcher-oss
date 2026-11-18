@@ -15,6 +15,10 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     minSdk = StrataBuild.MIN_SDK
                     targetSdk = StrataBuild.TARGET_SDK
                     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+                    // The Orchestrator runs each test in its own process; this also clears the app's data and runtime
+                    // permissions (`pm clear`) before each one, so no test sees what an earlier class left behind
+                    // (favourites, settings, themes, READ_CONTACTS on API 26-32). docs/ci/RELIABILITY.md.
+                    testInstrumentationRunnerArguments["clearPackageData"] = "true"
                 }
                 compileOptions {
                     sourceCompatibility = StrataBuild.JAVA_VERSION

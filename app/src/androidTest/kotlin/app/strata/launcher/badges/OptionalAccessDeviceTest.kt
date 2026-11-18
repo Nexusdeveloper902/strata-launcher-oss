@@ -141,8 +141,8 @@ class OptionalAccessDeviceTest {
     /**
      * `READ_CONTACTS` granted by tSearch13 is given back. Revoking a runtime permission kills the instrumented process,
      * so on API 33+ the app asks for its own revocation once the process ends (`revokeSelfPermissionOnKill`; the
-     * orchestrator ends it after every test). Below 33 there is no such call: the grant stays on that emulator. No later
-     * test depends on it: every test starts with contact search off, and T-SEARCH-12 only asserts that no dialog appears.
+     * orchestrator ends it after every test). Below 33 there is no such call, but the Orchestrator's clearPackageData
+     * (`pm clear` before every test) resets runtime permissions, so the grant does not reach the next test either.
      */
     private fun releaseContactsGrant() {
         if (contactsBefore || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return

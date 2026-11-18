@@ -31,10 +31,10 @@ class BackgroundCostTest {
         device.executeShellCommand("am force-stop --user $userId ${Strata.TARGET}")
         device.executeShellCommand(homeStartCommand())
         device.passOnboardingAndWaitForHome()
-        device.findOrFail(Strata.ALL_APPS).click()
+        device.clickOrFail(Strata.ALL_APPS)
         device.findOrFail(Strata.LIST)
         device.pressBack()
-        device.findOrFail(Strata.PILL).click()
+        device.clickOrFail(Strata.PILL)
         device.findOrFail(Strata.SEARCH_FIELD)
         device.pressBack()
         device.pressBack()
@@ -140,7 +140,7 @@ class BackgroundCostTest {
 
         // Positive control: real motion is counted.
         device.executeShellCommand("dumpsys gfxinfo ${Strata.TARGET} reset")
-        device.findOrFail(Strata.ALL_APPS).click()
+        device.clickOrFail(Strata.ALL_APPS)
         device.findOrFail(Strata.LIST).fling(Direction.DOWN)
         device.waitForIdle()
         val moved = framesRendered()
