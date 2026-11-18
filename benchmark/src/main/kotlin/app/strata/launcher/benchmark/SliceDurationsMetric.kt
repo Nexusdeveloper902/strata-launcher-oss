@@ -58,7 +58,7 @@ internal class SliceGapMetric(
 }
 
 /**
- * T-PERF-02 warm return, `warmReturnMs`: from the start of the system's `launching: <target>` slice to the end of the
+ * T-PERF-02 warm return, `warmReturnMs`: from the start of the launch ([launchStart]) to the end of the
  * first frame the target's RenderThread draws (`DrawFrame…`) after HomeActivity's `onResume` has run
  * (`strata.home.onResume`, traced by the app in every build). Anchoring on the resume means a frame drawn earlier (a
  * leftover or animation frame of the window before it was brought back) cannot end the measurement: the first frame
@@ -78,12 +78,7 @@ internal class WarmReturnMetric : TraceMetric() {
         traceSession: TraceProcessor.Session,
     ): List<Measurement> {
         val pkg = captureInfo.targetPackageName
-        val launch =
-            traceSession
-                .query("SELECT ts FROM slice WHERE name = 'launching: $pkg' ORDER BY ts LIMIT 1")
-                .firstOrNull()
-                ?.long("ts")
-                ?: error("T-PERF-02: no 'launching: $pkg' slice in the trace (the Home intent did not launch)")
+        val launch = launchStart(traceSession, pkg)
         val resumed =
             traceSession
                 .query(
@@ -115,6 +110,30 @@ internal class WarmReturnMetric : TraceMetric() {
                 ).firstOrNull()
                 ?.long("end_ts") ?: error("T-PERF-02: $pkg drew no frame after HomeActivity resumed")
         return listOf(Measurement(NAME, (drawn - launch) / 1_000_000.0))
+    }
+
+    /**
+     * Where the launch began. API 29+ opens it as `launchingActivity#N` and closes it with
+     * `launchingActivity#N:completed-<kind>:<target>`; the later `launching: <target>` slice starts only when the system
+     * reports the launch, AFTER the activity had already resumed (run 44227087271, API 34: launchingActivity#1 at
+     * +0 ms, onResume at +34 ms, `launching:` at +56 ms). So the start is `launchingActivity#N` of the marker naming the
+     * target; `launching: <target>` only where those slices do not exist.
+     */
+    private fun launchStart(
+        session: TraceProcessor.Session,
+        pkg: String,
+    ): Long {
+        val marker =
+            session
+                .query(
+                    "SELECT name FROM slice WHERE name GLOB 'launchingActivity#*:completed*:$pkg' ORDER BY ts LIMIT 1",
+                ).firstOrNull()
+                ?.string("name")
+        val name = marker?.substringBefore(':') ?: "launching: $pkg"
+        return session
+            .query("SELECT ts FROM slice WHERE name = '$name' ORDER BY ts LIMIT 1")
+            .firstOrNull()
+            ?.long("ts") ?: error("T-PERF-02: no '$name' slice in the trace (the Home intent did not launch)")
     }
 
     companion object {
