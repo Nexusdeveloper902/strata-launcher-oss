@@ -8,6 +8,7 @@ import app.strata.launcher.core.model.AppearanceSetting
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.SwipeDownAction
+import app.strata.launcher.core.model.SwipeToCall
 
 /**
  * The `settings` object (ARCHITECTURE §12.1): the §4.2 catalogue rows with Export = yes, keyed by their
@@ -110,6 +111,16 @@ object SettingsCodec {
                 { it.swipeDownAction },
             ) { s, v -> s.copy(swipeDownAction = v) },
             Bool("lock_gesture_enabled", { it.lockGestureEnabled }) { s, v -> s.copy(lockGestureEnabled = v) },
+            // FR-SEARCH-09: exported; CALL_PHONE is never restored, so a restored CALL acts as DIAL until it is granted.
+            Enum(
+                "swipe_to_call",
+                mapOf(
+                    "SWIPE_TO_CALL_OFF" to SwipeToCall.OFF,
+                    "SWIPE_TO_CALL_DIAL" to SwipeToCall.DIAL,
+                    "SWIPE_TO_CALL_CALL" to SwipeToCall.CALL,
+                ),
+                { it.swipeToCall },
+            ) { s, v -> s.copy(swipeToCall = v) },
         )
 
     /** The exported keys, in catalogue order. */

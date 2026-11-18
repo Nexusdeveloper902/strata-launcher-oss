@@ -17,4 +17,12 @@
     <string name="search_contacts_header">Contacts</string>
     <string name="search_contacts_hint">Search your contacts too? Turn it on in Settings</string>
     <string name="search_contact_failed">No app can open this contact</string>
+
+    <!-- Swipe a contact to call (FR-SEARCH-09) -->
+    <string name="search_contact_call">Call</string>
+    <string name="search_contact_call_action">Call %1$s</string>
+    <string name="search_contact_no_number">%1$s has no phone number</string>
+    <string name="search_call_failed">No phone app can make this call</string>
+    <string name="search_choose_number_title">Call %1$s</string>
+    <string name="search_choose_number_cancel">Cancel</string>
 </resources>

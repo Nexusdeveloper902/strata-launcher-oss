@@ -7,9 +7,11 @@ import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.platformapi.apps.LaunchResult
 import app.strata.launcher.core.platformapi.notifications.BadgeSource
 import app.strata.launcher.core.platformapi.notifications.ListenerAccess
+import app.strata.launcher.core.platformapi.system.CallMode
 import app.strata.launcher.core.platformapi.system.ContactHit
 import app.strata.launcher.core.platformapi.system.ContactsSource
 import app.strata.launcher.core.platformapi.system.PermissionState
+import app.strata.launcher.core.platformapi.system.PhoneNumber
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,14 +71,32 @@ class FakeBadgeSource(
     }
 }
 
-/** In-memory [ContactsSource] (T-SEARCH-12…14): [contacts] are matched by a case-insensitive name prefix of any word. */
+/**
+ * In-memory [ContactsSource] (T-SEARCH-12…14, T-SEARCH-23…25): [contacts] are matched by a case-insensitive name prefix
+ * of any word; [numbers] are keyed by lookup URI. [calls] records each started hand-off with the mode it was started
+ * in, which follows the real source: [CallMode.CALL] without [callPermissionState] granted dials instead.
+ */
 class FakeContactsSource(
     var permissionState: PermissionState = PermissionState.DENIED,
     var contacts: List<ContactHit> = emptyList(),
+    var callPermissionState: PermissionState = PermissionState.DENIED,
+    var numbers: Map<String, List<PhoneNumber>> = emptyMap(),
 ) : ContactsSource {
     val queries = mutableListOf<String>()
     val opened = mutableListOf<ContactHit>()
     var openFails = false
+
+    /** Lookup URIs whose numbers were read. */
+    val numberQueries = mutableListOf<String>()
+
+    /** (number, mode as started) of every call hand-off. */
+    val calls = mutableListOf<Pair<String, CallMode>>()
+
+    /** No dialer: every [call] gives `NOT_FOUND`. */
+    var callFails = false
+
+    /** When set, [numbers] waits for it (a slow provider; cancellation tests). */
+    var numbersGate: CompletableDeferred<Unit>? = null
 
     override fun permission(): PermissionState = permissionState
 
@@ -102,6 +122,33 @@ class FakeContactsSource(
     ): LaunchResult {
         if (openFails) return Outcome.Err(LaunchError.NOT_FOUND)
         opened += hit
+        return Outcome.Ok(Unit)
+    }
+
+    override fun callPermission(): PermissionState = callPermissionState
+
+    override suspend fun numbers(hit: ContactHit): List<PhoneNumber> {
+        if (permissionState != PermissionState.GRANTED) return emptyList()
+        numberQueries += hit.lookupUri
+        numbersGate?.await()
+        return numbers[hit.lookupUri].orEmpty().take(ContactsSource.MAX_NUMBERS)
+    }
+
+    override fun call(
+        number: String,
+        mode: CallMode,
+    ): LaunchResult {
+        if (!ContactsSource.isDialable(number)) return Outcome.Err(LaunchError.SECURITY)
+        if (callFails) return Outcome.Err(LaunchError.NOT_FOUND)
+        val started =
+            if (mode == CallMode.CALL &&
+                callPermissionState == PermissionState.GRANTED
+            ) {
+                mode
+            } else {
+                CallMode.DIAL
+            }
+        calls += number to started
         return Outcome.Ok(Unit)
     }
 }

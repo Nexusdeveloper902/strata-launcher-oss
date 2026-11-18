@@ -13,6 +13,7 @@ enum OnboardingProgress {
   ONBOARDING_WELCOME = 0; ONBOARDING_FAVORITES = 1; ONBOARDING_SET_DEFAULT = 2;
   ONBOARDING_ROLE_REQUESTED = 3; ONBOARDING_DONE = 4;
 }
+enum SwipeToCall { SWIPE_TO_CALL_OFF = 0; SWIPE_TO_CALL_DIAL = 1; SWIPE_TO_CALL_CALL = 2; }
 
 message Settings {
   optional int32 catalogue_version = 1;
@@ -39,4 +40,5 @@ message Settings {
   optional SwipeDownAction swipe_down_action = 22;
   optional bool lock_gesture_enabled = 23;
   optional OnboardingProgress onboarding_progress = 24;
+  optional SwipeToCall swipe_to_call = 25;
 }

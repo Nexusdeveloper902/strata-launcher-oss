@@ -179,6 +179,7 @@ screen while in SEARCH → HOME_REST on next resume (Proposed). Returning from a
 | Vertical drag | alphabet index | scrub sections, tick per letter | touch-down inside the index rect | "Jump to letter" | Inferred PUB-001, PUB-012 |
 | Double tap | empty home area | lock screen (opt-in) | `getDoubleTapTimeout()` | none needed (power key) | Inferred capability APK-007; location Proposed |
 | Horizontal swipe | rows | **not used** | — | — | Proposed (differs from PUB-008) |
+| Horizontal swipe toward the end edge | contact row in search (FR-SEARCH-09) | call the contact (dialer, or direct call with `CALL_PHONE`); the row follows the finger with "Call" uncovered behind it, a shorter drag springs back | ≥ 96 dp, mirrored in RTL; starts only after the horizontal touch slop, so vertical drags scroll | a11y action "Call <name>" | Proposed (owner request, D-017) |
 | Drag | handle in S-FAVEDIT | reorder | immediate | a11y move actions | Inferred PUB-007 |
 
 ### 4.2 Conflict rules (Proposed; DOC-055, DOC-056, DOC-057)
