@@ -17,8 +17,15 @@ Status values: `queued`, `in progress (<branch>)`, `in review (#PR)`, `done (#PR
 | FB-006 | P2 | One-tap permission setup: no digging through Accessibility and other menus | Deep links to the exact switch; Android 13+ "Allow restricted settings" guide | queued (after #38) |
 | FB-010 | P3 | Use platform features up to Android 17 where useful (personal build) | Raise compileSdk/targetSdk to the newest available; minSdk stays unless a feature needs it (decision) | queued |
 | FB-011 | P3 | Glyph tweaks the owner may ask for later | The current set is approved | queued |
-| FB-012 | P3 | Clock size is not capped at 40 % of the screen width per line (THEME_SYSTEM `sizeSp`) | Enforce the cap or amend the spec (owner decision) | queued (decision) |
-| FB-013 | P3 | Fuzzy search: scratch arrays sized to the whole query; surrogate pairs count as two edits | Codex findings on #38; skip fuzzy for queries longer than any indexed form; compute distance over code points | queued |
+
+## Found during review (not owner feedback)
+
+Gaps and follow-ups found by reviewers or spec checks. Same status values; IDs R-NNN.
+
+| ID | Pri | Item | Notes | Status |
+|---|---|---|---|---|
+| R-001 | P3 | Clock size is not capped at 40 % of the screen width per line (THEME_SYSTEM `sizeSp`) | Spec gap found during review. Enforce the cap or amend the spec to match the app (owner decision) | queued (decision) |
+| R-002 | P3 | Fuzzy search: scratch arrays sized to the whole query; surrogate pairs count as two edits | Codex findings on #38; skip fuzzy for queries longer than any indexed form; compute distance over code points | queued |
 
 ## Done
 
