@@ -51,6 +51,7 @@ import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.resumedHomeActivity
 import app.strata.launcher.shell
+import app.strata.launcher.switchNavMode
 import app.strata.launcher.visitRecentsAndReturn
 import app.strata.launcher.windowMatchesNavMode
 import com.google.common.truth.Truth.assertThat
