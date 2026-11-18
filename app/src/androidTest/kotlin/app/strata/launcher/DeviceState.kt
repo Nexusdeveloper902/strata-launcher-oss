@@ -226,8 +226,12 @@ fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()
         // The set-default step shows its buttons once the role check (off main) has finished.
-        waitUntil(timeoutMillis) { next() != "" }
-        val tag = next() ?: return screens
+        // The tag clicked is the one the wait saw. Not a second next(): between two reads the layer can be mid-change
+        // (root shown, no button yet), and the second read returned "" and clicked onNodeWithTag("") (GMD API 36,
+        // dispatch run 44289941495, tSearch13's @Before: "Failed to inject touch input ... (TestTag = '')").
+        var seen: String? = ""
+        waitUntil(timeoutMillis) { next().also { seen = it } != "" }
+        val tag = seen ?: return screens
         onNodeWithTag(tag).performClick()
         screens++
     }
