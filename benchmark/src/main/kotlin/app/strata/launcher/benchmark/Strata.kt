@@ -142,18 +142,74 @@ private fun UiDevice.whatUiAutomatorSees(res: String): String {
             .distinct()
             .take(MAX_IDS)
             .toList()
+    val stamp = "missing-$res-${System.currentTimeMillis()}"
     val shot =
         runCatching {
-            val dir =
-                InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let(::File)
-                    ?: InstrumentationRegistry
-                        .getInstrumentation()
-                        .context.externalMediaDirs
-                        .first()
-            File(dir, "missing-$res-${System.currentTimeMillis()}.png").takeIf { takeScreenshot(it) }?.name ?: "none"
+            File(outputDir(), "$stamp.png").takeIf { takeScreenshot(it) }?.also(::reportOutputFile)?.name ?: "none"
         }.getOrElse { "none ($it)" }
-    return "windows: $packages; resource ids (${ids.size}): $ids; screenshot: $shot"
+    val dump =
+        runCatching {
+            File(outputDir(), "$stamp.xml").also { it.writeText(xml) }.also(::reportOutputFile).name
+        }.getOrElse { "none ($it)" }
+    return "windows: $packages; resource ids (${ids.size}): $ids; screenshot: $shot; hierarchy: $dump; " +
+        "window state: ${targetWindowState()}"
 }
+
+/** Where GMD collects additional test output (the directory Macrobenchmark writes its traces to). */
+private fun outputDir(): File =
+    InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let(::File)
+        ?: InstrumentationRegistry
+            .getInstrumentation()
+            .context.externalMediaDirs
+            .first()
+
+/**
+ * Asks the test runner to copy [file] into the managed device's additional test output. GMD copies back only the files
+ * a test reports this way (as Macrobenchmark does for its traces): run 44298771296 took a screenshot that never
+ * reached the artifact.
+ */
+private fun reportOutputFile(file: File) {
+    val status = android.os.Bundle().apply { putString("additionalTestOutputFile_${file.name}", file.absolutePath) }
+    InstrumentationRegistry.getInstrumentation().sendStatus(2, status)
+}
+
+/**
+ * The window manager's view of the target's windows and of the keyguard: whether a window has a surface, is on screen,
+ * is visible and drawn. Answers "focused but not visible to UiAutomator" (run 44298771296: onboarding in the tree but
+ * not visible for over 10 s after the start).
+ */
+internal fun UiDevice.targetWindowState(): String {
+    val dump = executeShellCommand("dumpsys window windows")
+    val windows =
+        dump
+            .split(Regex("""(?m)^\s*Window #\d+"""))
+            .filter { Strata.TARGET in it.lineSequence().firstOrNull().orEmpty() }
+            .map { block ->
+                val name = Regex("""\{[0-9a-f]+ u\d+ ([^}]+)\}""").find(block)?.groupValues?.get(1) ?: "?"
+                val facts =
+                    WINDOW_FACTS
+                        .findAll(block)
+                        .map { it.value }
+                        .distinct()
+                        .joinToString(" ")
+                "$name: $facts"
+            }
+    val keyguard =
+        KEYGUARD_FACTS
+            .findAll(executeShellCommand("dumpsys window"))
+            .map { it.value }
+            .distinct()
+            .take(4)
+            .toList()
+    return "$windows; keyguard: $keyguard"
+}
+
+private val WINDOW_FACTS =
+    Regex(
+        """\b(mViewVisibility=\S+|mHasSurface=\S+|isOnScreen=\S+|isVisible=\S+|mDrawState=\S+|mIsWallpaper=\S+|alpha=\S+)""",
+    )
+private val KEYGUARD_FACTS =
+    Regex("""\b(mKeyguardShowing|mKeyguardGoingAway|mDreamingLockscreen|isKeyguardShowing)=\S+""")
 
 private const val MAX_IDS = 40
 
@@ -213,12 +269,32 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
         waitForIdle()
         // Onboarding or home, whichever shows: not "no onboarding within 1.5 s". On a slow emulator onboarding came up
         // later and covered home, and the journey then waited for a home that was not showing (run 44129238421).
+        val started = SystemClock.uptimeMillis()
+        var nextProbe = started + PROBE_AFTER_MS
         val first =
             pollFor(Strata.TIMEOUT_MS) {
                 when {
-                    hasObject(By.res(ONBOARDING_ROOT_TAG)) -> ONBOARDING_ROOT_TAG
-                    hasObject(By.res(Strata.ALL_APPS)) -> Strata.ALL_APPS
-                    else -> null
+                    hasObject(By.res(ONBOARDING_ROOT_TAG)) -> {
+                        ONBOARDING_ROOT_TAG
+                    }
+
+                    hasObject(By.res(Strata.ALL_APPS)) -> {
+                        Strata.ALL_APPS
+                    }
+
+                    else -> {
+                        // Neither screen visible to UiAutomator: record what the window manager says, so a run like
+                        // 44298771296 (onboarding in the tree, not visible for over 10 s) shows why.
+                        if (SystemClock.uptimeMillis() >= nextProbe) {
+                            val waited = SystemClock.uptimeMillis() - started
+                            Log.w(
+                                "Strata",
+                                "neither onboarding nor home visible after $waited ms: ${targetWindowState()}",
+                            )
+                            nextProbe += PROBE_EVERY_MS
+                        }
+                        null
+                    }
                 }
             }
         if (first != ONBOARDING_ROOT_TAG) break
@@ -293,6 +369,8 @@ private fun <T> pollFor(
 }
 
 private const val ONBOARDING_ROOT_TAG = "onboarding_root"
+private const val PROBE_AFTER_MS = 3_000L
+private const val PROBE_EVERY_MS = 2_000L
 private val ONBOARDING_ORDER_WELCOME = listOf("onboarding_welcome" to "onboarding_continue")
 private val ONBOARDING_ORDER_REST =
     listOf(
