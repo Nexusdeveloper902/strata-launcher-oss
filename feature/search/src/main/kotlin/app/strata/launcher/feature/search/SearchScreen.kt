@@ -41,13 +41,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -148,6 +151,7 @@ object SearchTestTags {
     const val NUMBER_CHOOSER = "search_number_chooser"
     const val NUMBER_CANCEL = "search_number_cancel"
     const val NUMBER_SCRIM = "search_number_scrim"
+    const val NUMBER_LIST = "search_number_list"
 
     fun contact(index: Int) = "search_contact_$index"
 
@@ -782,6 +786,10 @@ private fun NumberChooser(
     val type = Strata.typography
     val title = stringResource(R.string.search_choose_number_title, choice.contact.name)
     BackHandler { onAction(SearchAction.DismissNumberChoice) }
+    // The swipe can come while the field still has the keyboard up; the chooser needs the room. The query is not blank
+    // (contact rows are shown), so hiding the IME does not close search (ImeHideClosesSearch).
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(choice) { keyboard?.hide() }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         // The scrim takes every touch outside the pane (nothing reaches the rows behind it); a tap there cancels.
         Box(
@@ -798,6 +806,8 @@ private fun NumberChooser(
         Column(
             modifier =
                 Modifier
+                    // Never under the keyboard or the system bars: the pane fits the space they leave.
+                    .windowInsetsPadding(WindowInsets.safeDrawing.union(WindowInsets.ime))
                     .padding(24.dp)
                     .fillMaxWidth()
                     // Taps on the pane's own empty space stay in the pane.
@@ -815,8 +825,17 @@ private fun NumberChooser(
                 color = colors.textPrimary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp).semantics { heading() },
             )
-            choice.numbers.forEachIndexed { i, number ->
-                NumberRow(number, i) { onAction(SearchAction.ChooseNumber(number)) }
+            // Up to 8 numbers: the list scrolls in the room left between the title and Cancel, which always show.
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .testTag(SearchTestTags.NUMBER_LIST),
+            ) {
+                choice.numbers.forEachIndexed { i, number ->
+                    NumberRow(number, i) { onAction(SearchAction.ChooseNumber(number)) }
+                }
             }
             Box(
                 modifier =

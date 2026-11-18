@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.Dp
@@ -288,6 +289,63 @@ class SwipeToCallScreenTest {
         assertThat(calls(h)).isEmpty()
         dragRow(140.dp)
         assertThat(calls(h)).containsExactly("+1 555 0100" to CallMode.DIAL)
+    }
+
+    /**
+     * T-SEARCH-24 (review fix): on a short screen with the keyboard's inset up, the chooser for a contact with 8 numbers
+     * fits above the inset; the title and Cancel stay on screen, and the list scrolls so the last number is reachable.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h560dp")
+    fun tSearch24_chooserFitsAShortViewportWithTheKeyboard() {
+        val many = (0 until 8).map { PhoneNumber("+1 555 01" + (30 + it), "Mobile") }
+        val zia = ContactHit("content://com.android.contacts/contacts/lookup/fx2/2", "Zia Fixture")
+        val h =
+            SearchHarness(
+                settings = Settings(onboardingDone = true, contactsSearchEnabled = true),
+                contacts =
+                    FakeContactsSource(
+                        permissionState = PermissionState.GRANTED,
+                        contacts = listOf(zia),
+                        numbers = mapOf(zia.lookupUri to many),
+                    ),
+            )
+        show(h, "zia")
+        val imePx = with(compose.density) { 260.dp.roundToPx() }
+        compose.runOnIdle {
+            WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false)
+            val insets =
+                WindowInsetsCompat
+                    .Builder()
+                    .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, imePx))
+                    .setVisible(WindowInsetsCompat.Type.ime(), true)
+                    .build()
+            ViewCompat.dispatchApplyWindowInsets(compose.activity.window.decorView, insets)
+        }
+        compose.waitForIdle()
+        dragRow(140.dp)
+        compose.onNodeWithTag(SearchTestTags.NUMBER_CHOOSER).assertExists()
+        val rootHeight =
+            compose
+                .onRoot()
+                .fetchSemanticsNode()
+                .size.height
+        val limit = (rootHeight - imePx).toFloat()
+        // Without the fix the pane (title, 8 rows, Cancel) is taller than this room.
+        assertThat(limit).isLessThan(with(compose.density) { 480.dp.toPx() })
+        val pane = compose.onNodeWithTag(SearchTestTags.NUMBER_CHOOSER).fetchSemanticsNode().boundsInRoot
+        assertThat(pane.bottom).isAtMost(limit)
+        val cancel = compose.onNodeWithTag(SearchTestTags.NUMBER_CANCEL).fetchSemanticsNode().boundsInRoot
+        assertThat(cancel.bottom).isAtMost(limit)
+        assertThat(cancel.height).isGreaterThan(0f)
+        compose.onNodeWithTag(SearchTestTags.number(7)).performScrollTo()
+        compose.waitForIdle()
+        val last = compose.onNodeWithTag(SearchTestTags.number(7)).fetchSemanticsNode().boundsInRoot
+        assertThat(last.bottom).isAtMost(cancel.top + 1f)
+        assertThat(last.top).isAtLeast(pane.top)
+        compose.onNodeWithTag(SearchTestTags.number(7)).performClick()
+        compose.waitForIdle()
+        assertThat(calls(h)).containsExactly("+1 555 0137" to CallMode.DIAL)
     }
 
     private fun customActionLabels(): List<String> =
