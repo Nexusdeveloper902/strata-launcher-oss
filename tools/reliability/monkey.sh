@@ -40,9 +40,10 @@ adb logcat -d -b crash > "$out/logcat-crash.txt" 2>&1 || true
 adb logcat -d -s AndroidRuntime:E ActivityManager:E > "$out/logcat-errors.txt" 2>&1 || true
 
 # Reports for $pkg's own processes ($pkg, $pkg:*) fail the run; the same rule as MonkeyVerdict in the benchmark module.
-crashes=$(grep -c -E "// (NATIVE )?CRASH:? ${pkg}[ :]" "$out/monkey.txt" || true)
-anrs=$(grep -c -E "// NOT RESPONDING: ${pkg}[ :]" "$out/monkey.txt" || true)
-others=$(grep -E "// (NATIVE )?CRASH|// NOT RESPONDING" "$out/monkey.txt" | grep -v -E " ${pkg}[ :]" || true)
+pkg_re=$(printf '%s' "$pkg" | sed 's/\./\\./g') # dots in the package name match only dots
+crashes=$(grep -c -E "// (NATIVE )?CRASH:? ${pkg_re}[ :]" "$out/monkey.txt" || true)
+anrs=$(grep -c -E "// NOT RESPONDING: ${pkg_re}[ :]" "$out/monkey.txt" || true)
+others=$(grep -E "// (NATIVE )?CRASH|// NOT RESPONDING" "$out/monkey.txt" | grep -v -E " ${pkg_re}[ :]" || true)
 [ -n "$others" ] && printf 'other processes (not counted):\n%s\n' "$others"
 fatal=$(grep -c "Process: $pkg, PID" "$out/logcat-crash.txt" || true)
 finished=$(grep -c "// Monkey finished" "$out/monkey.txt" || true)

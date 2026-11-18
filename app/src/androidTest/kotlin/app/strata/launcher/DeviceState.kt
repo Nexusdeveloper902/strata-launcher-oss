@@ -167,7 +167,8 @@ fun awaitSystemSettled() {
     }
 }
 
-private const val SETTLE_TIMEOUT_MS = 60_000L
+// Post-boot broadcast queues take longer than one state change: four device timeouts bound the gate.
+private const val SETTLE_TIMEOUT_MS = 4 * DEVICE_TIMEOUT_MS
 
 /**
  * Waits until a RESUMED activity of [type] has window focus, i.e. WindowManager shows it and input goes to it. Compose
@@ -320,11 +321,8 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     val before = enabledNavOverlays()
     val settingBefore = navModeSetting()
     if (before == listOf(overlay)) return null
-    setNavOverlay(overlay)
-    val after = enabledNavOverlays()
-    check(overlay in after) { "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)" }
-    awaitNavModeSetting(NAV_MODE_SETTING.getValue(wanted), "strata.navMode=$wanted")
-    return {
+    // Built before the switch, so a switch that fails half-way (overlay enabled, mode never reported) is undone too.
+    val restore = {
         if (before.isEmpty()) {
             // No navigation overlay was enabled: the device default. Turn ours off again.
             Log.i(TAG, "nav mode restore: " + shell("cmd overlay disable $overlay"))
@@ -337,6 +335,18 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
             Log.e(TAG, "nav mode restore: navigation_mode is ${navModeSetting()}, was $settingBefore")
         }
     }
+    try {
+        setNavOverlay(overlay)
+        val after = enabledNavOverlays()
+        check(
+            overlay in after,
+        ) { "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)" }
+        awaitNavModeSetting(NAV_MODE_SETTING.getValue(wanted), "strata.navMode=$wanted")
+    } catch (e: Throwable) {
+        runCatching(restore).onFailure { e.addSuppressed(it) }
+        throw e
+    }
+    return restore
 }
 
 private fun navModeSetting(): String = shell("settings get secure navigation_mode").trim()
@@ -424,7 +434,9 @@ fun pollUntil(
 }
 
 private const val SET_HOME_TIMEOUT_MS = 2 * DEVICE_TIMEOUT_MS
-private const val SET_HOME_RETRY_MS = 5_000L
+
+// Re-issue the command three times per device timeout: a stalled system answered after ~15 s (one DEVICE_TIMEOUT_MS).
+private const val SET_HOME_RETRY_MS = DEVICE_TIMEOUT_MS / 3
 private const val POLL_MS = 100L
 
 /**

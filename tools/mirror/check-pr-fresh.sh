@@ -18,7 +18,7 @@ head_sha="$(gh api "repos/$repo/commits/$branch" -q .sha)"
 main_pushed="$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&head_sha=$main_sha&per_page=1" \
   -q '.workflow_runs[0].created_at // ""')"
 run="$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=$branch&event=pull_request&per_page=1" \
-  -q '.workflow_runs[0] | "\(.id) \(.status) \(.conclusion) \(.head_sha) \(.created_at)"')"
+  -q '.workflow_runs[0] // empty | "\(.id) \(.status) \(.conclusion // "none") \(.head_sha) \(.created_at)"')"
 
 fail() { echo "check-pr-fresh: $branch: $*" >&2; exit 1; }
 [ -n "$run" ] || fail "no pull_request CI run on the mirror (open a CI-only PR there)"

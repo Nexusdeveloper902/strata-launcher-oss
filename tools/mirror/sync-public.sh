@@ -66,8 +66,13 @@ src="$(git rev-parse --show-toplevel)"
 # merged into the MIRROR's main. If that main lags the private one, CI tests a merge that will never exist
 # (docs/ci/RELIABILITY.md, "Green PR, red main"). Pushing main is a fast-forward like every other sync. A dry run
 # inspects exactly the branches it was given.
+# main goes FIRST: the branch push starts the PR run, which must already see the new main (check-pr-fresh.sh compares
+# the run's start with main's push; a run started before main arrived would stay stale however often it is re-synced).
 if [ -z "$dry_run" ]; then
-  case " $* " in *" main "*) ;; *) set -- "$@" main ;; esac
+  rest=""
+  for b in "$@"; do [ "$b" = main ] || rest="$rest $b"; done
+  # shellcheck disable=SC2086
+  set -- main $rest
 fi
 
 work="$(mktemp -d)"
@@ -90,6 +95,13 @@ fi
 git init -q --bare "$work/repo"
 cd "$work/repo"
 for b in "$@"; do
+  # main is only ever mirrored from origin/main (what was merged), never from a local main.
+  if [ "$b" = main ] && [ -z "$dry_run" ]; then
+    git -C "$src" rev-parse -q --verify refs/remotes/origin/main >/dev/null ||
+      die "no origin/main in $src (fetch it first; a local main is never mirrored)"
+    git fetch -q "$src" "+refs/remotes/origin/main:refs/heads/main"
+    continue
+  fi
   # Prefer the remote-tracking ref (what was pushed), fall back to the local branch.
   if git -C "$src" rev-parse -q --verify "refs/remotes/origin/$b" >/dev/null; then
     git fetch -q "$src" "+refs/remotes/origin/$b:refs/heads/$b"

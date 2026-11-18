@@ -36,17 +36,18 @@ jobs:
       - name: Assemble
         run: ./gradlew assembleDebug assembleDebugAndroidTest :app:assembleBenchmark :benchmark:assemble --stacktrace
       # T-CI-07 (R8, size per ABI, not debuggable, no test code) on the release APK, which is also uploaded for the
-      # owner's phone. Signed with the stable release key only on a push to main or a manual run, and only when all
-      # four secrets exist; pull_request runs never see the secrets (the expressions below yield '' for them). Without
+      # owner's phone. Signed with the stable release key only on a push to main or a manual run ON MAIN, and only when
+      # all four secrets exist; pull_request runs and other branches never see the secrets (the expressions below yield
+      # '' for them). Without
       # the key it is a debug-signed TEST build, uploaded under a name that says so: a different key cannot update an
       # installed release. CONTRIBUTING.md "Release APK from CI", docs/release/RELEASE_GATE.md §3.11.
       - name: Release APK (T-CI-07)
         id: release
         env:
-          KEYSTORE_BASE64: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_KEYSTORE_BASE64 || '' }}
-          STORE_PASSWORD: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_STORE_PASSWORD || '' }}
-          KEY_ALIAS: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_KEY_ALIAS || '' }}
-          KEY_PASSWORD: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.STRATA_RELEASE_KEY_PASSWORD || '' }}
+          KEYSTORE_BASE64: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && secrets.STRATA_RELEASE_KEYSTORE_BASE64 || '' }}
+          STORE_PASSWORD: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && secrets.STRATA_RELEASE_STORE_PASSWORD || '' }}
+          KEY_ALIAS: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && secrets.STRATA_RELEASE_KEY_ALIAS || '' }}
+          KEY_PASSWORD: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && secrets.STRATA_RELEASE_KEY_PASSWORD || '' }}
         run: |
           set -euo pipefail
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
@@ -60,6 +61,11 @@ jobs:
               ./gradlew :app:checkReleaseApk --no-configuration-cache --stacktrace
             echo "kind=release" >> "$GITHUB_OUTPUT"
           else
+            set_count=0
+            for v in "$KEYSTORE_BASE64" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD"; do [ -z "$v" ] || set_count=$((set_count + 1)); done
+            if [ "$set_count" -gt 0 ]; then
+              echo "::warning::only $set_count of the 4 STRATA_RELEASE_* secrets are set; building the unsigned TEST APK"
+            fi
             ./gradlew :app:checkReleaseApk -Pstrata.release.debugSigned=true --stacktrace
             echo "kind=test" >> "$GITHUB_OUTPUT"
           fi
@@ -70,6 +76,10 @@ jobs:
           certs="$("$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs "$apk")"
           sha256="$(printf '%s\n' "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
           [ -n "$sha256" ] || { echo "::error::no signer certificate in $apk"; exit 1; }
+          if [ "${{ steps.release.outputs.kind }}" = release ] && printf '%s\n' "$certs" | grep -q '^Signer #1 certificate DN: .*CN=Android Debug'; then
+            echo "::error::the release APK is signed with a debug certificate; check the STRATA_RELEASE_* secrets"
+            exit 1
+          fi
           mkdir -p dist
           if [ "${{ steps.release.outputs.kind }}" = release ]; then
             name=strata-release-apk; file="dist/strata-release-${GITHUB_SHA::7}.apk"

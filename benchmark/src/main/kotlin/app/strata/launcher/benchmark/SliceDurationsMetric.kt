@@ -59,13 +59,16 @@ internal class SliceGapMetric(
 
 /**
  * T-PERF-02 warm return, `warmReturnMs`: from the start of the system's `launching: <target>` slice to the end of the
- * first frame the target's RenderThread draws after it (`DrawFrame…`), i.e. until the returned window is on screen.
+ * first frame the target's RenderThread draws (`DrawFrame…`) after HomeActivity's `onResume` has run
+ * (`strata.home.onResume`, traced by the app in every build). Anchoring on the resume means a frame drawn earlier (a
+ * leftover or animation frame of the window before it was brought back) cannot end the measurement: the first frame
+ * after `onResume` is the returned window's.
  *
  * Replaces `StartupTimingMetric` for this test only: its query pairs the FIRST UI-thread frame after the launch with
  * a RenderThread slice and throws when that frame drew nothing ("No RT frame slice associated with UI thread frame
  * slice after launching slice": runs 43625970551, 44068284763, 44129238421, 44129245277, 44131037055 on main, and
- * PR #19, even with the target verified STOPPED before the launch). On the emulator a warm return's first doFrame can
- * be such an empty frame. A missing launch or a launch that never draws fails the test with its own message; a slow one
+ * PRs #19 and #20, even with the target verified STOPPED before the launch). Only frames that drew are considered
+ * here. A launch without a resume, or a resume that never draws, fails the test with its own message; a slow one
  * fails the device budget.
  */
 @OptIn(ExperimentalMetricApi::class)
@@ -81,6 +84,20 @@ internal class WarmReturnMetric : TraceMetric() {
                 .firstOrNull()
                 ?.long("ts")
                 ?: error("T-PERF-02: no 'launching: $pkg' slice in the trace (the Home intent did not launch)")
+        val resumed =
+            traceSession
+                .query(
+                    """
+                    SELECT slice.ts + slice.dur AS end_ts FROM slice
+                    JOIN thread_track ON slice.track_id = thread_track.id
+                    JOIN thread USING (utid)
+                    JOIN process USING (upid)
+                    WHERE process.name = '$pkg' AND slice.name = '$RESUME_SECTION'
+                      AND slice.ts >= $launch AND slice.dur >= 0
+                    ORDER BY slice.ts LIMIT 1
+                    """.trimIndent(),
+                ).firstOrNull()
+                ?.long("end_ts") ?: error("T-PERF-02: HomeActivity did not resume after the launch ($RESUME_SECTION)")
         val drawn =
             traceSession
                 .query(
@@ -92,15 +109,18 @@ internal class WarmReturnMetric : TraceMetric() {
                     WHERE (process.name = '$pkg' OR process.name LIKE '$pkg:%')
                       AND thread.name = 'RenderThread'
                       AND slice.name LIKE 'DrawFrame%'
-                      AND slice.ts >= $launch AND slice.dur > 0
+                      AND slice.ts >= $resumed AND slice.dur > 0
                     ORDER BY slice.ts LIMIT 1
                     """.trimIndent(),
                 ).firstOrNull()
-                ?.long("end_ts") ?: error("T-PERF-02: $pkg drew no frame after the warm return's launch")
+                ?.long("end_ts") ?: error("T-PERF-02: $pkg drew no frame after HomeActivity resumed")
         return listOf(Measurement(NAME, (drawn - launch) / 1_000_000.0))
     }
 
     companion object {
         const val NAME = "warmReturnMs"
+
+        /** `TraceSections.HOME_RESUME` in :core:common (not a dependency of this module). */
+        private const val RESUME_SECTION = "strata.home.onResume"
     }
 }
