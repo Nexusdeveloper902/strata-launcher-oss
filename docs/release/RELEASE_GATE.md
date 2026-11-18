@@ -160,6 +160,13 @@ as `strata-release-apk`. The run summary shows the signer certificate SHA-256; i
 PR runs and runs without the secrets upload a debug-signed `strata-release-apk-unsigned-test` instead, which never
 updates an installed release. Details: `CONTRIBUTING.md`, "Release APK from CI".
 
+The CI APK is built on the public mirror and so has only the **public glyph set** (its packaged `glyph_index` is
+byte-identical to the public file; the private overlay `platform/icons/glyphs-private/` never leaves this
+repository). Mirror artifacts can be downloaded by any logged-in GitHub user. For the APK you ship, build it here
+with the commands above (`:app:checkReleaseApk` with the same key): that build includes the private glyphs, has the
+same signer SHA-256, and installs over a CI release APK in place (and the other way round, which drops the private
+glyphs).
+
 Moving the A56 from the debug APK to the release APK needs one uninstall (different signature). Export a backup first
 (Settings → Backup and restore → Export), uninstall, install the release APK, then Restore from file. Later release APKs from `main`
 update in place.

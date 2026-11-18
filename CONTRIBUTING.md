@@ -129,6 +129,24 @@ Back up first in Strata (Settings → Backup and restore → Export), uninstall,
 (Settings → Backup and restore → Restore from file). Every later `strata-release-apk` from `main` installs over it in place, as long as the
 summary shows the same certificate SHA-256.
 
+**What the CI APK contains, and who can get it.** CI runs on the public mirror, which has no
+`platform/icons/glyphs-private/`. So `strata-release-apk` contains only the public glyph set (checked: its packaged
+`glyph_index` is byte-identical to the public `glyph_index.txt`, 1 entry and 1 glyph drawable, against 152 entries and
+151 drawables in a release build from this repository). The overlay and the secrets stay out of public CI. The
+mirror's artifacts can be downloaded by **any logged-in GitHub user**, so the signed APK is effectively public. It holds
+no secrets or private glyphs, but anyone can install that build.
+
+**Fully signed APK with the private glyphs, built locally** (same key, same release task, in this repository):
+```sh
+export STRATA_RELEASE_STORE_FILE=~/keys/strata-release.jks STRATA_RELEASE_KEY_ALIAS=strata
+read -rs STRATA_RELEASE_STORE_PASSWORD; export STRATA_RELEASE_STORE_PASSWORD
+read -rs STRATA_RELEASE_KEY_PASSWORD; export STRATA_RELEASE_KEY_PASSWORD
+./gradlew :app:checkReleaseApk     # -> app/build/outputs/apk/release/app-release.apk, checked (T-CI-07)
+"$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
+It has the same signer SHA-256 as `strata-release-apk`, so either installs over the other in place (not a lower
+`versionCode`). Installing a CI APK over a local one removes the private glyphs until the next local build.
+
 ## Clean room
 Follow `AGENTS.md`. Implement from `spec/` only. Never open `research/APK_ANALYSIS.md` or
 `research/PUBLIC_BEHAVIOR.md` while writing code, and never copy code, strings, artwork or
