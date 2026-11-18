@@ -265,6 +265,7 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
     awaitSystemSettled()
     val order = listOf(ONBOARDING_ORDER_WELCOME, ONBOARDING_ORDER_REST).flatten()
     var screens = 0
+    var redecided = 0
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()
         // Onboarding or home, whichever shows: not "no onboarding within 1.5 s". On a slow emulator onboarding came up
@@ -310,11 +311,28 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
                 }
             } ?: error("onboarding is showing but none of its buttons appeared")
         if (next == ONBOARDING_GONE) break
-        // Re-find right before the click: the object seen by the poll may belong to a frame that has since changed.
-        clickOrFail(next)
-        screens++
+        // One click on the step seen by the poll. If its button is stale or gone, the step changed in between: decide
+        // again from what is showing, never chase the old tag. search-smart run 44302646087: Skip was clicked, the
+        // next poll still saw the leaving favourites step, its Skip node was stale, and re-finding "onboarding_skip"
+        // waited 10 s while onboarding already showed the set-default step.
+        if (clickOnce(next)) {
+            screens++
+        } else {
+            check(++redecided <= MAX_ONBOARDING_SCREENS) { "onboarding changed under every click (last: $next)" }
+        }
     }
     findOrFail(Strata.ALL_APPS)
+}
+
+/** Clicks [res] if it is on screen now; false when it is not there or went stale before the click. */
+private fun UiDevice.clickOnce(res: String): Boolean {
+    val button = findObject(By.res(res)) ?: return false
+    return try {
+        button.click()
+        true
+    } catch (e: StaleObjectException) {
+        false
+    }
 }
 
 /**
