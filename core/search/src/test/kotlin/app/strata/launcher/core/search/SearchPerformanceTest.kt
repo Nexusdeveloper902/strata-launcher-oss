@@ -36,6 +36,33 @@ class SearchPerformanceTest {
         assertThat(p95Ms).isAtMost(16.0)
     }
 
+    /**
+     * T-PERF-05 with typo queries (FR-SEARCH-02 T6, Proposed): queries with no or few exact matches make the fuzzy pass
+     * run over the whole index. Reported, with loose ceilings.
+     */
+    @Test
+    fun tPerf05_fuzzyQueriesLatency500Apps() {
+        val idx = index(apps, counts)
+        val queries = listOf("mpas", "pixlgram", "chtatyapp", "kalkulator", "zzqx", "calender")
+        repeat(WARMUP) { queries.forEach { q -> idx.rank(q, includeHidden = true) } }
+        val samples = ArrayList<Long>()
+        repeat(RUNS) {
+            for (q in queries) {
+                val t0 = System.nanoTime()
+                idx.rank(q, includeHidden = true)
+                samples += System.nanoTime() - t0
+            }
+        }
+        samples.sort()
+        val medianMs = samples[samples.size / 2] / 1e6
+        val p95Ms = samples[(samples.size * 95) / 100] / 1e6
+        println("T-PERF-05 JVM fuzzy: median=%.3f ms p95=%.3f ms (n=%d)".format(medianMs, p95Ms, samples.size))
+        // Report first; the ceilings only catch a pathological regression on a loaded CI host (measured median 0.2 ms,
+        // p95 0.7 ms). The 8 / 16 ms budget itself is checked on the device trace.
+        assertThat(medianMs).isAtMost(FUZZY_MEDIAN_CEILING_MS)
+        assertThat(p95Ms).isAtMost(FUZZY_P95_CEILING_MS)
+    }
+
     @Test
     fun indexBuild500Apps() {
         val cache = HashMap<String, String>()
@@ -56,5 +83,7 @@ class SearchPerformanceTest {
     private companion object {
         const val WARMUP = 20
         const val RUNS = 100
+        const val FUZZY_MEDIAN_CEILING_MS = 16.0
+        const val FUZZY_P95_CEILING_MS = 64.0
     }
 }

@@ -402,7 +402,8 @@ adopted later without changing the interfaces.
 (500 apps < 5 ms on RD-1, off main):
 ```
 SearchEntry(key, displayLabel, systemLabel, folded: [display, system], words: [start offsets],
-            initials: String, translit: String?, launchCount30d: Int, collationKey, flags{hidden, profile})
+            initials: String, translit: String?, launchCount30d: Int, collationKey, flags{hidden, profile},
+            camel: [folded camel-case splits] (D-016), package: folded package name (D-016))
 ```
 **Normalisation `fold(s)`** (deterministic, same for queries and labels):
 1. Unicode NFKD (`java.text.Normalizer`), then remove combining marks (`\p{Mn}`): "Café" → "Cafe".
@@ -422,7 +423,10 @@ SearchEntry(key, displayLabel, systemLabel, folded: [display, system], words: [s
 | T3 word-prefix | any word start begins with `q` ("maps" in "Google Maps") | 400 |
 | T4 initials | `q` (≥ 2 chars) is a prefix of `initials` ("gm" → Google Maps) | 300 |
 | T5 substring | label contains `q` | 200 |
-| T6 fuzzy | `q.length ≥ 4` and optimal-string-alignment distance ≤ 1 to a label prefix of length `q.length` ±1 ("mpas" → maps) | 100 |
+| T6 fuzzy | `q.length ≥ 4` and optimal-string-alignment distance ≤ 1 to a label prefix of length `q.length` ±1 ("mpas" → maps). **Amended (Proposed, D-016):** ≤ 1 edit for 4–7 chars, ≤ 2 from 8 chars, against a prefix of the label or of any label word (length `q.length` ± edits); +10 when the match is at the label start (20 + 50 + 10 < 100); runs only when T1–T5 found fewer than 5 label matches (package hits do not count) and the query contains a letter; lengths are counted in code points | 100 |
+| (D-016) camel | The label split at camel-case and letter/digit boundaries ("PlayTube Music" → "play tube music") is a second form matched by T1–T5 (not T6): "tube" is T3, "ptm" is T4, "play tub" is T2 | — |
+| (D-016) package | Package name: the last two segments that are not generic (`com`, `org`, `net`, `io`, `de`, `co`, `uk`, `app`, `apps`, `android`, `mobile`, `client`) or a vendor prefix (`google`, `samsung`, `sec`, `microsoft`, `huawei`, `xiaomi`, …). A query of ≥ 3 chars that begins one of them, or a dotted query inside the whole name, matches. No display bonus | 150 |
+| (D-016) order | Results sort by tier base (one tier lower for a transliterated form), then score, then collation, so no bonus or usage moves a result across tiers (the package tier is only 50 below T5) | — |
 Within a tier the score is **additive**: `score = tierBase + (20 if the match is on the display
 label, else 0) + min(launchCount30d, 50)`. The boost is local-only and is 0 while the launch log
 is paused or after it is cleared. The largest addition (20 + 50 = 70) is below the 100-point gap

@@ -60,6 +60,9 @@ class HomeLogicTest {
         assertThat(HomeUiState(modal = HomeModal.Sheet(key)).imeAllowed).isFalse()
         assertThat(HomeUiState(modal = HomeModal.Sheet(key, renaming = true)).imeAllowed).isTrue()
         assertThat(HomeUiState(layer = HomeLayer.SEARCH).imeAllowed).isTrue()
+        // The pickers rely on their focused field alone (T-HOME-14).
+        val picker = FavPickerUi(apps = emptyList(), query = "", picked = emptyList(), limitReached = false)
+        assertThat(HomeUiState(layer = HomeLayer.FAV_EDIT, favPicker = picker).imeAllowed).isFalse()
     }
 
     /** FR-APPS-03: system → none; updated system → "Uninstall updates"; others → Uninstall. */

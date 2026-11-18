@@ -77,7 +77,12 @@ fun ColumnScope.AppPicker(
         label = { Text(texts.search) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag(tags.search),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .imeField()
+                .testTag(tags.search),
     )
     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().testTag(tags.list)) {
         if (apps != null) {

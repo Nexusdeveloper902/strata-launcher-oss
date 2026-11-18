@@ -43,8 +43,8 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-SEARCH-01 | P0 | Search opens by swipe, pill, key or accessibility action | Corroborated | APK-028, PUB-013, PUB-054 | :core:search, :feature:search, :platform:system (area); not cited in ARCH | PRODUCT_SPEC §4.3 | T-SEARCH-01, T-SEARCH-02, T-SEARCH-03 | M2 [spec Rel: v1] |
-| FR-SEARCH-02 | P0 | Normalised tiered app matching with initials and fuzzy | Proposed | U-007 | :core:search, :feature:search, :platform:system (area); cited ARCH §8 | PRODUCT_SPEC §4.3 | T-SEARCH-04, T-SEARCH-05, T-SEARCH-06 | M2 [spec Rel: v1] |
+| FR-SEARCH-01 | P0 | Search opens by swipe, pill, key or accessibility action | Corroborated | APK-028, PUB-013, PUB-054 | :core:search, :feature:search, :platform:system (area); not cited in ARCH | PRODUCT_SPEC §4.3 | T-SEARCH-01, T-SEARCH-02, T-SEARCH-03, T-HOME-14^ | M2 [spec Rel: v1] |
+| FR-SEARCH-02 | P0 | Normalised tiered app matching with initials and fuzzy | Proposed | U-007 | :core:search, :feature:search, :platform:system (area); cited ARCH §8 | PRODUCT_SPEC §4.3 | T-SEARCH-04, T-SEARCH-05, T-SEARCH-06, T-SEARCH-17^, T-SEARCH-18^, T-SEARCH-19^, T-SEARCH-20^, T-SEARCH-21^, T-SEARCH-22^ | M2 [spec Rel: v1] |
 | FR-SEARCH-03 | P0 | Hidden apps searchable by setting; locked private never | Corroborated (capability); Proposed (setting) | PUB-017, APK-027, DOC-014 | :core:search, :feature:search, :platform:system (area); cited ARCH §4.2, §8 | PRODUCT_SPEC §4.3 | T-SEARCH-07, T-SEARCH-08, T-LIFE-09 | M2, M6 [spec Rel: v1] |
 | FR-SEARCH-04 | P0 | Keyboard Go, arrow, Tab and Esc handling | Proposed | PUB-054 | :core:search, :feature:search, :platform:system (area); cited ARCH §8 | PRODUCT_SPEC §4.3 | T-SEARCH-09, T-SEARCH-10, T-COMPAT-09 | M2 [spec Rel: v1] |
 | FR-SEARCH-05 | P1 | Empty query shows recent apps; clearable and disableable | Corroborated | SEC-005, APK-028 | :core:search, :feature:search, :platform:system (area); cited ARCH §4.2, §8 | PRODUCT_SPEC §4.3 | T-SEARCH-11, T-SEARCH-16 | M2 [spec Rel: v1] |
@@ -60,7 +60,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-APPS-02 | P0 | Launch via startMainActivity; handle failure and reconcile | Proposed | DOC-010, DOC-023 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §11 | PRODUCT_SPEC §4.4 | T-APPS-02, T-APPS-03 | M1 [spec Rel: v1] |
 | FR-APPS-03 | P0 | Long-press options sheet with per-app actions | Corroborated | APK-027, PUB-008, PUB-018 | :platform:apps, :platform:icons, :core:data, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.4 | T-APPS-04, T-APPS-05 | M3 [spec Rel: v1] |
 | FR-APPS-04 | P0 | Hide and unhide apps, keyed by component and user | Corroborated | APK-027, PUB-017, SEC-003 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §4.1 | PRODUCT_SPEC §4.4 | T-APPS-06, T-APPS-07 | M3 [spec Rel: v1] |
-| FR-APPS-05 | P0 | Custom app name of 1-60 characters, resettable | Corroborated | PUB-018, APK-027 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §8 | PRODUCT_SPEC §4.4 | T-APPS-08, T-APPS-09, T-SEARCH-06, T-LIFE-06 | M3 [spec Rel: v1] |
+| FR-APPS-05 | P0 | Custom app name of 1-60 characters, resettable | Corroborated | PUB-018, APK-027 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §8 | PRODUCT_SPEC §4.4 | T-APPS-08, T-APPS-09, T-SEARCH-06, T-LIFE-06, T-HOME-14^ | M3 [spec Rel: v1] |
 | FR-APPS-06 | P1 | Per-app icon override from installed icon packs | Corroborated | PUB-018, APK-023, APK-011 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §9 | PRODUCT_SPEC §4.4 | T-APPS-10 | M5 [spec Rel: v1] |
 | FR-APPS-07 | P0 | Uninstall via system flow; row removed on event | Inferred | APK-005, DOC-025 | :platform:apps, :platform:icons, :core:data, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.4 | T-APPS-11 | M3 [spec Rel: v1] |
 | FR-APPS-08 | P1 | App shortcuts in sheet; pinned shortcuts in v1.x | Inferred | APK-008, DOC-027, DOC-028 | :platform:apps, :platform:icons, :core:data, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.4 | T-APPS-12, T-APPS-13, T-LIFE-10, T-SEC-02 | M6, v1.x [spec Rel: v1 / v1.x] |
@@ -74,7 +74,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
 | FR-FAV-01 | P0 | Up to 12 favourites, added or removed from sheet | Corroborated (capability); Proposed (cap; picker in Edit favourites, owner request) | PUB-007, APK-026, APK-027 | :feature:home, :core:data (area); cited ARCH §4 | PRODUCT_SPEC §4.5 | T-FAV-01, T-FAV-07, T-FAV-08, T-ONBOARD-02 | M3 [spec Rel: v1] |
-| FR-FAV-02 | P0 | Reorder favourites by drag handles or accessibility actions | Inferred (reorder); Proposed (remove with Undo, Add apps, Settings entry; owner request) | PUB-007 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-02, T-FAV-03, T-FAV-06, T-FAV-07, T-FAV-09 | M3 [spec Rel: v1] |
+| FR-FAV-02 | P0 | Reorder favourites by drag handles or accessibility actions | Inferred (reorder); Proposed (remove with Undo, Add apps, Settings entry; owner request) | PUB-007 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-02, T-FAV-03, T-FAV-06, T-FAV-07, T-FAV-09, T-HOME-14^ | M3 [spec Rel: v1] |
 | FR-FAV-03 | P0 | Favourites block scrolls only when content overflows | Proposed | — | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-04, T-FAV-05 | M3 [spec Rel: v1] |
 | FR-FAV-04 | P2 | Favourite groups that expand to several apps | Corroborated | PUB-004, APK-032 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 — NONE (placeholder: “defined when scheduled”) | NONE | NONE [spec Rel: later] |
 
@@ -135,7 +135,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-ONBOARD-01 | P0 | First run of at most four screens, no permissions | Corroborated (sequence); Proposed (content) | SEC-002, APK-033 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-NOTIF-01 | M6 [spec Rel: v1] |
+| FR-ONBOARD-01 | P0 | First run of at most four screens, no permissions | Corroborated (sequence); Proposed (content) | SEC-002, APK-033 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-NOTIF-01, T-HOME-14^ | M6 [spec Rel: v1] |
 | FR-ONBOARD-02 | P0 | Set-default flow via role API with fallbacks | Inferred | APK-033, DOC-005, DOC-006, DOC-007, DOC-008, P-2 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-03, T-ONBOARD-04, T-ONBOARD-05, T-ONBOARD-06, T-HOME-02 | M6 [spec Rel: v1] |
 | FR-ONBOARD-03 | P0 | OEM failure detection with help card | Inferred | PUB-076, U-016 | :feature:onboarding, :platform:system (area); cited ARCH §14.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-07, T-COMPAT-04 | M6 [spec Rel: v1] |
 | FR-ONBOARD-04 | P0 | Lost-default banner, at most once per day | Inferred | PUB-050 | :feature:onboarding, :platform:system (area); cited ARCH §4.2, §10 | PRODUCT_SPEC §4.11 | T-ONBOARD-08, T-LIFE-10 | M6 [spec Rel: v1] |
@@ -205,7 +205,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 |---|---|---|---|---|---|---|---|---|
 | NFR-PERF-01 | P0 | Cold start within 700 ms median on RD-1 | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §7, §10, §15 | PRODUCT_SPEC §5 | T-PERF-01, T-PERF-02, T-PERF-12 | M1, M9 |
 | NFR-PERF-02 | P0 | Smooth list fling and index scrub | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-03, T-PERF-04, T-PERF-11 | M1, M9 |
-| NFR-PERF-03 | P0 | Search results recomputed within 8 ms median | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §8 | PRODUCT_SPEC §5 | T-PERF-05, T-PERF-06 | M2, M7, M9 |
+| NFR-PERF-03 | P0 | Search results recomputed within 8 ms median | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §8 | PRODUCT_SPEC §5 | T-PERF-05, T-PERF-06, T-SEARCH-22^ | M2, M7, M9 |
 | NFR-PERF-04 | P0 | Memory ceiling and bounded icon cache | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §9 | PRODUCT_SPEC §5 | T-PERF-07, T-PERF-08 | M3, M9 |
 | NFR-PERF-05 | P0 | No periodic jobs, alarms or wakelocks | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-09, T-PERF-13, T-PERF-14 | M9 |
 | NFR-PERF-06 | P1 | Package changes within 1 s; theme apply within 300 ms | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-10, T-LIST-08, T-THEME-53 | M9 |
@@ -281,15 +281,15 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
 - Requirements with at least one test: 145; without: 11.
 - Requirements with a roadmap milestone: 152; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 262; §22 rows: 144.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 269; §22 rows: 144.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
 - Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
-- §22-only pairs (~): none. Covers-only pairs (^): FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PRIV-01/T-SET-09.
-- §22/Covers disagreements in total: 0 §22-only pairs, 6 Covers-only pairs (suffixes in the matrix).
+- §22-only pairs (~): none. Covers-only pairs (^): FR-APPS-05/T-HOME-14, FR-FAV-02/T-HOME-14, FR-ONBOARD-01/T-HOME-14, FR-SEARCH-01/T-HOME-14, FR-SEARCH-02/T-SEARCH-17, FR-SEARCH-02/T-SEARCH-18, FR-SEARCH-02/T-SEARCH-19, FR-SEARCH-02/T-SEARCH-20, FR-SEARCH-02/T-SEARCH-21, FR-SEARCH-02/T-SEARCH-22, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-03/T-SEARCH-22, NFR-PRIV-01/T-SET-09.
+- §22/Covers disagreements in total: 0 §22-only pairs, 17 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria

@@ -207,7 +207,9 @@ data class HomeUiState(
     val canAddFavorite: Boolean get() = favorites.size < FavoritesRepository.MAX
 
     /**
-     * The soft keyboard may be up only while a text field is open: the search layer or the sheet's rename field.
+     * The soft keyboard may be up only while a text field is open: the search layer or the sheet's rename field. Any
+     * other text field (the favourites and onboarding pickers) keeps its keyboard only while it has focus
+     * ([app.strata.launcher.core.ui.imeField]; the owner's A56 report: the picker's keyboard closed by itself).
      * Everywhere else it is hidden (INTERACTION_SPEC §3 HOME_REST "IME hidden", ANDROID_PLATFORM §14 "closing
      * search … hides the keyboard"), including after a show that the IME completes only after the field has gone.
      */

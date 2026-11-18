@@ -36,6 +36,33 @@ object SearchFold {
         return out.toString()
     }
 
+    /**
+     * FR-SEARCH-02 (Proposed): [label] with a space inserted at each camel-case boundary (a lower-case letter followed
+     * by an upper-case one: "PlayTube" → "Play Tube", "QuickType" → "Quick Type") and between a letter and a digit. Runs on
+     * the raw label, before [fold] drops the case. Returns [label] itself when there is no boundary.
+     */
+    fun splitCamel(label: String): String {
+        var out: StringBuilder? = null
+        var prev = 0
+        var i = 0
+        while (i < label.length) {
+            val cp = label.codePointAt(i)
+            val boundary =
+                i > 0 &&
+                    (
+                        (Character.isLowerCase(prev) && Character.isUpperCase(cp)) ||
+                            (Character.isLetter(prev) && Character.isDigit(cp)) ||
+                            (Character.isDigit(prev) && Character.isLetter(cp))
+                    )
+            if (boundary && out == null) out = StringBuilder(label.length + 4).append(label, 0, i)
+            if (boundary) out?.append(' ')
+            out?.appendCodePoint(cp)
+            prev = cp
+            i += Character.charCount(cp)
+        }
+        return out?.toString() ?: label
+    }
+
     /** True when [s] (already folded) contains a letter outside ASCII a–z, i.e. a non-Latin label. */
     fun needsTransliteration(folded: String): Boolean {
         var i = 0
