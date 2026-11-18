@@ -2,20 +2,26 @@ package app.strata.launcher.home
 
 import android.content.Intent
 import android.os.Build
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import app.strata.launcher.CoverActivity
+import app.strata.launcher.DEVICE_TIMEOUT_MS
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.coverForeignActivities
 import app.strata.launcher.feature.home.HomeTestTags
+import app.strata.launcher.focusReport
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.shell
 import com.google.common.truth.Truth.assertThat
@@ -53,10 +59,43 @@ class DefaultHomeDeviceTest {
             .map { it.activityInfo.packageName }
             .firstOrNull { it != context.packageName && it != "com.android.settings" }
 
-    /** onPause → onResume of the rule's activity, as when the user comes back from Settings. */
+    /**
+     * onPause → onStop → onResume of the rule's activity, as when the user comes back from Settings: an opaque activity
+     * in its own task covers home, then the rule's task is started again ([bringHomeToFront]).
+     *
+     * Not `ActivityScenario.moveToState(STARTED)` then `RESUMED`: that puts a translucent activity in a new task above
+     * ours and expects ours to come back when it finishes. Right after the HOME role moves to the system launcher, the
+     * platform can order the new home's task above ours (API 29, 31, 33, 35 nightly: the rule's activity went STOPPED
+     * under the translucent one and never RESUMED again; API 34/36 and runs on 29 passed). The explicit start returns to
+     * the rule's activity whichever task the platform put in front.
+     */
     private fun pauseAndResume() {
-        compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
-        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        lateinit var owned: HomeActivity
+        compose.activityRule.scenario.onActivity { owned = it }
+
+        fun stage(): Stage? {
+            var stage: Stage? = null
+            instrumentation.runOnMainSync {
+                stage =
+                    ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(owned)
+            }
+            return stage
+        }
+        instrumentation.context.startActivity(
+            Intent()
+                .setClassName(instrumentation.context, CoverActivity::class.java.name)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            compose.waitUntil(DEVICE_TIMEOUT_MS) { stage() == Stage.STOPPED }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "The rule's HomeActivity was not stopped by the cover (stage ${stage()}). ${focusReport()}",
+                e,
+            )
+        }
+        compose.bringHomeToFront(owned, device)
         compose.waitForIdle()
     }
 

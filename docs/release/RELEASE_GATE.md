@@ -152,6 +152,25 @@ adb install app/build/outputs/apk/release/app-release.apk
 `strata.release.keyPassword` in `local.properties`, which is git-ignored.) Keep the key and its passwords backed up:
 updates must be signed with the same key.
 
+**From CI instead.** With the same key stored as the mirror's Actions secrets `STRATA_RELEASE_KEYSTORE_BASE64`
+(`base64 -w 0 ~/keys/strata-release.jks`; on macOS `base64 -i … -o …`), `STRATA_RELEASE_STORE_PASSWORD`,
+`STRATA_RELEASE_KEY_ALIAS` and `STRATA_RELEASE_KEY_PASSWORD` (Settings → Secrets and variables → Actions on
+`Nexusdeveloper902/strata-launcher-oss`), every push to `main` and every manual CI run uploads the signed, checked APK
+as `strata-release-apk`. The run summary shows the signer certificate SHA-256; it must be the same on every release.
+PR runs and runs without the secrets upload a debug-signed `strata-release-apk-unsigned-test` instead, which never
+updates an installed release. Details: `CONTRIBUTING.md`, "Release APK from CI".
+
+The CI APK is built on the public mirror and so has only the **public glyph set** (its packaged `glyph_index` is
+byte-identical to the public file; the private overlay `platform/icons/glyphs-private/` never leaves this
+repository). Mirror artifacts can be downloaded by any logged-in GitHub user. For the APK you ship, build it here
+with the commands above (`:app:checkReleaseApk` with the same key): that build includes the private glyphs, has the
+same signer SHA-256, and installs over a CI release APK in place (and the other way round, which drops the private
+glyphs).
+
+Moving the A56 from the debug APK to the release APK needs one uninstall (different signature). Export a backup first
+(Settings → Backup and restore → Export), uninstall, install the release APK, then Restore from file. Later release APKs from `main`
+update in place.
+
 ## 4. Manual pass sheets
 Record each as: device, Android/OEM version, build (versionName + commit), date, each line pass/fail/deviation.
 

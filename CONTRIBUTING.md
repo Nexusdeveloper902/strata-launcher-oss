@@ -58,8 +58,9 @@ where Actions minutes are free.
     from `python3 tools/glyphs/contact_sheet.py OUT.png platform/icons/glyphs-private/res/drawable-nodpi`
     (needs `pip install cairosvg pillow`; review tooling only).
 - `tools/mirror/sync-public.sh <branch>...` (needs `pip install git-filter-repo`) filters and
-  pushes branches. The filter is deterministic, so syncs are fast-forwards; never force-push
-  the mirror. Before pushing it verifies the filtered history and fails closed (any error
+  pushes branches, and always brings the mirror's `main` up to date too (a mirror PR's CI tests the
+  branch merged into the *mirror's* `main`). The filter is deterministic, so syncs are
+  fast-forwards; never force-push the mirror. Before pushing it verifies the filtered history and fails closed (any error
   aborts). Everything is read from the branches being synced, never from the working tree:
   - no stripped file and no path under a stripped directory may remain in any commit;
   - no canary may appear in any file of any filtered commit (binary files included), in any
@@ -75,10 +76,76 @@ where Actions minutes are free.
 - `tools/mirror/sync-public.sh --dry-run DIR <branch>...` filters and verifies the same way, then
   clones the filtered branches into the new directory `DIR` instead of pushing, so the public
   tree can be inspected and built locally.
-- Flow per change: push the branch here, run `tools/mirror/sync-public.sh <branch>`, open a PR
-  on the mirror to run CI, squash-merge the PR **here** once the mirror's CI is green, then run
-  `tools/mirror/sync-public.sh main` and close the mirror PR. Nothing is merged on the mirror.
+- Flow per change:
+  1. Push the branch here and run `tools/mirror/sync-public.sh <branch>`. Open a PR on the mirror
+     to run CI.
+  2. If the change touches device tests (`app/src/androidTest`, `DeviceState.kt`), the benchmark
+     module, test options in `build-logic`, or `nightly.yml`, also run the nightly matrix on the
+     branch: `gh workflow run nightly.yml -R Nexusdeveloper902/strata-launcher-oss --ref <branch>`.
+     PR CI covers only API 26/34/36. The nightly matrix is not a merge gate, but a new failure there is
+     fixed before the merge.
+  3. Before merging, run `tools/mirror/check-pr-fresh.sh <branch>`. It passes only when the newest PR
+     run is green, ran on the branch's current head, and started after the mirror's current `main` was
+     pushed. Otherwise sync again and wait for the new run.
+  4. Squash-merge the PR **here**, run `tools/mirror/sync-public.sh main`, close the mirror PR.
+     Nothing is merged on the mirror.
+  5. Re-check `main`: the sync starts CI on the mirror's `main` (a `push` run). Watch it
+     (`gh run watch -R Nexusdeveloper902/strata-launcher-oss <id>`). If it is red, `main` is broken
+     until it is fixed or reverted. Follow `docs/ci/RELIABILITY.md` to tell a flake from a real
+     failure. CI can also be re-run on `main` by hand (`gh workflow run ci.yml --ref main`).
+- Flaky tests, the re-run rule and how failures are classified: `docs/ci/RELIABILITY.md`.
 - This repository stays the source of truth.
+
+## Release APK from CI (for the owner's phone)
+The debug APK (`strata-debug-apk`) carries debug-only overhead: StrictMode `detectAll` with CloseGuard, no R8, debug
+logging. For daily use, install the **release** APK. The `build` job of every CI run builds it, checks it
+(`checkReleaseApk`, T-CI-07), verifies its signature (`apksigner verify --print-certs`) and writes the signer's
+certificate SHA-256 into the run's summary.
+
+| Run | Signed with | Artifact |
+|---|---|---|
+| push to `main`, manual run (`workflow_dispatch`), with the four secrets set | the stable release key | `strata-release-apk` |
+| pull request, or no secrets yet | the runner's throw-away debug key | `strata-release-apk-unsigned-test` (file `strata-release-TEST-not-for-install-….apk`) |
+
+Each runner creates a new debug key, so two CI runs never share a signature (checked: main runs 43652228837 and
+43599000906 have different certificates). Only `strata-release-apk` can update an installed copy. The secrets are read
+only on push and manual runs, never on `pull_request`, and are never printed. The keystore is decoded to the runner's
+temp directory (outside the workspace) and deleted when the step ends.
+
+One-time setup, on your computer, never inside the repository:
+1. Create the key (the same as `docs/release/RELEASE_GATE.md` §3.11; reuse that key if you already have one):
+   `keytool -genkeypair -v -keystore ~/keys/strata-release.jks -alias strata -keyalg RSA -keysize 4096 -validity 10000`
+2. Base64 it into one line: `base64 -w 0 ~/keys/strata-release.jks > ~/keys/strata-release.b64` (Linux) or
+   `base64 -i ~/keys/strata-release.jks -o ~/keys/strata-release.b64` (macOS).
+3. On `Nexusdeveloper902/strata-launcher-oss`: Settings → Secrets and variables → Actions → New repository secret,
+   four times: `STRATA_RELEASE_KEYSTORE_BASE64` (the contents of the `.b64` file), `STRATA_RELEASE_STORE_PASSWORD`,
+   `STRATA_RELEASE_KEY_ALIAS` (`strata`), `STRATA_RELEASE_KEY_PASSWORD`. Then delete the `.b64` file. Back up the
+   `.jks` and its passwords: a lost key means no more in-place updates.
+4. Run CI on `main` (`gh workflow run ci.yml -R Nexusdeveloper902/strata-launcher-oss --ref main`), download
+   `strata-release-apk`, and note the certificate SHA-256 from the run summary.
+
+Switching the phone from the debug APK to the release APK takes **one uninstall**, because the signatures differ.
+Back up first in Strata (Settings → Backup and restore → Export), uninstall, install the release APK, then restore the backup
+(Settings → Backup and restore → Restore from file). Every later `strata-release-apk` from `main` installs over it in place, as long as the
+summary shows the same certificate SHA-256.
+
+**What the CI APK contains, and who can get it.** CI runs on the public mirror, which has no
+`platform/icons/glyphs-private/`. So `strata-release-apk` contains only the public glyph set (checked: its packaged
+`glyph_index` is byte-identical to the public `glyph_index.txt`, 1 entry and 1 glyph drawable, against 152 entries and
+151 drawables in a release build from this repository). The overlay and the secrets stay out of public CI. The
+mirror's artifacts can be downloaded by **any logged-in GitHub user**, so the signed APK is effectively public. It holds
+no secrets or private glyphs, but anyone can install that build.
+
+**Fully signed APK with the private glyphs, built locally** (same key, same release task, in this repository):
+```sh
+export STRATA_RELEASE_STORE_FILE=~/keys/strata-release.jks STRATA_RELEASE_KEY_ALIAS=strata
+read -rs STRATA_RELEASE_STORE_PASSWORD; export STRATA_RELEASE_STORE_PASSWORD
+read -rs STRATA_RELEASE_KEY_PASSWORD; export STRATA_RELEASE_KEY_PASSWORD
+./gradlew :app:checkReleaseApk     # -> app/build/outputs/apk/release/app-release.apk, checked (T-CI-07)
+"$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
+It has the same signer SHA-256 as `strata-release-apk`, so either installs over the other in place (not a lower
+`versionCode`). Installing a CI APK over a local one removes the private glyphs until the next local build.
 
 ## Clean room
 Follow `AGENTS.md`. Implement from `spec/` only. Never open `research/APK_ANALYSIS.md` or

@@ -1,9 +1,12 @@
 package app.strata.launcher.benchmark
 
 import android.content.Intent
+import android.os.SystemClock
+import android.util.Log
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -62,22 +65,80 @@ internal fun MacrobenchmarkScope.homeReady() {
 /** [homeReady], then opens the A–Z list. */
 internal fun MacrobenchmarkScope.openList(): UiObject2 {
     homeReady()
-    device.findOrFail(Strata.ALL_APPS).click()
+    device.clickOrFail(Strata.ALL_APPS)
     return device.waitOrFail(Strata.LIST)
 }
 
 /** [homeReady], then opens search from the home pill and returns the field. */
 internal fun MacrobenchmarkScope.openSearch(): UiObject2 {
     homeReady()
-    device.findOrFail(Strata.PILL).click()
+    device.clickOrFail(Strata.PILL)
     return device.waitOrFail(Strata.SEARCH_FIELD)
 }
 
-internal fun UiDevice.findOrFail(res: String): UiObject2 =
-    wait(Until.findObject(By.res(res)), Strata.TIMEOUT_MS)
-        ?: error("'$res' not on screen after ${Strata.TIMEOUT_MS} ms (is the benchmark build of :app installed?)")
+/**
+ * Waits for [res] on screen, answering a system error dialog of ANOTHER process meanwhile. On a loaded emulator System
+ * UI can raise an ANR dialog that covers home (Macrobenchmark, run 44068284763: "Application Not Responding:
+ * com.android.systemui", then 'home_all_apps' not found). System UI's is answered "Wait" (closing it restarts System UI
+ * with the keyguard up), other apps' "Close". A dialog about the target itself is left alone, so its ANR still fails.
+ */
+internal fun UiDevice.findOrFail(res: String): UiObject2 {
+    val end = SystemClock.uptimeMillis() + Strata.TIMEOUT_MS
+    while (true) {
+        wait(Until.findObject(By.res(res)), FIND_SLICE_MS)?.let { return it }
+        answerForeignErrorDialog()
+        if (SystemClock.uptimeMillis() >= end) {
+            error(
+                "'$res' not on screen after ${Strata.TIMEOUT_MS} ms (is the benchmark build of :app installed?) " +
+                    focusedWindow(),
+            )
+        }
+    }
+}
+
+private fun UiDevice.focusedWindow(): String =
+    executeShellCommand("dumpsys window")
+        .lineSequence()
+        .map(String::trim)
+        .firstOrNull { it.startsWith("mCurrentFocus") }
+        .orEmpty()
+
+/** Answers a showing "isn't responding" / "keeps stopping" dialog unless it is about [Strata.TARGET]. */
+private fun UiDevice.answerForeignErrorDialog() {
+    val wait = findObject(By.res("android", "aerr_wait"))
+    val close = findObject(By.res("android", "aerr_close"))
+    if (wait == null && close == null) return
+    val focus = focusedWindow()
+    if (Strata.TARGET in focus) return
+    val button = if ("com.android.systemui" in focus) wait ?: close else close ?: wait
+    Log.w("Strata", "Answering a system error dialog of another process: $focus")
+    button?.click()
+}
+
+private const val FIND_SLICE_MS = 1_000L
 
 internal fun UiDevice.waitOrFail(res: String): UiObject2 = findOrFail(res)
+
+/**
+ * Finds [res] and runs [action] on it, finding it again when the node goes stale between the lookup and the action.
+ * A scroll, fling or index scrub recomposes the list, so a node found before can be gone by the click (Baseline
+ * Profile, run 43994307244: StaleObjectException clicking the list's search field right after the index scrub).
+ * Not a retry of the journey: the same step on the same screen, bounded by [Strata.TIMEOUT_MS]; a missing node still
+ * fails through [findOrFail].
+ */
+internal fun <T> UiDevice.onFresh(
+    res: String,
+    action: (UiObject2) -> T,
+): T {
+    val end = SystemClock.uptimeMillis() + Strata.TIMEOUT_MS
+    while (true) {
+        try {
+            return action(findOrFail(res))
+        } catch (e: StaleObjectException) {
+            if (SystemClock.uptimeMillis() >= end) throw e
+        }
+    }
+}
 
 /**
  * Completes the first-run flow if it is showing (fresh benchmark install): Welcome -> Continue, Skip favourites,
@@ -88,7 +149,17 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
     var screens = 0
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()
-        if (wait(Until.hasObject(By.res(ONBOARDING_ROOT_TAG)), SHORT_WAIT_MS) != true) break
+        // Onboarding or home, whichever shows: not "no onboarding within 1.5 s". On a slow emulator onboarding came up
+        // later and covered home, and the journey then waited for a home that was not showing (run 44129238421).
+        val first =
+            pollFor(Strata.TIMEOUT_MS) {
+                when {
+                    hasObject(By.res(ONBOARDING_ROOT_TAG)) -> ONBOARDING_ROOT_TAG
+                    hasObject(By.res(Strata.ALL_APPS)) -> Strata.ALL_APPS
+                    else -> null
+                }
+            }
+        if (first != ONBOARDING_ROOT_TAG) break
         // The set-default step shows its buttons once the role check (off main) has finished. After the last click
         // ("Not now" / "Go to home") the layer is still leaving when the root is checked above, so the poll also ends
         // when the root is gone (CI run 43563634680, BackgroundCostTest: it waited 10 s for buttons of a closed layer).
@@ -102,11 +173,42 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
             } ?: error("onboarding is showing but none of its buttons appeared")
         if (next == ONBOARDING_GONE) break
         // Re-find right before the click: the object seen by the poll may belong to a frame that has since changed.
-        findOrFail(next).click()
+        clickOrFail(next)
         screens++
     }
     findOrFail(Strata.ALL_APPS)
 }
+
+/**
+ * Waits until every activity record of the target is STOPPED (from `dumpsys activity activities`, the `state=` /
+ * `mState=` of each `Hist` entry). `am start -W` of another app returns once that app is displayed, but the activity
+ * behind it is stopped only after the new one reports idle. A "warm return" measured before that brings a still-visible
+ * window to front, which draws no new frame, and StartupTimingMetric fails with "No RT frame slice associated with
+ * UI thread frame slice" (runs 43625970551 and 44068284763, T-PERF-02). Fails, never passes, when no state is found.
+ */
+internal fun UiDevice.awaitTargetStopped(timeoutMs: Long = 2 * Strata.TIMEOUT_MS) {
+    fun states(): List<String> =
+        executeShellCommand("dumpsys activity activities")
+            .split(Regex("""(?m)^\s*\*?\s*Hist\s*#"""))
+            .drop(1)
+            .filter { entry -> entry.lineSequence().first().contains("${Strata.TARGET}/") }
+            .mapNotNull { entry -> STATE.find(entry)?.groupValues?.get(1) }
+    // The platform stops the covered activity at the latest 10 s after the new one started, if it never reports idle.
+    val end = SystemClock.uptimeMillis() + timeoutMs
+    var last = states()
+    while (last.isEmpty() || last.any { it != "STOPPED" }) {
+        check(SystemClock.uptimeMillis() < end) {
+            "${Strata.TARGET} not stopped behind the other app within $timeoutMs ms (states: $last)"
+        }
+        SystemClock.sleep(POLL_MS)
+        last = states()
+    }
+}
+
+private val STATE = Regex("""\bm?[sS]tate=([A-Z_]+)""")
+
+/** Clicks [res] once it is on screen, finding it again if it went stale before the click ([onFresh]). */
+internal fun UiDevice.clickOrFail(res: String) = onFresh(res) { it.click() }
 
 /** Scrolls the list to its end (T-PERF-07 "after a full list scroll"). */
 internal fun UiDevice.scrollListToEnd() {
@@ -141,12 +243,11 @@ private val ONBOARDING_ORDER_REST =
 private const val ONBOARDING_GONE = "<onboarding gone>"
 private const val MAX_ONBOARDING_SCREENS = 6
 private const val MAX_SCROLLS = 200
-private const val SHORT_WAIT_MS = 1_500L
 private const val POLL_MS = 100L
 
 /** From home: the pill menu -> Themes -> the theme library. */
 internal fun UiDevice.openThemeLibraryFromHome() {
-    findOrFail("home_search_pill_menu").click()
+    clickOrFail("home_search_pill_menu")
     val themes =
         wait(Until.findObject(By.res("home_menu_themes")), Strata.TIMEOUT_MS) ?: findObject(By.text("Themes"))
     checkNotNull(themes) { "Themes menu item not found" }.click()
@@ -158,6 +259,6 @@ internal fun UiDevice.applyTheme(id: String) {
     executeShellCommand(Strata.HOME_START_COMMAND)
     passOnboardingAndWaitForHome()
     openThemeLibraryFromHome()
-    findOrFail("theme_row_$id").click()
+    clickOrFail("theme_row_$id")
     waitForIdle()
 }
