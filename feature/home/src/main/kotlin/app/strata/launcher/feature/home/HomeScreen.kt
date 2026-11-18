@@ -10,11 +10,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -55,8 +60,10 @@ import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -102,6 +109,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import app.strata.launcher.core.theme.model.Alignment as ThemeAlignment
 import app.strata.launcher.core.ui.R as UiR
 
 object HomeTestTags {
@@ -552,6 +560,21 @@ fun HomeScreen(
             }
             // INTERACTION_SPEC §10 / VISUAL_SPEC §8.1: below 360 dp of height the widget is hidden (clock only).
             val widget = widgetSlot.takeIf { widgetFits }
+            // FB-007: a centred clock is centred on the window, not in the column, whose start and end differ by the
+            // index reserve and by one-sided insets (a display cutout). Portrait only: in landscape it has its pane.
+            val direction = LocalLayoutDirection.current
+            val safe = WindowInsets.safeDrawing
+            val headerSides =
+                if (!landscape && theme.clock.alignment == ThemeAlignment.CENTER) {
+                    val density = LocalDensity.current
+                    val padding = safe.asPaddingValues(density)
+                    val startInset = with(density) { padding.calculateStartPadding(direction).roundToPx() }
+                    val endInset = with(density) { padding.calculateEndPadding(direction).roundToPx() }
+                    val reservePx = with(density) { indexReserve.roundToPx() }
+                    (startInset + if (!atEnd) reservePx else 0) to (endInset + if (atEnd) reservePx else 0)
+                } else {
+                    null
+                }
             val header: @Composable (Modifier) -> Unit = { m ->
                 Column(modifier = m) {
                     if (widget == null || !widget.replacesClock) {
@@ -559,7 +582,10 @@ fun HomeScreen(
                             ticks = timeTicks,
                             onClock = { onAction(HomeAction.OpenClock) },
                             onDate = { onAction(HomeAction.OpenCalendar) },
-                            modifier = Modifier.padding(top = HEADER_TOP, start = 16.dp, end = 16.dp),
+                            modifier =
+                                Modifier
+                                    .then(headerSides?.let { (st, en) -> Modifier.centredOnWindow(st, en) } ?: Modifier)
+                                    .padding(top = HEADER_TOP, start = 16.dp, end = 16.dp),
                         )
                     }
                     widget?.content(
@@ -1020,3 +1046,25 @@ private val MEDIUM_WIDTH = 600.dp
 private val MEDIUM_SIDE_PADDING = 32.dp
 private val FAVORITES_MAX_WIDTH = 480.dp
 private const val HEADER_WEIGHT = 0.4f
+
+/**
+ * Lays the content out over a symmetric span of the window: the parent is inset by [startPx] and [endPx] (layout
+ * direction relative), and the content gets the parent's width minus the difference, placed so that it keeps the
+ * larger inset on both sides. Its centre is then the window's centre, and it still never covers what the insets keep
+ * clear (FB-007).
+ */
+internal fun Modifier.centredOnWindow(
+    startPx: Int,
+    endPx: Int,
+): Modifier =
+    layout { measurable, constraints ->
+        val side = maxOf(startPx, endPx)
+        if (!constraints.hasBoundedWidth) {
+            val placeable = measurable.measure(constraints)
+            return@layout layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+        }
+        val width = (constraints.maxWidth + startPx + endPx - 2 * side).coerceAtLeast(0)
+        val placeable =
+            measurable.measure(constraints.copy(minWidth = minOf(constraints.minWidth, width), maxWidth = width))
+        layout(constraints.maxWidth, placeable.height) { placeable.placeRelative(side - startPx, 0) }
+    }

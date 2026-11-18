@@ -17,17 +17,25 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Single writer of the `app_snapshot` cache (ARCHITECTURE §4). [start] emits the persisted snapshot
- * first (FR-LIFE-01), then serves reconcile requests one at a time on [catalogDispatcher]: full passes
- * (start, `onStart`, launch failure, profile changes) and per-package passes (`LauncherApps.Callback`).
+ * first (FR-LIFE-01), then serves reconcile requests on [catalogDispatcher]: full passes (start, `onStart`,
+ * launch failure, profile changes) and per-package passes (`LauncherApps.Callback`).
  * Override records of vanished apps are kept 30 days (`missing_since`) and then purged (FR-LIFE-03).
+ *
+ * Per-package passes never wait for a full one (FB-009, NFR-PERF-06): in a batch they run first, and while a full
+ * pass is loading (on the source's I/O dispatcher, which leaves [catalogDispatcher] free) new per-package requests
+ * are still served. Packages handled during the load keep their per-package result when the full pass commits, so
+ * a load read before an uninstall cannot bring the app back.
  */
 class AppCatalogRepository(
     private val database: LazyResource<StrataDatabase>,
@@ -73,9 +81,14 @@ class AppCatalogRepository(
                 }
             }
             loadSnapshot()
-            for (first in requests) {
-                val batch = drain(first)
-                runCatchingLogged("reconcile") { process(batch) }
+            var pending: Request? = null
+            while (true) {
+                val batch = drain(pending ?: requests.receive())
+                pending = null
+                runCatchingLogged("reconcile") { packagesPass(batch.filterIsInstance<Request.Packages>()) }
+                if (batch.any { it == Request.Full }) {
+                    runCatchingLogged("reconcile") { if (fullPass()) pending = Request.Full }
+                }
             }
         }
     }
@@ -85,7 +98,9 @@ class AppCatalogRepository(
     }
 
     /** Runs one full reconcile now (tests and the first start). */
-    suspend fun reconcileNow() = process(listOf(Request.Full))
+    suspend fun reconcileNow() {
+        fullPass()
+    }
 
     private suspend fun loadSnapshot() {
         runCatchingLogged("snapshot") {
@@ -101,12 +116,8 @@ class AppCatalogRepository(
         return batch
     }
 
-    private suspend fun process(batch: List<Request>) {
-        if (batch.any { it == Request.Full }) {
-            fullPass()
-            return
-        }
-        val bySerial = batch.filterIsInstance<Request.Packages>().groupBy { it.userSerial }
+    private suspend fun packagesPass(requests: List<Request.Packages>) {
+        val bySerial = requests.groupBy { it.userSerial }
         for ((serial, reqs) in bySerial) {
             val packages = reqs.flatMap { it.packages }.toSet()
             val loadedEntries = packages.flatMap { source.loadPackage(it, serial) }
@@ -115,11 +126,41 @@ class AppCatalogRepository(
         }
     }
 
-    private suspend fun fullPass() {
-        val load = source.loadAll()
-        val result = Reconciler.full(state.value.entries, load.entries, clock.nowMillis())
-        commit(result, load.loadedSerials, fromSnapshot = false)
-    }
+    /**
+     * One full pass. While `loadAll` runs, per-package requests are served and remembered; a full request that
+     * arrives meanwhile is answered with true (run another full pass: this load may predate its cause).
+     */
+    private suspend fun fullPass(): Boolean =
+        coroutineScope {
+            val load = async { source.loadAll() }
+            val touched = HashSet<Pair<Long, String>>()
+            var again = false
+            while (!load.isCompleted) {
+                val next =
+                    select<Request?> {
+                        load.onAwait { null }
+                        requests.onReceive { it }
+                    } ?: break
+                val batch = drain(next)
+                if (batch.any { it == Request.Full }) again = true
+                val packages = batch.filterIsInstance<Request.Packages>()
+                runCatchingLogged("reconcile") { packagesPass(packages) }
+                packages.forEach { r -> r.packages.forEach { touched += r.userSerial to it } }
+            }
+            val loaded = load.await()
+            val current = state.value.entries
+
+            fun isTouched(e: AppEntry) = (e.key.userSerial to e.packageName) in touched
+            val platform =
+                if (touched.isEmpty()) {
+                    loaded.entries
+                } else {
+                    loaded.entries.filterNot(::isTouched) + current.filter(::isTouched)
+                }
+            val result = Reconciler.full(current, platform, clock.nowMillis())
+            commit(result, loaded.loadedSerials, fromSnapshot = false)
+            again
+        }
 
     private suspend fun commit(
         result: ReconcileResult,

@@ -242,6 +242,12 @@ sealed interface HomeAction {
     /** `onNewIntent(MAIN + HOME)` while home is in front (ANDROID_PLATFORM §1, INTERACTION_SPEC §6). */
     data object HomePressed : HomeAction
 
+    /**
+     * `onNewIntent(MAIN + HOME)` on arrival from another app (FB-008): the same reset as [HomePressed], but never the
+     * FR-HOME-05 "Home press opens search" option, which applies only when home was already at rest in front.
+     */
+    data object ArrivedHome : HomeAction
+
     /** "Continue" on the onboarding stub. */
     data object CompleteOnboarding : HomeAction
 
@@ -737,7 +743,11 @@ class HomeViewModel(
             }
 
             HomeAction.HomePressed -> {
-                homePressed()
+                homePressed(inFront = true)
+            }
+
+            HomeAction.ArrivedHome -> {
+                homePressed(inFront = false)
             }
 
             HomeAction.CompleteOnboarding -> {
@@ -1001,12 +1011,13 @@ class HomeViewModel(
 
     /**
      * INTERACTION_SPEC §6: close modal → close search (cleared) → close list → favourites to start; FAVEDIT saves
-     * (§3 "Home key = Done"). At rest with nothing open, the FR-HOME-05 setting opens search.
+     * (§3 "Home key = Done"). At rest with nothing open, the FR-HOME-05 setting opens search, but only for a press
+     * while home was [inFront]: an arrival from another app is never a search request (FB-008).
      */
-    private fun homePressed() {
+    private fun homePressed(inFront: Boolean) {
         val ui = local.value
         val atRest = ui.layer == HomeLayer.REST && ui.modal == HomeModal.None
-        if (atRest && currentSettings.value?.homePressOpensSearch == true) {
+        if (inFront && atRest && currentSettings.value?.homePressOpensSearch == true) {
             openSearch("")
             return
         }

@@ -1,5 +1,6 @@
 package app.strata.launcher.catalog
 
+import android.content.Intent
 import android.graphics.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
@@ -14,9 +15,13 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import app.strata.launcher.CoverActivity
+import app.strata.launcher.DEVICE_TIMEOUT_MS
+import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
+import app.strata.launcher.resumedHomeActivity
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -70,6 +75,32 @@ class ListDeviceTest {
         waitForRow(present = false)
     }
 
+    /**
+     * T-LIST-13 (FB-009, device half): an uninstall right after home came back to front (as when the uninstall
+     * confirmation closes; `onStart` asks for a full reconcile) removes the row within 1 s (NFR-PERF-06), not after the
+     * full reload. Shell calls name the user by number (`uid / 100000`).
+     */
+    @Test
+    fun tList13_removalRightAfterReturnIsPrompt() {
+        assumeTrue(File(FIXTURE_APK).exists() || shell("ls $FIXTURE_APK").contains(FIXTURE_APK))
+        val user = android.os.Process.myUid() / PER_USER_RANGE
+        shell("pm install -r --user $user $FIXTURE_APK")
+        openList()
+        waitForRow(present = true, timeoutMs = DEVICE_TIMEOUT_MS)
+        lateinit var home: HomeActivity
+        compose.activityRule.scenario.onActivity { home = it }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.context.startActivity(
+            Intent()
+                .setClassName(instrumentation.context, CoverActivity::class.java.name)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { resumedHomeActivity() == null }
+        compose.bringHomeToFront(home, device)
+        shell("pm uninstall --user $user $FIXTURE_PACKAGE")
+        waitForRow(present = false)
+    }
+
     /** T-APPS-02: the fixture starts with sourceBounds equal to the row bounds (±2 px). */
     @Test
     fun tApps02_launchWithSourceBounds() {
@@ -107,5 +138,8 @@ class ListDeviceTest {
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
         const val FIXTURE_APK = "/data/local/tmp/strata-fixture-zz.apk"
+
+        /** `UserHandle.PER_USER_RANGE`: user id = uid / this. */
+        const val PER_USER_RANGE = 100_000
     }
 }
