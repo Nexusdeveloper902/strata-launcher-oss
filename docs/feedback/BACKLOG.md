@@ -24,7 +24,7 @@ Gaps and follow-ups found by reviewers or spec checks. Same status values; IDs R
 
 | ID | Pri | Item | Notes | Status |
 |---|---|---|---|---|
-| R-001 | P3 | Clock size is not capped at 40 % of the screen width per line (THEME_SYSTEM `sizeSp`) | Spec gap found during review. Enforce the cap or amend the spec to match the app (owner decision) | queued (decision) |
+| R-001 | P3 | Clock size is not capped at 40 % of the screen width per line (THEME_SYSTEM `sizeSp`) | Owner chose to keep the app as is; THEME_SYSTEM amended, no cap | done (#40) |
 | R-002 | P3 | Fuzzy search: scratch arrays sized to the whole query; surrogate pairs count as two edits | Codex findings on #38; skip fuzzy for queries longer than any indexed form; compute distance over code points | queued |
 
 ## Done

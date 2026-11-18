@@ -288,7 +288,7 @@ glyph is a resource and index change only, not a code change. Trademark note: U-
 | `style` | enum | `numeric` | `numeric` (single line), `numericStacked` (hours over minutes), `words` (spelled-out, localised; falls back to `numeric` for locales without a words formatter), `analogMinimal` (two hands, no numerals) | D |
 | `hourFormat` | enum | `system` | `system` (`DateFormat.is24HourFormat`), `h12`, `h24` | D |
 | `showSeconds` | boolean | `false` | — | D |
-| `sizeSp` | integer | `56` | `24..128` (scaled by `typography.scale` and the system font scale, capped so the clock never exceeds 40 % of screen width per glyph line) | C |
+| `sizeSp` | integer | `56` | `24..128` (scaled by `typography.scale` and the system font scale; not capped, so a large size can fill the width — owner decision R-001) | C |
 | `alignment` | enum | `start` | `start`, `center`, `end` (mirrored in RTL) | D |
 | `date.visible` | boolean | `true` | — | D |
 | `date.skeleton` | string | `EEEEdMMMM` | `^[yMLdEc]{1,16}$`, a CLDR skeleton localised with `DateFormat.getBestDateTimePattern(locale, skeleton)`, so ordering and punctuation are always locale-correct | D |
