@@ -28,6 +28,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import app.strata.launcher.DEVICE_TIMEOUT_MS
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
 import app.strata.launcher.awaitSystemSettled
@@ -111,7 +112,7 @@ class OptionalAccessDeviceTest {
         listenersBefore = shell("settings get secure enabled_notification_listeners")
         restore()
         compose.passOnboarding()
-        compose.waitUntil(10_000) { count(HomeTestTags.ROOT) > 0 }
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { count(HomeTestTags.ROOT) > 0 }
     }
 
     @After
@@ -222,7 +223,7 @@ class OptionalAccessDeviceTest {
         } else {
             context.sendOrderedBroadcast(intent, null, reply, handler, initial, null, null)
         }
-        check(done.await(FIXTURE_TIMEOUT_S, TimeUnit.SECONDS)) { "fixture $action did not answer" }
+        check(done.await(DEVICE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) { "fixture $action did not answer" }
         return result.get()
     }
 
@@ -451,7 +452,6 @@ class OptionalAccessDeviceTest {
         const val QUIET_WAIT_MS = 5_000L
         const val QUERIES = 20
         const val MAX_SCAN_BYTES = 16L * 1024 * 1024
-        const val FIXTURE_TIMEOUT_S = 15L
         const val SECRET = "SECRET-123"
         const val OTP = "482913"
         val SAMPLE_QUERIES = listOf("ann", "bo", "ma", "joanna", "c", "zz", "pe", "li", "sa", "to")

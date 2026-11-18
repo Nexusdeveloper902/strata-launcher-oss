@@ -153,6 +153,9 @@ fun ComposeTestRule.openAllApps(timeoutMillis: Long = 10_000) {
  * system. Not a sleep: `wait-for-broadcast-idle` ends when the queues are empty.
  */
 fun awaitSystemSettled() {
+    // Once per test process (the Orchestrator starts one per test): a class that settles in @Before before its own
+    // set-up need not wait again in passOnboarding.
+    if (systemSettled) return
     val done = java.util.concurrent.CountDownLatch(1)
     val waiter =
         Thread({
@@ -162,12 +165,17 @@ fun awaitSystemSettled() {
             isDaemon = true
             start()
         }
-    if (!done.await(SETTLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+    if (done.await(SETTLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+        systemSettled = true
+    } else {
         Log.w(TAG, "Broadcast queues still busy after $SETTLE_TIMEOUT_MS ms; continuing (${waiter.name})")
     }
 }
 
 // Post-boot broadcast queues take longer than one state change: four device timeouts bound the gate.
+@Volatile
+private var systemSettled = false
+
 private const val SETTLE_TIMEOUT_MS = 4 * DEVICE_TIMEOUT_MS
 
 /**
@@ -207,7 +215,7 @@ fun ComposeTestRule.awaitFocusedActivity(
  * every test, so each HomeActivity test starts with it. Returns the number of screens passed.
  */
 
-fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
+fun ComposeTestRule.passOnboarding(timeoutMillis: Long = DEVICE_TIMEOUT_MS): Int {
     fun count(tag: String) = onAllNodesWithTag(tag).fetchSemanticsNodes().size
 
     fun next(): String? =
@@ -222,6 +230,13 @@ fun ComposeTestRule.passOnboarding(timeoutMillis: Long = 10_000): Int {
     awaitSystemSettled()
     // Touches go to the focused window only: wait until home (or onboarding's own activity) is shown and focused.
     awaitFocusedActivity(ComponentActivity::class.java)
+    // Something must be composed before "no onboarding" can mean done: with nothing composed yet next() is null too,
+    // and the loop below would return 0 at once without having seen either screen.
+    try {
+        waitUntil(timeoutMillis) { count(OnboardingTestTags.ROOT) > 0 || count(HomeTestTags.ROOT) > 0 }
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError("Neither onboarding nor home composed within $timeoutMillis ms. ${focusReport()}", e)
+    }
     var screens = 0
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()

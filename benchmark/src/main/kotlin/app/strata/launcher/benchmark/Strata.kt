@@ -150,7 +150,7 @@ private fun UiDevice.whatUiAutomatorSees(res: String): String {
                         .getInstrumentation()
                         .context.externalMediaDirs
                         .first()
-            File(dir, "missing-$res-${System.currentTimeMillis()}.png").also { takeScreenshot(it) }.name
+            File(dir, "missing-$res-${System.currentTimeMillis()}.png").takeIf { takeScreenshot(it) }?.name ?: "none"
         }.getOrElse { "none ($it)" }
     return "windows: $packages; resource ids (${ids.size}): $ids; screenshot: $shot"
 }
