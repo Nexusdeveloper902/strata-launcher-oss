@@ -142,18 +142,74 @@ private fun UiDevice.whatUiAutomatorSees(res: String): String {
             .distinct()
             .take(MAX_IDS)
             .toList()
+    val stamp = "missing-$res-${System.currentTimeMillis()}"
     val shot =
         runCatching {
-            val dir =
-                InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let(::File)
-                    ?: InstrumentationRegistry
-                        .getInstrumentation()
-                        .context.externalMediaDirs
-                        .first()
-            File(dir, "missing-$res-${System.currentTimeMillis()}.png").takeIf { takeScreenshot(it) }?.name ?: "none"
+            File(outputDir(), "$stamp.png").takeIf { takeScreenshot(it) }?.also(::reportOutputFile)?.name ?: "none"
         }.getOrElse { "none ($it)" }
-    return "windows: $packages; resource ids (${ids.size}): $ids; screenshot: $shot"
+    val dump =
+        runCatching {
+            File(outputDir(), "$stamp.xml").also { it.writeText(xml) }.also(::reportOutputFile).name
+        }.getOrElse { "none ($it)" }
+    return "windows: $packages; resource ids (${ids.size}): $ids; screenshot: $shot; hierarchy: $dump; " +
+        "window state: ${targetWindowState()}"
 }
+
+/** Where GMD collects additional test output (the directory Macrobenchmark writes its traces to). */
+private fun outputDir(): File =
+    InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let(::File)
+        ?: InstrumentationRegistry
+            .getInstrumentation()
+            .context.externalMediaDirs
+            .first()
+
+/**
+ * Asks the test runner to copy [file] into the managed device's additional test output. GMD copies back only the files
+ * a test reports this way (as Macrobenchmark does for its traces): run 44298771296 took a screenshot that never
+ * reached the artifact.
+ */
+private fun reportOutputFile(file: File) {
+    val status = android.os.Bundle().apply { putString("additionalTestOutputFile_${file.name}", file.absolutePath) }
+    InstrumentationRegistry.getInstrumentation().sendStatus(2, status)
+}
+
+/**
+ * The window manager's view of the target's windows and of the keyguard: whether a window has a surface, is on screen,
+ * is visible and drawn. Answers "focused but not visible to UiAutomator" (run 44298771296: onboarding in the tree but
+ * not visible for over 10 s after the start).
+ */
+internal fun UiDevice.targetWindowState(): String {
+    val dump = executeShellCommand("dumpsys window windows")
+    val windows =
+        dump
+            .split(Regex("""(?m)^\s*Window #\d+"""))
+            .filter { Strata.TARGET in it.lineSequence().firstOrNull().orEmpty() }
+            .map { block ->
+                val name = Regex("""\{[0-9a-f]+ u\d+ ([^}]+)\}""").find(block)?.groupValues?.get(1) ?: "?"
+                val facts =
+                    WINDOW_FACTS
+                        .findAll(block)
+                        .map { it.value }
+                        .distinct()
+                        .joinToString(" ")
+                "$name: $facts"
+            }
+    val keyguard =
+        KEYGUARD_FACTS
+            .findAll(executeShellCommand("dumpsys window"))
+            .map { it.value }
+            .distinct()
+            .take(4)
+            .toList()
+    return "$windows; keyguard: $keyguard"
+}
+
+private val WINDOW_FACTS =
+    Regex(
+        """\b(mViewVisibility=\S+|mHasSurface=\S+|isOnScreen=\S+|isVisible=\S+|mDrawState=\S+|mIsWallpaper=\S+|alpha=\S+)""",
+    )
+private val KEYGUARD_FACTS =
+    Regex("""\b(mKeyguardShowing|mKeyguardGoingAway|mDreamingLockscreen|isKeyguardShowing)=\S+""")
 
 private const val MAX_IDS = 40
 
@@ -209,16 +265,37 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
     awaitSystemSettled()
     val order = listOf(ONBOARDING_ORDER_WELCOME, ONBOARDING_ORDER_REST).flatten()
     var screens = 0
+    var redecided = 0
     while (screens < MAX_ONBOARDING_SCREENS) {
         waitForIdle()
         // Onboarding or home, whichever shows: not "no onboarding within 1.5 s". On a slow emulator onboarding came up
         // later and covered home, and the journey then waited for a home that was not showing (run 44129238421).
+        val started = SystemClock.uptimeMillis()
+        var nextProbe = started + PROBE_AFTER_MS
         val first =
             pollFor(Strata.TIMEOUT_MS) {
                 when {
-                    hasObject(By.res(ONBOARDING_ROOT_TAG)) -> ONBOARDING_ROOT_TAG
-                    hasObject(By.res(Strata.ALL_APPS)) -> Strata.ALL_APPS
-                    else -> null
+                    hasObject(By.res(ONBOARDING_ROOT_TAG)) -> {
+                        ONBOARDING_ROOT_TAG
+                    }
+
+                    hasObject(By.res(Strata.ALL_APPS)) -> {
+                        Strata.ALL_APPS
+                    }
+
+                    else -> {
+                        // Neither screen visible to UiAutomator: record what the window manager says, so a run like
+                        // 44298771296 (onboarding in the tree, not visible for over 10 s) shows why.
+                        if (SystemClock.uptimeMillis() >= nextProbe) {
+                            val waited = SystemClock.uptimeMillis() - started
+                            Log.w(
+                                "Strata",
+                                "neither onboarding nor home visible after $waited ms: ${targetWindowState()}",
+                            )
+                            nextProbe += PROBE_EVERY_MS
+                        }
+                        null
+                    }
                 }
             }
         if (first != ONBOARDING_ROOT_TAG) break
@@ -234,11 +311,28 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
                 }
             } ?: error("onboarding is showing but none of its buttons appeared")
         if (next == ONBOARDING_GONE) break
-        // Re-find right before the click: the object seen by the poll may belong to a frame that has since changed.
-        clickOrFail(next)
-        screens++
+        // One click on the step seen by the poll. If its button is stale or gone, the step changed in between: decide
+        // again from what is showing, never chase the old tag. search-smart run 44302646087: Skip was clicked, the
+        // next poll still saw the leaving favourites step, its Skip node was stale, and re-finding "onboarding_skip"
+        // waited 10 s while onboarding already showed the set-default step.
+        if (clickOnce(next)) {
+            screens++
+        } else {
+            check(++redecided <= MAX_ONBOARDING_SCREENS) { "onboarding changed under every click (last: $next)" }
+        }
     }
     findOrFail(Strata.ALL_APPS)
+}
+
+/** Clicks [res] if it is on screen now; false when it is not there or went stale before the click. */
+private fun UiDevice.clickOnce(res: String): Boolean {
+    val button = findObject(By.res(res)) ?: return false
+    return try {
+        button.click()
+        true
+    } catch (e: StaleObjectException) {
+        false
+    }
 }
 
 /**
@@ -269,6 +363,34 @@ internal fun UiDevice.awaitTargetStopped(timeoutMs: Long = 2 * Strata.TIMEOUT_MS
 
 private val STATE = Regex("""\bm?[sS]tate=([A-Z_]+)""")
 
+/**
+ * Ends a FrameTimingMetric measure block only after the target's frames have been presented: waits until its frame
+ * count (`dumpsys gfxinfo`) stays the same for [RENDER_QUIET_SAMPLES] samples [RENDER_SAMPLE_MS] apart, bounded by
+ * [Strata.TIMEOUT_MS]. SurfaceFlinger writes a frame's "actual" timeline slice only once it is presented; a block that
+ * ends right after the last draw stops the trace first. Run 44298771296 (tTheme53): the app drew frames 178557-178580,
+ * the 0.72 s trace ended about 70 ms after the last one, no actual slice existed for any of them, and
+ * FrameTimingMetric failed with "Observed no expect/actual slices". `waitForIdle` waits for accessibility events, which
+ * a theme apply need not send. What is measured does not change; the trace only lasts until the frames are complete.
+ */
+internal fun UiDevice.awaitFramesPresented() {
+    fun frames(): Int =
+        BackgroundCostTest.framesOf(executeShellCommand("dumpsys gfxinfo ${Strata.TARGET}"))
+            ?: error("no frame count in `dumpsys gfxinfo ${Strata.TARGET}`")
+    val end = SystemClock.uptimeMillis() + Strata.TIMEOUT_MS
+    var last = frames()
+    var still = 0
+    while (still < RENDER_QUIET_SAMPLES && SystemClock.uptimeMillis() < end) {
+        SystemClock.sleep(RENDER_SAMPLE_MS)
+        val now = frames()
+        still = if (now == last) still + 1 else 0
+        last = now
+    }
+}
+
+// Six frame intervals at 60 Hz per sample; two still samples are ≥ 12 vsyncs after the last frame, ample for its present.
+private const val RENDER_SAMPLE_MS = 6 * 1_000L / 60
+private const val RENDER_QUIET_SAMPLES = 2
+
 /** Clicks [res] once it is on screen, finding it again if it went stale before the click ([onFresh]). */
 internal fun UiDevice.clickOrFail(res: String) = onFresh(res) { it.click() }
 
@@ -293,6 +415,8 @@ private fun <T> pollFor(
 }
 
 private const val ONBOARDING_ROOT_TAG = "onboarding_root"
+private const val PROBE_AFTER_MS = 3_000L
+private const val PROBE_EVERY_MS = 2_000L
 private val ONBOARDING_ORDER_WELCOME = listOf("onboarding_welcome" to "onboarding_continue")
 private val ONBOARDING_ORDER_REST =
     listOf(

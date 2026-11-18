@@ -166,7 +166,12 @@ class SearchViewModel(
     private val selected = MutableStateFlow(0)
     private val storeAvailable = MutableStateFlow(false)
     private val effectChannel = Channel<SearchEffect>(Channel.BUFFERED)
-    private val translitCache = HashMap<String, String>()
+
+    /**
+     * Shared across index builds. `mapLatest` already cancels and joins a running build before the next starts, so two
+     * builds do not overlap today; a concurrent map keeps that true if the pipeline changes.
+     */
+    private val translitCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** The last index included private-space apps (their labels are then in [translitCache]). */
     private var indexedPrivate = false

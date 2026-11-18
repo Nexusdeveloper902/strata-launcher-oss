@@ -388,12 +388,23 @@ class HomeDeviceTest {
             runBlocking { appGraph().settingsRepository.update { it.copy(homePressOpensSearch = true) } }
             val instrumentation = InstrumentationRegistry.getInstrumentation()
             val context = instrumentation.context
+            lateinit var covered: HomeActivity
+            compose.activityRule.scenario.onActivity { covered = it }
             context.startActivity(
                 Intent()
                     .setClassName(context, app.strata.launcher.CoverActivity::class.java.name)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            compose.waitUntil(DEVICE_TIMEOUT_MS) { resumedHome() == null }
+            // The cover must be fully in front (home STOPPED), not merely starting: "no resumed home" already holds at
+            // PAUSED, and a Home gesture sent during the cover's launch transition does nothing (search-smart run
+            // 44302646087, API 34: swipe 54 ms after the pause, 0.9 s before the cover was displayed).
+            compose.waitUntil(DEVICE_TIMEOUT_MS) {
+                var stage: Stage? = null
+                instrumentation.runOnMainSync {
+                    stage = ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(covered)
+                }
+                stage == Stage.STOPPED
+            }
             val w = device.displayWidth
             val h = device.displayHeight
             // From the bottom edge upward, released while still moving: the system Home gesture.
