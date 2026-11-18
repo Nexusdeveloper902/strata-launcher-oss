@@ -4,12 +4,14 @@ import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
 import androidx.benchmark.macro.MacrobenchmarkScope
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import java.io.File
 
 /**
  * The target app and its journeys, shared by every benchmark. The target is the `benchmark` build of `:app`
@@ -90,11 +92,70 @@ internal fun UiDevice.findOrFail(res: String): UiObject2 {
         if (SystemClock.uptimeMillis() >= end) {
             error(
                 "'$res' not on screen after ${Strata.TIMEOUT_MS} ms (is the benchmark build of :app installed?) " +
-                    focusedWindow(),
+                    focusedWindow() + " | " + whatUiAutomatorSees(res),
             )
         }
     }
 }
+
+/**
+ * Device-ready gate (the app tests' `awaitSystemSettled`, docs/ci/RELIABILITY.md): waits, bounded and never failing,
+ * until the system's broadcast queues are idle. The module's first test after boot failed twice (runs 44234299843,
+ * 44234404782, tPerf09 idle home) and earlier as tPerf09_noJobsOrAlarms when that sorted first. Returns at once on a
+ * settled system.
+ */
+internal fun UiDevice.awaitSystemSettled() {
+    val done = java.util.concurrent.CountDownLatch(1)
+    Thread({
+        runCatching { executeShellCommand("cmd activity wait-for-broadcast-idle") }
+        done.countDown()
+    }, "settle-gate").apply {
+        isDaemon = true
+        start()
+    }
+    if (!done.await(SETTLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+        Log.w("Strata", "Broadcast queues still busy after $SETTLE_TIMEOUT_MS ms; continuing")
+    }
+}
+
+// Six find timeouts: post-boot broadcast queues take longer than one screen change.
+private const val SETTLE_TIMEOUT_MS = 6 * Strata.TIMEOUT_MS
+
+/**
+ * What UiAutomator can see when [res] is missing: the packages of the windows it reads and the resource ids in them,
+ * plus a screenshot in the additional test output (collected by GMD). Run 44234299843 failed with home focused and
+ * fully drawn, yet neither onboarding nor home found, and nothing showed why.
+ */
+private fun UiDevice.whatUiAutomatorSees(res: String): String {
+    val xml =
+        runCatching {
+            java.io
+                .ByteArrayOutputStream()
+                .also { dumpWindowHierarchy(it) }
+                .toString(Charsets.UTF_8.name())
+        }.getOrElse { return "hierarchy dump failed: $it" }
+    val packages = Regex("""package="([^"]*)"""").findAll(xml).map { it.groupValues[1] }.toSortedSet()
+    val ids =
+        Regex("""resource-id="([^"]+)"""")
+            .findAll(xml)
+            .map { it.groupValues[1] }
+            .distinct()
+            .take(MAX_IDS)
+            .toList()
+    val shot =
+        runCatching {
+            val dir =
+                InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let(::File)
+                    ?: InstrumentationRegistry
+                        .getInstrumentation()
+                        .context.externalMediaDirs
+                        .first()
+            File(dir, "missing-$res-${System.currentTimeMillis()}.png").takeIf { takeScreenshot(it) }?.name ?: "none"
+        }.getOrElse { "none ($it)" }
+    return "windows: $packages; resource ids (${ids.size}): $ids; screenshot: $shot"
+}
+
+private const val MAX_IDS = 40
 
 private fun UiDevice.focusedWindow(): String =
     executeShellCommand("dumpsys window")
@@ -145,6 +206,7 @@ internal fun <T> UiDevice.onFresh(
  * Not now / Continue on the set-default step, Done. Then waits for home's "All apps".
  */
 internal fun UiDevice.passOnboardingAndWaitForHome() {
+    awaitSystemSettled()
     val order = listOf(ONBOARDING_ORDER_WELCOME, ONBOARDING_ORDER_REST).flatten()
     var screens = 0
     while (screens < MAX_ONBOARDING_SCREENS) {
