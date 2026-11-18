@@ -345,6 +345,34 @@ internal fun UiDevice.awaitTargetStopped(timeoutMs: Long = 2 * Strata.TIMEOUT_MS
 
 private val STATE = Regex("""\bm?[sS]tate=([A-Z_]+)""")
 
+/**
+ * Ends a FrameTimingMetric measure block only after the target's frames have been presented: waits until its frame
+ * count (`dumpsys gfxinfo`) stays the same for [RENDER_QUIET_SAMPLES] samples [RENDER_SAMPLE_MS] apart, bounded by
+ * [Strata.TIMEOUT_MS]. SurfaceFlinger writes a frame's "actual" timeline slice only once it is presented; a block that
+ * ends right after the last draw stops the trace first. Run 44298771296 (tTheme53): the app drew frames 178557-178580,
+ * the 0.72 s trace ended about 70 ms after the last one, no actual slice existed for any of them, and
+ * FrameTimingMetric failed with "Observed no expect/actual slices". `waitForIdle` waits for accessibility events, which
+ * a theme apply need not send. What is measured does not change; the trace only lasts until the frames are complete.
+ */
+internal fun UiDevice.awaitFramesPresented() {
+    fun frames(): Int =
+        BackgroundCostTest.framesOf(executeShellCommand("dumpsys gfxinfo ${Strata.TARGET}"))
+            ?: error("no frame count in `dumpsys gfxinfo ${Strata.TARGET}`")
+    val end = SystemClock.uptimeMillis() + Strata.TIMEOUT_MS
+    var last = frames()
+    var still = 0
+    while (still < RENDER_QUIET_SAMPLES && SystemClock.uptimeMillis() < end) {
+        SystemClock.sleep(RENDER_SAMPLE_MS)
+        val now = frames()
+        still = if (now == last) still + 1 else 0
+        last = now
+    }
+}
+
+// Six frame intervals at 60 Hz per sample; two still samples are ≥ 12 vsyncs after the last frame, ample for its present.
+private const val RENDER_SAMPLE_MS = 6 * 1_000L / 60
+private const val RENDER_QUIET_SAMPLES = 2
+
 /** Clicks [res] once it is on screen, finding it again if it went stale before the click ([onFresh]). */
 internal fun UiDevice.clickOrFail(res: String) = onFresh(res) { it.click() }
 

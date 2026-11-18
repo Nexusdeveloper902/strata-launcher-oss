@@ -79,6 +79,7 @@ class ThemeBenchmark {
                 toggle.click()
                 device.waitForIdle()
             }
+            device.awaitFramesPresented()
         }
 
     /** T-THEME-48, drag half: the accent hue slider dragged back and forth for about 5 s (≥ 55 fps). */
@@ -127,6 +128,7 @@ class ThemeBenchmark {
             val row = checkNotNull(device.findObject(By.res("theme_row_$id"))) { "theme row $id not found" }
             row.click()
             device.waitForIdle()
+            device.awaitFramesPresented()
         }
         BudgetGate.check(
             javaClass,
