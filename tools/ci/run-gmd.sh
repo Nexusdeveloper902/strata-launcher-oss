@@ -72,6 +72,13 @@ while true; do
     # A truncated system-image download (run 41670711767: "Archive is not a ZIP archive") must not be reused.
     sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
     rm -rf "$sdk/.temp" "$sdk/.downloadIntermediates" 2>/dev/null || true
+    # A failed emulator-package install leaves $sdk/emulator without its binary; the retry then failed with "Cannot
+    # query the value of this property" instead of installing again (flake hunt run 44190179756, API 26). Remove it so
+    # AGP installs it afresh.
+    if [ -d "$sdk/emulator" ] && [ ! -x "$sdk/emulator/emulator" ]; then
+      echo "::warning::removing the half-installed emulator package at $sdk/emulator before the retry"
+      rm -rf "$sdk/emulator"
+    fi
     continue
   fi
   echo "::error::${task}: failed for a reason that is not a known infrastructure failure"

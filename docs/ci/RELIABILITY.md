@@ -24,8 +24,13 @@ What made CI untrustworthy in November 2026, what changed, and how to read a red
    | `Unable to start Android emulator`, `Failed to start emulator`, `did not boot`, `device offline`, `Unable to find device serial` | Emulator start or adb lost |
    | `Archive is not a ZIP archive`, `Failed to install the following SDK components`, `System image … download` | Truncated SDK or system-image download |
    | `INSTALL_FAILED_INSUFFICIENT_STORAGE` | Runner disk |
+| `Failed to install the following SDK components: emulator` | Emulator package download failed; `run-gmd.sh` removes the half-installed package before its retry |
    | `Precondition: Strata is not the default home after 30000 ms` | The system did not answer `set-home-activity` for 30 s (stalled emulator) |
 
+   Note: `emulator-5554: connection terminated: read failed` in the "emulator diagnostics" group is **not** a sign that
+   the emulator died. That group runs after Gradle has failed, and it tails the adb log after the run (and its own
+   manual emulator start) shut the emulator down. Read the test report (PR #20 run 44190199625: the cause was
+   tPerf02).
 3. **Not infrastructure** (fix it): an assertion or timeout inside a test, `No compose hierarchies found`,
    `StaleObjectException`, `Activity never becomes requested state`, a monkey verdict naming
    `app.strata.launcher*`, or anything that fails the same way twice.
@@ -108,13 +113,17 @@ Other data points: PR #34 (`fix-battery`) passed all 9 checks. PR #19 (`search-c
 Macrobenchmark twice (tPerf02; stale click in `passOnboardingAndWaitForHome`), and main `ae168c4` (run 44131037055) failed
 on tPerf02 and the edge-back test. Those branches did not have the fixes above.
 
+Round 5 (44190179756 + CI 44190184467, with the settle gate): PR smoke API 26 3/4, API 34 4/4, API 36 4/4;
+T-COMPAT-01 API 33 3/3; Macrobenchmark 2/2. The one failure was infrastructure (the emulator package download failed,
+and the retry then tripped over the half-installed package; `run-gmd.sh` fixed). No test failed in round 5.
+
 After round 4, the edge-back test (5/5 on API 29, where it failed before) and Macrobenchmark (4/4) are fixed.
 
 ## Still open
 
 - Round 4 left two "Failed to inject touch input" clicks in `passOnboarding`, on a focused window early after boot
-  (API 33 HomeSmokeTest, API 36 tNotif02). The broadcast-idle gate above is the fix, committed after round 4. It has
-  not yet been confirmed by a run.
+  (API 33 HomeSmokeTest, API 36 tNotif02). The broadcast-idle gate above is the fix, committed after round 4. Round 5
+  saw no recurrence in 16 device jobs. That is evidence, not proof: keep watching for this failure.
 - `OnboardingDeviceTest.tOnboard01` on API 33 ("onboarding_continue could not be clicked"): once in about 25 compat
   runs, in round 3, and not seen in round 4. Not root-caused; the log shows no system dialog or focus change. Watch it.
 - The `ci-flake-hunt` branch on the mirror is a scratch branch. Its `nightly.yml` repeats jobs and is not for merging.
