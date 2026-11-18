@@ -40,6 +40,7 @@ import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.closeSystemErrorDialog
 import app.strata.launcher.coverForeignActivities
 import app.strata.launcher.feature.home.HomeAction
+import app.strata.launcher.feature.home.HomeLayer
 import app.strata.launcher.feature.home.HomeTestTags
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.home.SheetTestTags
@@ -50,6 +51,7 @@ import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.resumedHomeActivity
 import app.strata.launcher.shell
+import app.strata.launcher.switchNavMode
 import app.strata.launcher.visitRecentsAndReturn
 import app.strata.launcher.windowMatchesNavMode
 import com.google.common.truth.Truth.assertThat
@@ -363,6 +365,56 @@ class HomeDeviceTest {
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError("No focused home with gestural=$gestural insets. ${focusReport()}", e)
+        }
+    }
+
+    /**
+     * T-GEST-10 / T-HOME-15 (FB-008, owner report on the A56): swiping up with the system Home gesture from another app
+     * returns to home at rest. Neither the tail of the gesture (FR-GEST-01) nor the Home intent it delivers (FR-HOME-05,
+     * whose "opens search" option is on here, the worst case) may open search. Gesture navigation is switched on for
+     * the run and restored; without it the test is skipped visibly.
+     */
+    @Test
+    fun tGest10_homeGestureFromAppDoesNotOpenSearch() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+        assumeTrue(isDefaultHome())
+        val restoreNav = runCatching { switchNavMode("gestural") }
+        assumeTrue("gesture navigation is not available: ${restoreNav.exceptionOrNull()}", restoreNav.isSuccess)
+        try {
+            assumeTrue(
+                "navigation_mode is not gestural",
+                shell("settings get secure navigation_mode").trim() == GESTURAL_NAV_MODE,
+            )
+            runBlocking { appGraph().settingsRepository.update { it.copy(homePressOpensSearch = true) } }
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val context = instrumentation.context
+            context.startActivity(
+                Intent()
+                    .setClassName(context, app.strata.launcher.CoverActivity::class.java.name)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            compose.waitUntil(DEVICE_TIMEOUT_MS) { resumedHome() == null }
+            val w = device.displayWidth
+            val h = device.displayHeight
+            // From the bottom edge upward, released while still moving: the system Home gesture.
+            device.swipe(w / 2, h - 2, w / 2, h / 3, EDGE_SWIPE_STEPS)
+            lateinit var home: HomeActivity
+            compose.waitUntil(DEVICE_TIMEOUT_MS) {
+                val front = resumedHome()
+                var focused = false
+                if (front != null) instrumentation.runOnMainSync { focused = front.window.decorView.hasWindowFocus() }
+                if (!focused) closeSystemErrorDialog(device)
+                if (front != null && focused) home = front
+                front != null && focused
+            }
+            // Let the arrival finish: the Home intent, the resume and any pointer events are all handled on the main
+            // thread, then composed. Waits on state, not on time.
+            instrumentation.waitForIdleSync()
+            compose.waitForIdle()
+            assertThat(vm(home).state.value.layer).isNotEqualTo(HomeLayer.SEARCH)
+            assertThat(imeVisible(home)).isFalse()
+        } finally {
+            restoreNav.getOrNull()?.invoke()
         }
     }
 

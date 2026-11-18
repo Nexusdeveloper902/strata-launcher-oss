@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.StateFlow
  */
 interface TimeTicks {
     val ticks: Flow<Unit>
+
+    /** The wall-clock time the header shows, read on each tick (tests fix it). */
+    fun nowMillis(): Long = System.currentTimeMillis()
 }
 
 /**

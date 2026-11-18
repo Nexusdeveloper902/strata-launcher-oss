@@ -132,6 +132,11 @@ class FakeTimeTicks : TimeTicks {
 
     override val ticks: Flow<Unit> = events.onStart { emit(Unit) }
 
+    /** A fixed wall-clock time for the header; null = the system time. */
+    @Volatile var fixedNowMillis: Long? = null
+
+    override fun nowMillis(): Long = fixedNowMillis ?: System.currentTimeMillis()
+
     /** Collectors of [ticks] right now: the real source holds a broadcast receiver for each one. */
     val collectors: Int get() = events.subscriptionCount.value
 

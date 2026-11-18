@@ -4,7 +4,9 @@ import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.compose.setContent
@@ -44,6 +46,7 @@ import app.strata.launcher.feature.home.HomeModal
 import app.strata.launcher.feature.home.HomeRoute
 import app.strata.launcher.feature.home.HomeViewModel
 import app.strata.launcher.feature.home.HomeWidgetSlot
+import app.strata.launcher.feature.home.LocalWallClock
 import app.strata.launcher.feature.home.rememberAppActions
 import app.strata.launcher.feature.onboarding.OnboardingAction
 import app.strata.launcher.feature.onboarding.OnboardingRoute
@@ -74,6 +77,9 @@ import kotlinx.coroutines.launch
  * action and category of incoming intents; extras are ignored (ARCHITECTURE §13, T-SEC-03).
  */
 class HomeActivity : ComponentActivity() {
+    /** FB-008: an arrival from another app is neither a Home press in front nor the start of a home gesture. */
+    private val arrivalGuard = HomeArrivalGuard()
+
     private val viewModel: HomeViewModel by viewModels {
         viewModelFactory {
             initializer {
@@ -216,7 +222,10 @@ class HomeActivity : ComponentActivity() {
             }
             setContent {
                 themeHost.Content(window) {
-                    CompositionLocalProvider(LocalIconLoader provides iconLoader) {
+                    CompositionLocalProvider(
+                        LocalIconLoader provides iconLoader,
+                        LocalWallClock provides appGraph.timeTicks::nowMillis,
+                    ) {
                         val state by viewModel.state.collectAsStateWithLifecycle()
                         // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                         ReportDrawnWhen { state.listReady }
@@ -383,6 +392,7 @@ class HomeActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        arrivalGuard.onStop()
         appGraph.widgetHost.stopListening()
         themeHost.onStop()
         super.onStop()
@@ -457,9 +467,26 @@ class HomeActivity : ComponentActivity() {
                 }
             }
             searchViewModel.onAction(SearchAction.Resume)
+            arrivalGuard.onResume(SystemClock.uptimeMillis())
         } finally {
             AndroidTracer.end()
         }
+    }
+
+    override fun onPause() {
+        arrivalGuard.onPause()
+        super.onPause()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        arrivalGuard.onWindowFocusChanged(hasFocus, SystemClock.uptimeMillis())
+    }
+
+    /** FB-008: a pointer stream that began before home was resumed and focused never reaches the content. */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (!arrivalGuard.acceptTouch(ev.actionMasked == MotionEvent.ACTION_DOWN, ev.downTime)) return true
+        return super.dispatchTouchEvent(ev)
     }
 
     /**
@@ -492,7 +519,9 @@ class HomeActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (HomeIntents.isHomePress(intent.action, intent.categories)) {
-            viewModel.onAction(HomeAction.HomePressed)
+            val broughtToFront = intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT != 0
+            val inFront = arrivalGuard.isHomePressInFront(broughtToFront)
+            viewModel.onAction(if (inFront) HomeAction.HomePressed else HomeAction.ArrivedHome)
         }
         if (HomeIntents.isEditFavorites(intent.action)) viewModel.onAction(HomeAction.EditFavorites)
     }
