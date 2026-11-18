@@ -28,8 +28,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import app.strata.launcher.DEVICE_TIMEOUT_MS
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
+import app.strata.launcher.awaitSystemSettled
 import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.core.model.BadgeKey
 import app.strata.launcher.core.model.VisibleApp
@@ -103,12 +105,14 @@ class OptionalAccessDeviceTest {
 
     @Before
     fun ready() {
+        // The fixture calls below come before passOnboarding's gate: settle first (see awaitSystemSettled).
+        awaitSystemSettled()
         contactsBefore =
             context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
         listenersBefore = shell("settings get secure enabled_notification_listeners")
         restore()
         compose.passOnboarding()
-        compose.waitUntil(10_000) { count(HomeTestTags.ROOT) > 0 }
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { count(HomeTestTags.ROOT) > 0 }
     }
 
     @After
@@ -128,8 +132,8 @@ class OptionalAccessDeviceTest {
     private fun restore() {
         // The fixture's own permissions (test APK only); WRITE_CONTACTS is needed to delete its contacts.
         shell("pm grant $TEST_PACKAGE android.permission.WRITE_CONTACTS")
-        fixture(AccessFixtureReceiver.ACTION_CANCEL_ALL)
-        fixture(AccessFixtureReceiver.ACTION_CLEAR_CONTACTS)
+        fixture(AccessFixtureReceiver.ACTION_CANCEL_ALL, resendIfNotDelivered = true)
+        fixture(AccessFixtureReceiver.ACTION_CLEAR_CONTACTS, resendIfNotDelivered = true)
         revokeListener()
         runBlocking {
             graph.settingsRepository.update {
@@ -163,11 +167,36 @@ class OptionalAccessDeviceTest {
         }
     }
 
-    /** Explicit broadcast to the fixture receiver in the test APK (its own process, so its own package and uid). */
+    /**
+     * Explicit broadcast to the fixture receiver in the test APK (its own process, so its own package and uid).
+     *
+     * [resendIfNotDelivered]: only for the idempotent clean-up steps of [restore]. A reply with the sender's initial
+     * code ([AccessFixtureReceiver.RESULT_NOT_DELIVERED]) means the receiver never set one: its process died before it
+     * answered. GMD API 26 run 44234299843 (tSearch13, the class's first test right after boot): the contacts provider
+     * process was replaced while CLEAR_CONTACTS ran, and a client of a dying provider is killed with it. Such a step is
+     * sent once more. A step that ran and failed (RESULT_FAILED, RESULT_REFUSED) is never re-sent.
+     */
     private fun fixture(
         action: String,
+        resendIfNotDelivered: Boolean = false,
         extras: Intent.() -> Unit = {},
     ) {
+        val first = sendFixture(action, extras)
+        val code =
+            if (first == AccessFixtureReceiver.RESULT_NOT_DELIVERED && resendIfNotDelivered) {
+                android.util.Log.w("OptionalAccessDeviceTest", "fixture $action not delivered; sending it once more")
+                sendFixture(action, extras)
+            } else {
+                first
+            }
+        check(code == AccessFixtureReceiver.RESULT_DONE) { "fixture $action failed: result $code" }
+    }
+
+    /** Sends one fixture broadcast and returns its result code. */
+    private fun sendFixture(
+        action: String,
+        extras: Intent.() -> Unit,
+    ): Int {
         val intent =
             Intent(action)
                 .setComponent(ComponentName(TEST_PACKAGE, AccessFixtureReceiver::class.java.name))
@@ -194,8 +223,8 @@ class OptionalAccessDeviceTest {
         } else {
             context.sendOrderedBroadcast(intent, null, reply, handler, initial, null, null)
         }
-        check(done.await(FIXTURE_TIMEOUT_S, TimeUnit.SECONDS)) { "fixture $action did not answer" }
-        check(result.get() == AccessFixtureReceiver.RESULT_DONE) { "fixture $action failed: result ${result.get()}" }
+        check(done.await(DEVICE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) { "fixture $action did not answer" }
+        return result.get()
     }
 
     private fun post(
@@ -423,7 +452,6 @@ class OptionalAccessDeviceTest {
         const val QUIET_WAIT_MS = 5_000L
         const val QUERIES = 20
         const val MAX_SCAN_BYTES = 16L * 1024 * 1024
-        const val FIXTURE_TIMEOUT_S = 15L
         const val SECRET = "SECRET-123"
         const val OTP = "482913"
         val SAMPLE_QUERIES = listOf("ann", "bo", "ma", "joanna", "c", "zz", "pe", "li", "sa", "to")
