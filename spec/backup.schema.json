@@ -339,6 +339,14 @@
         },
         "lock_gesture_enabled": {
           "type": "boolean"
+        },
+        "swipe_to_call": {
+          "enum": [
+            "SWIPE_TO_CALL_OFF",
+            "SWIPE_TO_CALL_DIAL",
+            "SWIPE_TO_CALL_CALL"
+          ],
+          "description": "FR-SEARCH-09. CALL is effective only while CALL_PHONE is granted; the permission is never restored."
         }
       }
     }

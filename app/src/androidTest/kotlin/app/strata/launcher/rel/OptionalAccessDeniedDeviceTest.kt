@@ -89,6 +89,10 @@ class OptionalAccessDeniedDeviceTest {
         // OptionalAccessDeviceTest (tSearch13; it cannot revoke in-process below API 33) no longer reaches this class
         // (CI run 43563634680, API 26, before clearPackageData). Asserted on every API level.
         assertWithMessage("READ_CONTACTS must not be granted").that(contactsGranted).isFalse()
+        // FR-SEARCH-09: CALL_PHONE is requested only when the user picks "Call directly"; nothing here asked for it.
+        val callGranted =
+            context.checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+        assertWithMessage("CALL_PHONE must not be granted").that(callGranted).isFalse()
     }
 
     @Test

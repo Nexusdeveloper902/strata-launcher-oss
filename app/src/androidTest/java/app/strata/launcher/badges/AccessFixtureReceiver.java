@@ -43,6 +43,8 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
     public static final String EXTRA_TITLE = "title";
     public static final String EXTRA_TEXT = "text";
     public static final String EXTRA_NAMES = "names";
+    /** Optional, parallel to {@link #EXTRA_NAMES}: one invented phone number per contact ("" = none). FR-SEARCH-09. */
+    public static final String EXTRA_PHONES = "phones";
     public static final String KIND_ALERTING = "alerting";
     public static final String KIND_SILENT = "silent";
     public static final String KIND_ONGOING = "ongoing";
@@ -85,7 +87,8 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
             context.getSystemService(NotificationManager.class).cancelAll();
         } else if (ACTION_SEED_CONTACTS.equals(action)) {
             String[] names = intent.getStringArrayExtra(EXTRA_NAMES);
-            seed(context, names == null ? new String[0] : names);
+            String[] phones = intent.getStringArrayExtra(EXTRA_PHONES);
+            seed(context, names == null ? new String[0] : names, phones == null ? new String[0] : phones);
         } else if (ACTION_CLEAR_CONTACTS.equals(action)) {
             clear(context);
         } else {
@@ -114,9 +117,11 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
         nm.notify(intent.getIntExtra(EXTRA_ID, 1), notification);
     }
 
-    private static void seed(Context context, String[] names) throws OperationApplicationException, RemoteException {
+    private static void seed(Context context, String[] names, String[] phones)
+            throws OperationApplicationException, RemoteException {
         ArrayList<ContentProviderOperation> ops = new ArrayList<>();
-        for (String name : names) {
+        for (int i = 0; i < names.length; i++) {
+            String name = names[i];
             int back = ops.size();
             ops.add(ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
                     .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, ACCOUNT_TYPE)
@@ -128,6 +133,16 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
                             ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
                     .build());
+            if (i < phones.length && !phones[i].isEmpty()) {
+                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, back)
+                        .withValue(ContactsContract.Data.MIMETYPE,
+                                ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+                        .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phones[i])
+                        .withValue(ContactsContract.CommonDataKinds.Phone.TYPE,
+                                ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+                        .build());
+            }
         }
         context.getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
     }

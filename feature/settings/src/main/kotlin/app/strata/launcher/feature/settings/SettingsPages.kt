@@ -54,6 +54,13 @@ object SettingsPageTags {
     const val PRIVACY_NOTIFICATIONS = "settings_privacy_notifications"
     const val PRIVACY_CONTACTS = "settings_privacy_contacts"
     const val PRIVACY_LOCK = "settings_privacy_lock"
+    const val PRIVACY_DEFAULT_HOME = "settings_privacy_default_home"
+    const val PRIVACY_PHONE = "settings_privacy_phone"
+    const val PRIVACY_COUNT = "settings_privacy_count"
+    const val PRIVACY_LOCK_WHERE = "settings_privacy_lock_where"
+    const val RESTRICTED_GUIDE = "settings_restricted_guide"
+    const val RESTRICTED_APP_INFO = "settings_restricted_app_info"
+    const val SETUP_ROW = "settings_setup"
     const val ABOUT_ROW = "settings_about"
     const val ABOUT_PAGE = "settings_about_page"
     const val ABOUT_VERSION = "settings_about_version"
@@ -205,10 +212,35 @@ internal fun PrivacyPage(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
 ) {
+    // FR-SET-08: the checklist. Each row has one action: "Allow" goes through the feature's disclosure (where it has one)
+    // straight to the exact system switch; once given, the action opens the page where it is withdrawn.
+    val items = state.accessItems
     LazyColumn(modifier = Modifier.fillMaxSize().safeDrawingPadding().testTag(SettingsPageTags.PRIVACY_PAGE)) {
         item { Title(stringResource(R.string.privacy_page)) }
         item { NoteRow(stringResource(R.string.privacy_no_internet), SettingsPageTags.PRIVACY_NO_INTERNET) }
         item { NoteRow(stringResource(R.string.privacy_on_device), "settings_privacy_on_device") }
+        if (items.isNotEmpty()) {
+            item(key = "count") {
+                NoteRow(
+                    stringResource(R.string.privacy_setup_count, items.count { it.granted }, items.size),
+                    SettingsPageTags.PRIVACY_COUNT,
+                )
+            }
+        }
+        // The restricted-settings guide first: on Android 13+ it decides whether the switches below can be turned on.
+        if (state.showRestrictedGuide) item(key = "restricted") { RestrictedGuide(onAction) }
+        state.defaultHome?.let { held ->
+            item(key = "default_home") {
+                AccessRow(
+                    title = stringResource(R.string.privacy_default_home),
+                    state = stringResource(if (held) R.string.privacy_state_on else R.string.privacy_state_off),
+                    purpose = stringResource(R.string.privacy_default_home_purpose),
+                    action =
+                        stringResource(if (held) R.string.privacy_manage_in_system else R.string.privacy_set_default),
+                    tag = SettingsPageTags.PRIVACY_DEFAULT_HOME,
+                ) { onAction(SettingsAction.DefaultHomeRow) }
+            }
+        }
         state.optional.badgeAccess?.let { access ->
             item(key = "notifications") {
                 val stateText =
@@ -224,12 +256,10 @@ internal fun PrivacyPage(
                     state = stateText,
                     purpose = stringResource(R.string.privacy_notifications_purpose),
                     action =
-                        if (access ==
-                            ListenerAccess.UNSUPPORTED
-                        ) {
-                            null
-                        } else {
-                            stringResource(R.string.privacy_manage_in_system)
+                        when {
+                            access == ListenerAccess.UNSUPPORTED -> null
+                            access.granted -> stringResource(R.string.privacy_manage_in_system)
+                            else -> stringResource(R.string.privacy_allow)
                         },
                     tag = SettingsPageTags.PRIVACY_NOTIFICATIONS,
                 ) { onAction(SettingsAction.ManageBadgeAccess) }
@@ -237,20 +267,32 @@ internal fun PrivacyPage(
         }
         state.optional.contactsPermission?.let { permission ->
             item(key = "contacts") {
+                val granted = permission == PermissionState.GRANTED
                 AccessRow(
                     title = stringResource(R.string.privacy_contacts),
                     state =
                         stringResource(
-                            if (permission == PermissionState.GRANTED) {
-                                R.string.privacy_state_allowed
-                            } else {
-                                R.string.privacy_state_not_allowed
-                            },
+                            if (granted) R.string.privacy_state_allowed else R.string.privacy_state_not_allowed,
                         ),
                     purpose = stringResource(R.string.privacy_contacts_purpose),
-                    action = stringResource(R.string.privacy_manage_app_info),
+                    action = stringResource(if (granted) R.string.privacy_manage_app_info else R.string.privacy_allow),
                     tag = SettingsPageTags.PRIVACY_CONTACTS,
                 ) { onAction(SettingsAction.ManageContactsAccess) }
+            }
+        }
+        state.optional.callPermission?.let { permission ->
+            item(key = "phone") {
+                val granted = permission == PermissionState.GRANTED
+                AccessRow(
+                    title = stringResource(R.string.privacy_phone),
+                    state =
+                        stringResource(
+                            if (granted) R.string.privacy_state_allowed else R.string.privacy_state_not_allowed,
+                        ),
+                    purpose = stringResource(R.string.privacy_phone_purpose),
+                    action = stringResource(if (granted) R.string.privacy_manage_app_info else R.string.privacy_allow),
+                    tag = SettingsPageTags.PRIVACY_PHONE,
+                ) { onAction(SettingsAction.ManageCallAccess) }
             }
         }
         if (state.lockSupported) {
@@ -262,10 +304,52 @@ internal fun PrivacyPage(
                             if (state.lockServiceEnabled) R.string.privacy_state_on else R.string.privacy_state_off,
                         ),
                     purpose = stringResource(R.string.privacy_lock_purpose),
-                    action = stringResource(R.string.privacy_manage_in_system),
+                    action =
+                        stringResource(
+                            if (state.lockServiceEnabled) R.string.privacy_manage_in_system else R.string.privacy_allow,
+                        ),
                     tag = SettingsPageTags.PRIVACY_LOCK,
                 ) { onAction(SettingsAction.ManageLockAccess) }
             }
+            // No public intent opens one accessibility service's switch, so say where it is on the page that opens.
+            if (!state.lockServiceEnabled) {
+                item(key = "lock_where") {
+                    NoteRow(stringResource(R.string.privacy_lock_where), SettingsPageTags.PRIVACY_LOCK_WHERE)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * FR-SET-08: Android 13+ blocks notification access and accessibility services for apps installed from a file until
+ * "Allow restricted settings" is turned on in the app's App info menu. The steps, and a button for App info.
+ */
+@Composable
+private fun RestrictedGuide(onAction: (SettingsAction) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().testTag(SettingsPageTags.RESTRICTED_GUIDE)) {
+        Text(
+            text = stringResource(R.string.privacy_restricted_title),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp).semantics { heading() },
+        )
+        Text(
+            text = stringResource(R.string.privacy_restricted_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = Strata.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+        )
+        listOf(R.string.privacy_restricted_step1, R.string.privacy_restricted_step2, R.string.privacy_restricted_step3)
+            .forEach { step ->
+                Text(
+                    text = stringResource(step),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Strata.colors.textSecondary,
+                    modifier = Modifier.padding(start = 32.dp, end = 24.dp, top = 2.dp, bottom = 2.dp),
+                )
+            }
+        ActionRow(stringResource(R.string.settings_open_app_info), null, SettingsPageTags.RESTRICTED_APP_INFO) {
+            onAction(SettingsAction.OpenAppDetails)
         }
     }
 }

@@ -3,37 +3,54 @@ package app.strata.launcher.feature.search
 import android.graphics.Bitmap
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,6 +71,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -65,11 +83,16 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -78,19 +101,29 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.platformapi.system.ContactHit
+import app.strata.launcher.core.platformapi.system.PhoneNumber
 import app.strata.launcher.core.ui.AppRow
 import app.strata.launcher.core.ui.SearchPillFrame
 import app.strata.launcher.core.ui.Strata
@@ -100,6 +133,7 @@ import app.strata.launcher.core.ui.imeField
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import app.strata.launcher.core.ui.R as UiR
 
 object SearchTestTags {
@@ -113,7 +147,15 @@ object SearchTestTags {
     const val CONTACTS_HEADER = "search_contacts_header"
     const val CONTACTS_HINT = "search_contacts_hint"
 
+    const val CALL_HINT = "search_contact_call_hint"
+    const val NUMBER_CHOOSER = "search_number_chooser"
+    const val NUMBER_CANCEL = "search_number_cancel"
+    const val NUMBER_SCRIM = "search_number_scrim"
+    const val NUMBER_LIST = "search_number_list"
+
     fun contact(index: Int) = "search_contact_$index"
+
+    fun number(index: Int) = "search_number_$index"
 
     fun row(app: VisibleApp) = "search_row_${app.key.component}_${app.key.userSerial}"
 }
@@ -170,6 +212,18 @@ fun SearchRoute(
                     launch { snackbar.showSnackbar(resources.getString(R.string.search_contact_failed)) }
                 }
 
+                is SearchEffect.NoNumber -> {
+                    launch {
+                        snackbar.showSnackbar(
+                            resources.getString(R.string.search_contact_no_number, effect.name),
+                        )
+                    }
+                }
+
+                SearchEffect.CallFailed -> {
+                    launch { snackbar.showSnackbar(resources.getString(R.string.search_call_failed)) }
+                }
+
                 is SearchEffect.LaunchFailed -> {
                     launch {
                         val result =
@@ -197,7 +251,10 @@ fun SearchRoute(
             onLongPress = onLongPress,
             rowActions = rowActions,
             closeLog = closeLog,
+            // FR-SEARCH-09: the chooser is modal; TalkBack must not reach the results behind it.
+            modifier = if (state.numberChoice != null) Modifier.clearAndSetSemantics {} else Modifier,
         )
+        state.numberChoice?.let { NumberChooser(it, onAction) }
         SnackbarHost(
             hostState = snackbar,
             modifier =
@@ -370,7 +427,9 @@ fun SearchScreen(
                         contact = contact,
                         index = i,
                         selected = state.selected == state.items.size + i,
+                        swipeToCall = state.swipeToCall,
                         onOpen = { origin -> onAction(SearchAction.OpenContact(contact, origin)) },
+                        onCall = { onAction(SearchAction.CallContact(contact)) },
                     )
                 }
             }
@@ -562,13 +621,20 @@ private fun ContactsHeader() {
     )
 }
 
-/** FR-SEARCH-06: the contact's photo (or a monogram) and name. One accessibility node; tap opens the contact. */
+/**
+ * FR-SEARCH-06: the contact's photo (or a monogram) and name. One accessibility node; tap opens the contact.
+ * FR-SEARCH-09: with [swipeToCall], a horizontal drag toward the end edge (right in LTR, left in RTL) past
+ * [CALL_SWIPE_THRESHOLD] calls it; a shorter drag springs back. A vertical drag scrolls the list as before (the drag
+ * starts only once the horizontal slop is passed first). The same call is the row's "Call <name>" accessibility action.
+ */
 @Composable
 private fun ContactRow(
     contact: ContactHit,
     index: Int,
     selected: Boolean,
+    swipeToCall: Boolean,
     onOpen: (LaunchOrigin?) -> Unit,
+    onCall: () -> Unit,
 ) {
     val view = LocalView.current
     val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
@@ -578,49 +644,247 @@ private fun ContactRow(
         theme.icons.sizeDp
             .coerceAtLeast(24)
             .dp
-    Row(
+    val density = LocalDensity.current
+    val threshold = with(density) { CALL_SWIPE_THRESHOLD.toPx() }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val animate = theme.animation.enabled
+    val currentOnCall by rememberUpdatedState(onCall)
+    // Distance dragged toward the end edge, in px (never negative: a drag toward the start does nothing).
+    var drag by remember(contact.lookupUri) { mutableFloatStateOf(0f) }
+    // INTERACTION_SPEC §4.2 rule 1 "system edges win": a touch that goes down in the left or right systemGestures inset
+    // belongs to the system back gesture, so the drag it starts never moves the row and never calls.
+    val gestures = WindowInsets.systemGestures
+    val edgeLeft by rememberUpdatedState(gestures.getLeft(density, LayoutDirection.Ltr))
+    val edgeRight by rememberUpdatedState(gestures.getRight(density, LayoutDirection.Ltr))
+    var startedInEdge by remember { mutableStateOf(false) }
+    val dragState =
+        rememberDraggableState { delta ->
+            if (startedInEdge) return@rememberDraggableState
+            val towardEnd = if (rtl) -delta else delta
+            drag = (drag + towardEnd).coerceIn(0f, threshold * MAX_DRAG_FACTOR)
+        }
+    val callAction = stringResource(R.string.search_contact_call_action, contact.name)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (drag > 0f) CallHint(progress = drag / threshold, width = with(density) { drag.toDp() })
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    // `offset` follows the layout direction: positive = toward the end edge in LTR and RTL.
+                    .offset { IntOffset(drag.roundToInt(), 0) }
+                    // Sees each touch-down first (Initial pass) without consuming it.
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val x =
+                                (coordinates[0]?.takeIf { it.isAttached }?.positionInWindow()?.x ?: 0f) +
+                                    down.position.x
+                            val width = view.rootView.width
+                            startedInEdge = x < edgeLeft || (width > 0 && x >= width - edgeRight)
+                        }
+                    }.draggable(
+                        state = dragState,
+                        orientation = Orientation.Horizontal,
+                        enabled = swipeToCall,
+                        onDragStopped = {
+                            val passed = !startedInEdge && drag >= threshold
+                            if (passed) currentOnCall()
+                            if (animate && !passed) animate(drag, 0f) { v, _ -> drag = v } else drag = 0f
+                        },
+                    ).heightIn(min = 48.dp)
+                    .then(if (selected) Modifier.border(2.dp, colors.accent) else Modifier)
+                    .focusRing()
+                    .clickable(role = Role.Button) { onOpen(coordinates[0]?.let { originOf(it, view) }) }
+                    .onGloballyPositioned { coordinates[0] = it }
+                    .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp)
+                    .semantics(mergeDescendants = true) {
+                        if (swipeToCall) {
+                            customActions =
+                                listOf(
+                                    CustomAccessibilityAction(callAction) {
+                                        currentOnCall()
+                                        true
+                                    },
+                                )
+                        }
+                    }.testTag(SearchTestTags.contact(index)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val bitmap = contact.photo?.native as? Bitmap
+            if (bitmap != null) {
+                Image(
+                    bitmap = remember(bitmap) { bitmap.asImageBitmap() },
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(size).clip(CircleShape),
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(size).clip(CircleShape).background(colors.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = contact.name.firstGrapheme(),
+                        style = Strata.typography.label,
+                        color = colors.textSecondary,
+                    )
+                }
+            }
+            Text(
+                text = contact.name,
+                style = Strata.typography.label,
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** FR-SEARCH-09: "Call" in the space the dragged row uncovers at its start edge; full strength at the threshold. */
+@Composable
+private fun BoxScope.CallHint(
+    progress: Float,
+    width: Dp,
+) {
+    Box(
+        modifier =
+            Modifier
+                .matchParentSize()
+                // Visual only: the row's own "Call" action is what accessibility services see (the tag is for tests).
+                .clearAndSetSemantics { testTag = SearchTestTags.CALL_HINT },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier.width(width).fillMaxHeight().clipToBounds(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.search_contact_call),
+                style = Strata.typography.label,
+                color = Strata.colors.accent,
+                maxLines = 1,
+                modifier = Modifier.alpha(progress.coerceIn(0f, 1f)),
+            )
+        }
+    }
+}
+
+/**
+ * FR-SEARCH-09: several numbers and none marked default: one row per number (number and type label), Cancel. Back
+ * cancels too. Drawn in the search layer's window, not a dialog: the field keeps its focus and the IME guard is not
+ * involved.
+ */
+@Composable
+private fun NumberChooser(
+    choice: NumberChoice,
+    onAction: (SearchAction) -> Unit,
+) {
+    val colors = Strata.colors
+    val type = Strata.typography
+    val title = stringResource(R.string.search_choose_number_title, choice.contact.name)
+    BackHandler { onAction(SearchAction.DismissNumberChoice) }
+    // The swipe can come while the field still has the keyboard up; the chooser needs the room. The query is not blank
+    // (contact rows are shown), so hiding the IME does not close search (ImeHideClosesSearch).
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(choice) { keyboard?.hide() }
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // The scrim takes every touch outside the pane (nothing reaches the rows behind it); a tap there cancels.
+        Box(
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .background(colors.scrim.copy(alpha = CHOOSER_SCRIM_ALPHA))
+                    .clickable(interactionSource = null, indication = null) {
+                        onAction(SearchAction.DismissNumberChoice)
+                    }
+                    // Not a TalkBack stop: the pane's Cancel and Back do the same.
+                    .clearAndSetSemantics { testTag = SearchTestTags.NUMBER_SCRIM },
+        )
+        Column(
+            modifier =
+                Modifier
+                    // Never under the keyboard or the system bars: the pane fits the space they leave.
+                    .windowInsetsPadding(WindowInsets.safeDrawing.union(WindowInsets.ime))
+                    .padding(24.dp)
+                    .fillMaxWidth()
+                    // Taps on the pane's own empty space stay in the pane.
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .background(colors.background.copy(alpha = 1f), RoundedCornerShape(16.dp))
+                    .padding(vertical = 8.dp)
+                    .semantics {
+                        paneTitle = title
+                        isTraversalGroup = true
+                    }.testTag(SearchTestTags.NUMBER_CHOOSER),
+        ) {
+            Text(
+                text = title,
+                style = type.section,
+                color = colors.textPrimary,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp).semantics { heading() },
+            )
+            // Up to 8 numbers: the list scrolls in the room left between the title and Cancel, which always show.
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .testTag(SearchTestTags.NUMBER_LIST),
+            ) {
+                choice.numbers.forEachIndexed { i, number ->
+                    NumberRow(number, i) { onAction(SearchAction.ChooseNumber(number)) }
+                }
+            }
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .focusRing()
+                        .clickable(role = Role.Button) { onAction(SearchAction.DismissNumberChoice) }
+                        .padding(horizontal = 24.dp)
+                        .testTag(SearchTestTags.NUMBER_CANCEL),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Text(
+                    text = stringResource(R.string.search_choose_number_cancel),
+                    style = type.label,
+                    color = colors.accent,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NumberRow(
+    number: PhoneNumber,
+    index: Int,
+    onClick: () -> Unit,
+) {
+    val colors = Strata.colors
+    val type = Strata.typography
+    Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .then(if (selected) Modifier.border(2.dp, colors.accent) else Modifier)
                 .focusRing()
-                .clickable(role = Role.Button) { onOpen(coordinates[0]?.let { originOf(it, view) }) }
-                .onGloballyPositioned { coordinates[0] = it }
-                .padding(horizontal = theme.list.horizontalPaddingDp.dp, vertical = 4.dp)
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = 24.dp, vertical = 6.dp)
                 .semantics(mergeDescendants = true) {}
-                .testTag(SearchTestTags.contact(index)),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .testTag(SearchTestTags.number(index)),
+        verticalArrangement = Arrangement.Center,
     ) {
-        val bitmap = contact.photo?.native as? Bitmap
-        if (bitmap != null) {
-            Image(
-                bitmap = remember(bitmap) { bitmap.asImageBitmap() },
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(size).clip(CircleShape),
-            )
-        } else {
-            Box(
-                modifier = Modifier.size(size).clip(CircleShape).background(colors.surface),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = contact.name.firstGrapheme(),
-                    style = Strata.typography.label,
-                    color = colors.textSecondary,
-                )
-            }
-        }
+        // Phone numbers read left to right in every locale.
         Text(
-            text = contact.name,
-            style = Strata.typography.label,
+            text = number.number,
+            style = type.label.copy(textDirection = TextDirection.Ltr),
             color = colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
         )
+        number.label?.let { Text(text = it, style = type.label, color = colors.textSecondary) }
     }
 }
 
@@ -693,6 +957,14 @@ private fun originOf(
         bottom = location[1] + bounds.bottom.toInt(),
     )
 }
+
+/** FR-SEARCH-09: the drag toward the end edge that calls a contact (INTERACTION_SPEC §5). */
+internal val CALL_SWIPE_THRESHOLD = 96.dp
+
+/** A contact row follows the finger up to this multiple of [CALL_SWIPE_THRESHOLD]. */
+private const val MAX_DRAG_FACTOR = 1.5f
+
+private const val CHOOSER_SCRIM_ALPHA = 0.6f
 
 /** Predictive back fades the layer by up to this fraction (INTERACTION_SPEC §6). */
 private const val BACK_FADE = 0.7f

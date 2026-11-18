@@ -8,6 +8,13 @@ enum class AppearanceSetting { FOLLOW_THEME, SYSTEM, LIGHT, DARK }
 enum class SwipeDownAction { NONE, NOTIFICATIONS }
 
 /**
+ * ARCHITECTURE §4.2 field 25 (FR-SEARCH-09): what swiping a contact search result toward the end edge does. [DIAL] opens
+ * the dialer with the number (no permission); [CALL] places the call, effective only while `CALL_PHONE` is granted
+ * (otherwise it acts as [DIAL]); [OFF] turns the swipe off.
+ */
+enum class SwipeToCall { OFF, DIAL, CALL }
+
+/**
  * ARCHITECTURE §4.2 field 24: how far the first-run flow got (FR-ONBOARD-01, J-01). Persisted so that a relaunch of
  * either host (the entry activity or the home activity, D-008), a process kill or the home activity started by the
  * system after the role grant resumes the flow instead of starting it again. [ROLE_REQUESTED] = the set-default step
@@ -44,6 +51,7 @@ data class Settings(
     val swipeDownAction: SwipeDownAction = SwipeDownAction.NONE,
     val lockGestureEnabled: Boolean = false,
     val onboardingProgress: OnboardingProgress = OnboardingProgress.WELCOME,
+    val swipeToCall: SwipeToCall = SwipeToCall.DIAL,
 ) {
     companion object {
         /** Current catalogue version (field 1). */

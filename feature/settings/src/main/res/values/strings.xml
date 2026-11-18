@@ -237,4 +237,27 @@
     <string name="backup_theme_needs_update">Needs app update: %1$s</string>
     <string name="settings_favorites">Favourites</string>
     <string name="settings_favorites_summary">Add, remove and reorder the apps on home</string>
+    <!-- Swipe a contact to call (FR-SEARCH-09, settings field 25) -->
+    <string name="settings_swipe_to_call">Swipe a contact to call</string>
+    <string name="settings_swipe_to_call_summary">In search, swipe a contact toward the screen edge.</string>
+    <string name="settings_swipe_off">Off</string>
+    <string name="settings_swipe_dial">Open the dialer with the number</string>
+    <string name="settings_swipe_call">Call directly (asks for the phone permission)</string>
+    <string name="settings_call_permission_needed">Permission needed. Until you allow phone calls in Strata\'s permissions, the swipe opens the dialer.</string>
+
+    <!-- Permission setup (FR-SET-08) -->
+    <string name="settings_setup">Set up permissions</string>
+    <string name="privacy_setup_count">Allowed: %1$d of %2$d</string>
+    <string name="privacy_allow">Allow</string>
+    <string name="privacy_set_default">Set as default</string>
+    <string name="privacy_default_home">Default home app</string>
+    <string name="privacy_default_home_purpose">Strata opens when you press Home.</string>
+    <string name="privacy_phone">Phone calls</string>
+    <string name="privacy_phone_purpose">Calls a contact directly when you swipe it in search. Without it, the swipe opens the dialer.</string>
+    <string name="privacy_lock_where">On the page that opens, tap Installed apps (on some phones Downloaded apps or Services), then Strata screen lock, and turn it on.</string>
+    <string name="privacy_restricted_title">Switch greyed out? Allow restricted settings</string>
+    <string name="privacy_restricted_body">Android 13 and later block notification access and accessibility services for apps installed from a file, until you allow it once:</string>
+    <string name="privacy_restricted_step1">1. Tap Allow below. If Android says the setting is restricted, close that message.</string>
+    <string name="privacy_restricted_step2">2. Tap Open App info, then the menu at the top right, and choose Allow restricted settings.</string>
+    <string name="privacy_restricted_step3">3. Come back here and tap Allow again.</string>
 </resources>

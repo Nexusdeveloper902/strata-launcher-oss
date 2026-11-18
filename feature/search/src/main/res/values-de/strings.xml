@@ -14,4 +14,10 @@
     <string name="search_contacts_header">Kontakte</string>
     <string name="search_contacts_hint">Auch Kontakte durchsuchen? Schalte es in den Einstellungen ein</string>
     <string name="search_contact_failed">Keine App kann diesen Kontakt öffnen</string>
+    <string name="search_contact_call">Anrufen</string>
+    <string name="search_contact_call_action">%1$s anrufen</string>
+    <string name="search_contact_no_number">%1$s hat keine Telefonnummer</string>
+    <string name="search_call_failed">Keine Telefon-App kann diesen Anruf starten</string>
+    <string name="search_choose_number_title">%1$s anrufen</string>
+    <string name="search_choose_number_cancel">Abbrechen</string>
 </resources>

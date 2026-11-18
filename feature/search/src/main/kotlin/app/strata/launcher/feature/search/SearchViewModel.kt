@@ -7,6 +7,7 @@ import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.Settings
+import app.strata.launcher.core.model.SwipeToCall
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppLauncher
@@ -15,9 +16,11 @@ import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.platformapi.settings.SettingsRepository
+import app.strata.launcher.core.platformapi.system.CallMode
 import app.strata.launcher.core.platformapi.system.ContactHit
 import app.strata.launcher.core.platformapi.system.ContactsSource
 import app.strata.launcher.core.platformapi.system.PermissionState
+import app.strata.launcher.core.platformapi.system.PhoneNumber
 import app.strata.launcher.core.platformapi.system.SystemIntents
 import app.strata.launcher.core.platformapi.system.TextFolding
 import app.strata.launcher.core.search.SearchIndex
@@ -25,6 +28,7 @@ import app.strata.launcher.core.search.Transliterate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,6 +73,10 @@ data class SearchUiState(
     val contacts: List<ContactHit> = emptyList(),
     /** INTERACTION_SPEC §8: the one-time "search contacts too?" hint (contacts off, no app match, a name-like query). */
     val showContactsHint: Boolean = false,
+    /** FR-SEARCH-09: contact rows can be swiped to call (settings field 25 is not `OFF`). */
+    val swipeToCall: Boolean = false,
+    /** FR-SEARCH-09: several numbers and no default: the user picks one; null otherwise. */
+    val numberChoice: NumberChoice? = null,
 ) {
     val isBlank: Boolean get() = query.isBlank()
 
@@ -81,6 +89,12 @@ data class SearchUiState(
     /** No app matches the query; contact rows may still follow (FR-SEARCH-06 shows them below the apps). */
     val noResults: Boolean get() = !isBlank && settled && results.isEmpty()
 }
+
+/** FR-SEARCH-09: the number chooser for [contact] (several numbers, none marked default). Memory only. */
+data class NumberChoice(
+    val contact: ContactHit,
+    val numbers: List<PhoneNumber>,
+)
 
 /** INTERACTION_SPEC §8 "the query looks like a name": two or more letters, only letters, spaces, `'`, `-` or `.`. */
 object NameLikeQuery {
@@ -112,6 +126,15 @@ sealed interface SearchAction {
     /** FR-SEARCH-06: a contact row; opens its lookup URI in the contacts app. */
     data class OpenContact(val contact: ContactHit, val origin: LaunchOrigin?) : SearchAction
 
+    /** FR-SEARCH-09: a contact row was swiped toward the end edge (or its "Call" accessibility action was used). */
+    data class CallContact(val contact: ContactHit) : SearchAction
+
+    /** FR-SEARCH-09: a number picked in the chooser. */
+    data class ChooseNumber(val number: PhoneNumber) : SearchAction
+
+    /** FR-SEARCH-09: the chooser was cancelled (Cancel, Back, outside). */
+    data object DismissNumberChoice : SearchAction
+
     /** The contacts hint row: close search and open Settings, where contact search is turned on. */
     data object ContactsHint : SearchAction
 
@@ -133,6 +156,12 @@ sealed interface SearchEffect {
 
     /** No contacts app could open the result. */
     data object ContactOpenFailed : SearchEffect
+
+    /** FR-SEARCH-09: the swiped contact has no phone number. */
+    data class NoNumber(val name: String) : SearchEffect
+
+    /** FR-SEARCH-09: no phone app could take the call (no dialer, e.g. a tablet without telephony). */
+    data object CallFailed : SearchEffect
 
     /** The contacts hint was tapped: home opens Settings. */
     data object OpenSettings : SearchEffect
@@ -164,6 +193,10 @@ class SearchViewModel(
     /** The hint was shown in this search session: it stays until the layer closes, then never again. */
     private val hintSession = MutableStateFlow(false)
     private val selected = MutableStateFlow(0)
+    private val numberChoice = MutableStateFlow<NumberChoice?>(null)
+
+    /** The number lookup of the last swipe; a new swipe or closing the layer cancels it. */
+    private var callJob: Job? = null
     private val storeAvailable = MutableStateFlow(false)
     private val effectChannel = Channel<SearchEffect>(Channel.BUFFERED)
 
@@ -305,6 +338,7 @@ class SearchViewModel(
         val store: Boolean,
         val contacts: ContactResults?,
         val hintSession: Boolean,
+        val numberChoice: NumberChoice?,
     )
 
     val state: StateFlow<SearchUiState> =
@@ -312,7 +346,14 @@ class SearchViewModel(
             query,
             ranked.onStart { emit(null) },
             recents.onStart { emit(emptyList()) },
-            combine(selected, storeAvailable, contactResults.onStart { emit(null) }, hintSession, ::Extras),
+            combine(
+                selected,
+                storeAvailable,
+                contactResults.onStart { emit(null) },
+                hintSession,
+                numberChoice,
+                ::Extras,
+            ),
             currentSettings,
         ) { q, r, rec, extras, s ->
             val settled = r != null && r.query == q
@@ -339,6 +380,8 @@ class SearchViewModel(
                 settled = settled || q.isBlank(),
                 contacts = contactHits,
                 showContactsHint = hint,
+                swipeToCall = contacts != null && (s?.swipeToCall ?: SwipeToCall.DIAL) != SwipeToCall.OFF,
+                numberChoice = extras.numberChoice,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SearchUiState())
 
@@ -401,6 +444,21 @@ class SearchViewModel(
                 openContact(action.contact, action.origin)
             }
 
+            is SearchAction.CallContact -> {
+                callContact(action.contact)
+            }
+
+            is SearchAction.ChooseNumber -> {
+                val choice = numberChoice.value ?: return
+                if (action.number !in choice.numbers) return
+                numberChoice.value = null
+                placeCall(action.number)
+            }
+
+            SearchAction.DismissNumberChoice -> {
+                numberChoice.value = null
+            }
+
             SearchAction.ContactsHint -> {
                 effectChannel.trySend(SearchEffect.OpenSettings)
                 close()
@@ -449,12 +507,64 @@ class SearchViewModel(
         }
     }
 
+    /**
+     * FR-SEARCH-09: reads the contact's numbers off main, then calls the only or default one, or shows the chooser. The
+     * swipe is ignored while settings field 25 is `OFF`. Numbers stay in memory and are never logged (ARCHITECTURE §11).
+     */
+    private fun callContact(contact: ContactHit) {
+        val source = contacts ?: return
+        if (!state.value.swipeToCall) return
+        callJob?.cancel()
+        numberChoice.value = null
+        callJob =
+            viewModelScope.launch {
+                val numbers =
+                    try {
+                        source.numbers(contact)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                val preferred = ContactsSource.preferred(numbers)
+                when {
+                    numbers.isEmpty() -> effectChannel.trySend(SearchEffect.NoNumber(contact.name))
+                    preferred != null -> placeCall(preferred)
+                    else -> numberChoice.value = NumberChoice(contact, numbers)
+                }
+            }
+    }
+
+    /**
+     * FR-SEARCH-09 / settings field 25: `CALL` places the call only while `CALL_PHONE` is granted (checked now, so a
+     * revoke in the system settings counts at once); otherwise, and for `DIAL`, the dialer opens with the number.
+     */
+    private fun placeCall(number: PhoneNumber) {
+        val source = contacts ?: return
+        val setting = currentSettings.value?.swipeToCall ?: SwipeToCall.DIAL
+        if (setting == SwipeToCall.OFF) return
+        val mode =
+            if (setting == SwipeToCall.CALL && source.callPermission() == PermissionState.GRANTED) {
+                CallMode.CALL
+            } else {
+                CallMode.DIAL
+            }
+        if (source.call(number.number, mode) is Outcome.Ok) {
+            close()
+        } else {
+            effectChannel.trySend(SearchEffect.CallFailed)
+        }
+    }
+
     private fun setQuery(text: String) {
         query.value = text
         selected.value = 0
     }
 
     private fun close() {
+        callJob?.cancel()
+        callJob = null
+        numberChoice.value = null
         hintSession.value = false
         setQuery("")
         effectChannel.trySend(SearchEffect.Close)

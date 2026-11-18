@@ -28,12 +28,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import app.strata.launcher.DEVICE_TIMEOUT_MS
 import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.appGraph
 import app.strata.launcher.awaitSystemSettled
 import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.core.model.BadgeKey
+import app.strata.launcher.core.model.SwipeToCall
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.notifications.ListenerAccess
 import app.strata.launcher.core.ui.AppRowTestTags
@@ -66,7 +68,7 @@ import android.os.Process as AndroidProcess
 
 /**
  * Notification badges and contact search on a device (level I): T-NOTIF-01…04, T-NOTIF-07, T-PERF-09 (short form),
- * T-SEARCH-12, T-SEARCH-13. Not run in this environment (no emulator); compiled by `assembleDebugAndroidTest`.
+ * T-SEARCH-12, T-SEARCH-13, T-SEARCH-27 (swipe to call, under gesture navigation). Not run in this environment (no emulator); compiled by `assembleDebugAndroidTest`.
  *
  * The system grant page and the permission dialog cannot be driven on Gradle Managed Devices, so access is granted
  * through the shell (`cmd notification allow_listener`, `pm grant`), the seam the R tests replace with fakes. The fixture
@@ -79,14 +81,30 @@ import android.os.Process as AndroidProcess
 class OptionalAccessDeviceTest {
     val compose = createAndroidComposeRule<HomeActivity>()
 
+    /** T-SEARCH-27 needs gesture navigation (switched before its activity starts, then restored by the rule). */
     @get:Rule
-    val rules: RuleChain = RuleChain.outerRule(DeviceStateRule()).around(compose)
+    val rules: RuleChain =
+        RuleChain
+            .outerRule(
+                DeviceStateRule(navModeFor = {
+                    if (it.methodName?.startsWith("tSearch27") ==
+                        true
+                    ) {
+                        "gestural"
+                    } else {
+                        null
+                    }
+                }),
+            ).around(compose)
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val device = UiDevice.getInstance(instrumentation)
     private val context = instrumentation.targetContext
     private val graph get() = context.applicationContext.appGraph
     private val listener = ComponentName(context, BadgeListenerService::class.java).flattenToString()
+
+    /** Numeric user of this process (pm/am/cmd take `--user <id>`; never `current`). */
+    private val userId = AndroidProcess.myUid() / PER_USER_RANGE
     private var listenersBefore: String = "null"
 
     private fun count(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().size
@@ -101,6 +119,9 @@ class OptionalAccessDeviceTest {
 
     /** `READ_CONTACTS` of Strata before the test (the owner may have contact search on). */
     private var contactsBefore = false
+
+    /** The settings [restore] resets, as they were before the test (put back in [tearDown]). */
+    private var settingsBefore: app.strata.launcher.core.model.Settings? = null
     private val replyThread = HandlerThread("fixture-replies").apply { start() }
 
     @Before
@@ -110,6 +131,7 @@ class OptionalAccessDeviceTest {
         contactsBefore =
             context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
         listenersBefore = shell("settings get secure enabled_notification_listeners")
+        settingsBefore = runBlocking { graph.settingsRepository.settings.first() }
         restore()
         compose.passOnboarding()
         compose.waitUntil(DEVICE_TIMEOUT_MS) { count(HomeTestTags.ROOT) > 0 }
@@ -118,6 +140,7 @@ class OptionalAccessDeviceTest {
     @After
     fun tearDown() {
         restore()
+        putBackSettings()
         releaseContactsGrant()
         replyThread.quitSafely()
         var owned: HomeActivity? = null
@@ -137,7 +160,27 @@ class OptionalAccessDeviceTest {
         revokeListener()
         runBlocking {
             graph.settingsRepository.update {
-                it.copy(badgesEnabled = false, contactsSearchEnabled = false, contactsHintShown = false)
+                it.copy(
+                    badgesEnabled = false,
+                    contactsSearchEnabled = false,
+                    contactsHintShown = false,
+                    swipeToCall = SwipeToCall.DIAL,
+                )
+            }
+        }
+    }
+
+    /** The badge, contact-search and swipe-to-call settings the owner had before the test ([restore] cleared them). */
+    private fun putBackSettings() {
+        val before = settingsBefore ?: return
+        runBlocking {
+            graph.settingsRepository.update {
+                it.copy(
+                    badgesEnabled = before.badgesEnabled,
+                    contactsSearchEnabled = before.contactsSearchEnabled,
+                    contactsHintShown = before.contactsHintShown,
+                    swipeToCall = before.swipeToCall,
+                )
             }
         }
     }
@@ -438,8 +481,82 @@ class OptionalAccessDeviceTest {
         compose.bringHomeToFront(owned!!, device)
     }
 
+    /**
+     * The activity that takes `ACTION_DIAL` for [number], as `package/class`, from the package manager's own resolution
+     * (the shell sees every package); null when nothing resolves. A chooser resolves to the system's resolver activity.
+     */
+    private fun dialHandler(number: String): String? =
+        shell("cmd package resolve-activity --brief --user $userId -a android.intent.action.DIAL -d tel:$number")
+            .lines()
+            .map(String::trim)
+            .lastOrNull { '/' in it && !it.contains(' ') }
+
+    /**
+     * T-SEARCH-27: gesture navigation; a fixture contact with an invented number; settings field 25 `DIAL`. A real
+     * swipe (through the system input path, so the gesture-navigation edges apply) on the row toward the end edge opens
+     * the dialer with the number, or, where no dialer exists, shows the "No phone app" message. Never a call: the mode
+     * is `DIAL` and the test checks it before swiping.
+     */
+    @Test
+    fun tSearch27_swipeOpensTheDialer() {
+        shell("pm grant --user $userId $TEST_PACKAGE android.permission.WRITE_CONTACTS")
+        fixture(AccessFixtureReceiver.ACTION_SEED_CONTACTS) {
+            putExtra(AccessFixtureReceiver.EXTRA_NAMES, arrayOf(CALL_NAME))
+            putExtra(AccessFixtureReceiver.EXTRA_PHONES, arrayOf(CALL_NUMBER))
+        }
+        shell("pm grant --user $userId ${context.packageName} android.permission.READ_CONTACTS")
+        runBlocking {
+            graph.settingsRepository.update { it.copy(contactsSearchEnabled = true, swipeToCall = SwipeToCall.DIAL) }
+        }
+        assertThat(runBlocking { graph.settingsRepository.settings.first() }.swipeToCall).isEqualTo(SwipeToCall.DIAL)
+        compose.waitUntil(DEVICE_TIMEOUT_MS) {
+            runBlocking { graph.contacts.search(CALL_QUERY, 5) }.any { it.name == CALL_NAME }
+        }
+        val hit = runBlocking { graph.contacts.search(CALL_QUERY, 5) }.first { it.name == CALL_NAME }
+        assertThat(runBlocking { graph.contacts.numbers(hit) }.map { it.number }).containsExactly(CALL_NUMBER)
+        val handler = dialHandler(CALL_DIGITS)
+        val noPhoneApp = context.getString(app.strata.launcher.feature.search.R.string.search_call_failed)
+        var owned: HomeActivity? = null
+        compose.activityRule.scenario.onActivity { owned = it }
+        openSearchAndType(CALL_QUERY)
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { count(SearchTestTags.contact(0)) > 0 }
+        val row = device.wait(Until.findObject(By.res(SearchTestTags.contact(0))), DEVICE_TIMEOUT_MS)
+        assertWithMessage("contact row not visible to UiAutomator. ${focusReport()}").that(row).isNotNull()
+        val bounds = row.visibleBounds
+        val threshold = (CALL_SWIPE_DP * context.resources.displayMetrics.density).toInt()
+        val rtl = context.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL
+        // Start well inside the row (never in a system gesture edge) and travel twice the threshold toward the end.
+        val startX = if (rtl) bounds.right - bounds.width() / 4 else bounds.left + bounds.width() / 4
+        val endX = if (rtl) startX - 2 * threshold else startX + 2 * threshold
+        device.swipe(startX, bounds.centerY(), endX, bounds.centerY(), SWIPE_STEPS)
+        if (handler != null) {
+            val pkg = handler.substringBefore('/')
+            assertWithMessage("$handler did not come to front. ${focusReport()}")
+                .that(device.wait(Until.hasObject(By.pkg(pkg).depth(0)), DEVICE_TIMEOUT_MS))
+                .isTrue()
+        } else {
+            assertWithMessage("no dialer here, and no message either. ${focusReport()}")
+                .that(device.wait(Until.hasObject(By.text(noPhoneApp)), DEVICE_TIMEOUT_MS))
+                .isTrue()
+        }
+        assertThat(device.hasObject(By.pkg(PERMISSION_CONTROLLER))).isFalse()
+        assertThat(device.hasObject(By.pkg(GOOGLE_PERMISSION_CONTROLLER))).isFalse()
+        compose.bringHomeToFront(owned!!, device)
+    }
+
     private companion object {
         const val TEST_PACKAGE = "app.strata.launcher.test"
+        const val PER_USER_RANGE = 100_000
+
+        /** T-SEARCH-27 fixture: an invented name and a number from the 555-01xx range reserved for fiction. */
+        const val CALL_NAME = "Zed Callfixture"
+        const val CALL_QUERY = "callfixture"
+        const val CALL_NUMBER = "+1 555 0142"
+        const val CALL_DIGITS = "+15550142"
+
+        /** FR-SEARCH-09 threshold (SearchScreen's CALL_SWIPE_THRESHOLD). */
+        const val CALL_SWIPE_DP = 96f
+        const val SWIPE_STEPS = 40
         const val PERMISSION_CONTROLLER = "com.android.permissioncontroller"
         const val GOOGLE_PERMISSION_CONTROLLER = "com.google.android.permissioncontroller"
 
@@ -447,7 +564,7 @@ class OptionalAccessDeviceTest {
         const val SPEC_BADGE_MS = 2_000L
 
         /** Upper bound for waits on state; a stall, not a performance budget. */
-        const val STALL_MS = 30_000L
+        const val STALL_MS = 2 * DEVICE_TIMEOUT_MS
         const val SETTLE_MS = 1_500L
         const val QUIET_WAIT_MS = 5_000L
         const val QUERIES = 20

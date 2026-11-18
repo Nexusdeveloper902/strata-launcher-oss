@@ -224,4 +224,24 @@
     <string name="backup_theme_needs_update">App-Update nötig: %1$s</string>
     <string name="settings_favorites">Favoriten</string>
     <string name="settings_favorites_summary">Apps auf dem Startbildschirm hinzufügen, entfernen und sortieren</string>
+    <string name="settings_swipe_to_call">Kontakt zum Anrufen wischen</string>
+    <string name="settings_swipe_to_call_summary">Wische in der Suche einen Kontakt zum Bildschirmrand.</string>
+    <string name="settings_swipe_off">Aus</string>
+    <string name="settings_swipe_dial">Telefon-App mit der Nummer öffnen</string>
+    <string name="settings_swipe_call">Direkt anrufen (fragt nach der Telefon-Berechtigung)</string>
+    <string name="settings_call_permission_needed">Berechtigung nötig. Bis du Anrufe in Stratas Berechtigungen erlaubst, öffnet das Wischen die Telefon-App.</string>
+    <string name="settings_setup">Berechtigungen einrichten</string>
+    <string name="privacy_setup_count">Erlaubt: %1$d von %2$d</string>
+    <string name="privacy_allow">Erlauben</string>
+    <string name="privacy_set_default">Als Standard festlegen</string>
+    <string name="privacy_default_home">Standard-Startbildschirm</string>
+    <string name="privacy_default_home_purpose">Strata öffnet sich, wenn du die Home-Taste drückst.</string>
+    <string name="privacy_phone">Anrufe</string>
+    <string name="privacy_phone_purpose">Ruft einen Kontakt direkt an, wenn du ihn in der Suche wischst. Ohne sie öffnet das Wischen die Telefon-App.</string>
+    <string name="privacy_lock_where">Tippe auf der geöffneten Seite auf Installierte Apps (auf manchen Telefonen Heruntergeladene Apps oder Dienste), dann auf Strata screen lock, und schalte es ein.</string>
+    <string name="privacy_restricted_title">Schalter ausgegraut? Eingeschränkte Einstellungen zulassen</string>
+    <string name="privacy_restricted_body">Ab Android 13 sind Benachrichtigungszugriff und Bedienungshilfen für Apps aus einer Datei gesperrt, bis du sie einmal zulässt:</string>
+    <string name="privacy_restricted_step1">1. Tippe unten auf Erlauben. Meldet Android eine eingeschränkte Einstellung, schließe die Meldung.</string>
+    <string name="privacy_restricted_step2">2. Tippe auf App-Info öffnen, dann oben rechts auf das Menü, und wähle Eingeschränkte Einstellungen zulassen.</string>
+    <string name="privacy_restricted_step3">3. Komm hierher zurück und tippe noch einmal auf Erlauben.</string>
 </resources>
