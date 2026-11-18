@@ -240,7 +240,9 @@ class AndroidContactsSource(
     ): LaunchResult {
         if (!ContactsSource.isDialable(number)) return Outcome.Err(LaunchError.SECURITY)
         // CALL only while CALL_PHONE is granted (ANDROID_PLATFORM §23); otherwise the dialer, never a SecurityException.
-        val direct = mode == CallMode.CALL && callPermission() == PermissionState.GRANTED
+        // MMI/USSD codes and pauses (`*`, `#`, `,`, `;`, p, w) never skip the dialer: the user sees them first.
+        val direct =
+            mode == CallMode.CALL && ContactsSource.isPlainNumber(number) && callPermission() == PermissionState.GRANTED
         val intent =
             Intent(if (direct) Intent.ACTION_CALL else Intent.ACTION_DIAL, callUri(number))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

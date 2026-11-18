@@ -13,6 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.DragInteraction
@@ -35,6 +38,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,10 +80,13 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -95,6 +102,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
@@ -139,6 +147,7 @@ object SearchTestTags {
     const val CALL_HINT = "search_contact_call_hint"
     const val NUMBER_CHOOSER = "search_number_chooser"
     const val NUMBER_CANCEL = "search_number_cancel"
+    const val NUMBER_SCRIM = "search_number_scrim"
 
     fun contact(index: Int) = "search_contact_$index"
 
@@ -238,6 +247,8 @@ fun SearchRoute(
             onLongPress = onLongPress,
             rowActions = rowActions,
             closeLog = closeLog,
+            // FR-SEARCH-09: the chooser is modal; TalkBack must not reach the results behind it.
+            modifier = if (state.numberChoice != null) Modifier.clearAndSetSemantics {} else Modifier,
         )
         state.numberChoice?.let { NumberChooser(it, onAction) }
         SnackbarHost(
@@ -636,8 +647,15 @@ private fun ContactRow(
     val currentOnCall by rememberUpdatedState(onCall)
     // Distance dragged toward the end edge, in px (never negative: a drag toward the start does nothing).
     var drag by remember(contact.lookupUri) { mutableFloatStateOf(0f) }
+    // INTERACTION_SPEC §4.2 rule 1 "system edges win": a touch that goes down in the left or right systemGestures inset
+    // belongs to the system back gesture, so the drag it starts never moves the row and never calls.
+    val gestures = WindowInsets.systemGestures
+    val edgeLeft by rememberUpdatedState(gestures.getLeft(density, LayoutDirection.Ltr))
+    val edgeRight by rememberUpdatedState(gestures.getRight(density, LayoutDirection.Ltr))
+    var startedInEdge by remember { mutableStateOf(false) }
     val dragState =
         rememberDraggableState { delta ->
+            if (startedInEdge) return@rememberDraggableState
             val towardEnd = if (rtl) -delta else delta
             drag = (drag + towardEnd).coerceIn(0f, threshold * MAX_DRAG_FACTOR)
         }
@@ -650,12 +668,22 @@ private fun ContactRow(
                     .fillMaxWidth()
                     // `offset` follows the layout direction: positive = toward the end edge in LTR and RTL.
                     .offset { IntOffset(drag.roundToInt(), 0) }
-                    .draggable(
+                    // Sees each touch-down first (Initial pass) without consuming it.
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val x =
+                                (coordinates[0]?.takeIf { it.isAttached }?.positionInWindow()?.x ?: 0f) +
+                                    down.position.x
+                            val width = view.rootView.width
+                            startedInEdge = x < edgeLeft || (width > 0 && x >= width - edgeRight)
+                        }
+                    }.draggable(
                         state = dragState,
                         orientation = Orientation.Horizontal,
                         enabled = swipeToCall,
                         onDragStopped = {
-                            val passed = drag >= threshold
+                            val passed = !startedInEdge && drag >= threshold
                             if (passed) currentOnCall()
                             if (animate && !passed) animate(drag, 0f) { v, _ -> drag = v } else drag = 0f
                         },
@@ -754,22 +782,32 @@ private fun NumberChooser(
     val type = Strata.typography
     val title = stringResource(R.string.search_choose_number_title, choice.contact.name)
     BackHandler { onAction(SearchAction.DismissNumberChoice) }
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(colors.scrim.copy(alpha = CHOOSER_SCRIM_ALPHA)),
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // The scrim takes every touch outside the pane (nothing reaches the rows behind it); a tap there cancels.
+        Box(
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .background(colors.scrim.copy(alpha = CHOOSER_SCRIM_ALPHA))
+                    .clickable(interactionSource = null, indication = null) {
+                        onAction(SearchAction.DismissNumberChoice)
+                    }
+                    // Not a TalkBack stop: the pane's Cancel and Back do the same.
+                    .clearAndSetSemantics { testTag = SearchTestTags.NUMBER_SCRIM },
+        )
         Column(
             modifier =
                 Modifier
                     .padding(24.dp)
                     .fillMaxWidth()
+                    // Taps on the pane's own empty space stay in the pane.
+                    .pointerInput(Unit) { detectTapGestures { } }
                     .background(colors.background.copy(alpha = 1f), RoundedCornerShape(16.dp))
                     .padding(vertical = 8.dp)
-                    .semantics { paneTitle = title }
-                    .testTag(SearchTestTags.NUMBER_CHOOSER),
+                    .semantics {
+                        paneTitle = title
+                        isTraversalGroup = true
+                    }.testTag(SearchTestTags.NUMBER_CHOOSER),
         ) {
             Text(
                 text = title,

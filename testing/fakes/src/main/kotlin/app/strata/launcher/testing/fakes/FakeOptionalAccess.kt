@@ -142,6 +142,7 @@ class FakeContactsSource(
         if (callFails) return Outcome.Err(LaunchError.NOT_FOUND)
         val started =
             if (mode == CallMode.CALL &&
+                ContactsSource.isPlainNumber(number) &&
                 callPermissionState == PermissionState.GRANTED
             ) {
                 mode

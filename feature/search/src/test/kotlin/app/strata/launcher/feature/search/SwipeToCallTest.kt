@@ -221,4 +221,30 @@ class SwipeToCallTest {
         assertThat(h.contacts.calls).isEmpty()
         assertThat(h.viewModel.state.value.numberChoice).isNull()
     }
+
+    /** T-SEARCH-26 (VM half, review fix): CALL with the grant still dials a stored MMI/USSD code instead of running it. */
+    @Test
+    fun tSearch26_codeIsDialledNotCalled() {
+        val code = hit(4, "Zack Fixture")
+        val h =
+            SearchHarness(
+                dispatcher = dispatcher,
+                settings =
+                    Settings(
+                        onboardingDone = true,
+                        contactsSearchEnabled = true,
+                        swipeToCall = SwipeToCall.CALL,
+                    ),
+                contacts =
+                    FakeContactsSource(
+                        permissionState = PermissionState.GRANTED,
+                        contacts = listOf(code),
+                        callPermissionState = PermissionState.GRANTED,
+                        numbers = mapOf(code.lookupUri to listOf(PhoneNumber("*21*+15550100#"))),
+                    ),
+            )
+        h.viewModel.onAction(SearchAction.Open("zack"))
+        h.viewModel.onAction(SearchAction.CallContact(code))
+        assertThat(h.contacts!!.calls).containsExactly("*21*+15550100#" to CallMode.DIAL)
+    }
 }

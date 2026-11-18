@@ -70,7 +70,8 @@ interface ContactsSource {
 
     /**
      * FR-SEARCH-09: starts the dialer ([CallMode.DIAL]) or the call ([CallMode.CALL]) for [number]. [CallMode.CALL]
-     * without `CALL_PHONE` dials instead (never a `SecurityException`). A number with anything but dialable characters
+     * without `CALL_PHONE`, or for a number that is not [isPlainNumber] (MMI/USSD codes, pauses), dials instead (never a
+     * `SecurityException`, never a code run unseen). A number with anything but dialable characters
      * is refused (`SECURITY`); no handler gives `NOT_FOUND`.
      */
     fun call(
@@ -89,6 +90,15 @@ interface ContactsSource {
 
         /** A number we hand to `tel:`: dialable characters only, with at least one digit (FR-SEARCH-09). */
         fun isDialable(number: String): Boolean = DIALABLE.matches(number) && number.any { it in '0'..'9' }
+
+        private val CONTROL = setOf('*', '#', ',', ';', 'p', 'P', 'w', 'W')
+
+        /**
+         * FR-SEARCH-09: a number [CallMode.CALL] may place without the dialer. `*` and `#` make MMI/USSD codes (call
+         * forwarding, for example) and pause/wait characters send extra tones, so such a stored "number" only ever opens
+         * the dialer, where the user sees it before anything runs.
+         */
+        fun isPlainNumber(number: String): Boolean = isDialable(number) && number.none { it in CONTROL }
 
         /**
          * FR-SEARCH-09: the number a swipe calls without asking: the only one, else the default one; null = the user

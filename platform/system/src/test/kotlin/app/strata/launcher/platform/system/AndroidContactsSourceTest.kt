@@ -234,6 +234,28 @@ class AndroidContactsSourceTest {
         assertThat(intent.data).isEqualTo(Uri.fromParts("tel", "+1 555 0100", null))
     }
 
+    /**
+     * T-SEARCH-26 (review fix): with CALL and CALL_PHONE, a stored MMI/USSD code or a number with pauses never goes to
+     * `ACTION_CALL` (a code like call forwarding would run unseen); it opens the dialer. DIAL keeps every dialable form.
+     */
+    @Test
+    fun tSearch26_codesAndPausesNeverCallDirectly() {
+        val source = AndroidContactsSource(app, Dispatchers.IO, Messages())
+        shadowOf(app).grantPermissions(Manifest.permission.CALL_PHONE)
+        val codes =
+            listOf("*21*+15550100#", "#31#5550100", "+1 555 0100,1234", "+1 555 0100;99", "5550100p1", "5550100W2")
+        for (code in codes) {
+            assertThat(source.call(code, CallMode.CALL)).isEqualTo(Outcome.Ok(Unit))
+            val intent = started()!!
+            assertThat(intent.action).isEqualTo(Intent.ACTION_DIAL)
+            assertThat(intent.data).isEqualTo(Uri.fromParts("tel", code, null))
+            assertThat(source.call(code, CallMode.DIAL)).isEqualTo(Outcome.Ok(Unit))
+            assertThat(started()!!.action).isEqualTo(Intent.ACTION_DIAL)
+        }
+        assertThat(source.call("+1 (555) 010-0", CallMode.CALL)).isEqualTo(Outcome.Ok(Unit))
+        assertThat(started()!!.action).isEqualTo(Intent.ACTION_CALL)
+    }
+
     /** T-SEARCH-26: anything but dialable characters (or no digit) is refused and nothing starts. */
     @Test
     fun tSearch26_undialableNumbersAreRefused() {

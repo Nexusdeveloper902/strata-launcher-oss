@@ -119,6 +119,9 @@ class OptionalAccessDeviceTest {
 
     /** `READ_CONTACTS` of Strata before the test (the owner may have contact search on). */
     private var contactsBefore = false
+
+    /** The settings [restore] resets, as they were before the test (put back in [tearDown]). */
+    private var settingsBefore: app.strata.launcher.core.model.Settings? = null
     private val replyThread = HandlerThread("fixture-replies").apply { start() }
 
     @Before
@@ -128,6 +131,7 @@ class OptionalAccessDeviceTest {
         contactsBefore =
             context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
         listenersBefore = shell("settings get secure enabled_notification_listeners")
+        settingsBefore = runBlocking { graph.settingsRepository.settings.first() }
         restore()
         compose.passOnboarding()
         compose.waitUntil(DEVICE_TIMEOUT_MS) { count(HomeTestTags.ROOT) > 0 }
@@ -136,6 +140,7 @@ class OptionalAccessDeviceTest {
     @After
     fun tearDown() {
         restore()
+        putBackSettings()
         releaseContactsGrant()
         replyThread.quitSafely()
         var owned: HomeActivity? = null
@@ -160,6 +165,21 @@ class OptionalAccessDeviceTest {
                     contactsSearchEnabled = false,
                     contactsHintShown = false,
                     swipeToCall = SwipeToCall.DIAL,
+                )
+            }
+        }
+    }
+
+    /** The badge, contact-search and swipe-to-call settings the owner had before the test ([restore] cleared them). */
+    private fun putBackSettings() {
+        val before = settingsBefore ?: return
+        runBlocking {
+            graph.settingsRepository.update {
+                it.copy(
+                    badgesEnabled = before.badgesEnabled,
+                    contactsSearchEnabled = before.contactsSearchEnabled,
+                    contactsHintShown = before.contactsHintShown,
+                    swipeToCall = before.swipeToCall,
                 )
             }
         }

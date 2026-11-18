@@ -1,20 +1,30 @@
 package app.strata.launcher.feature.search
 
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.core.model.Settings
@@ -37,7 +47,10 @@ import org.robolectric.annotation.Config
 @Config(qualifiers = "w411dp-h900dp")
 class SwipeToCallScreenTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
+
+    /** The left `systemGestures` inset Compose saw, in px (proves the injected inset arrived: no vacuous edge test). */
+    private var seenEdgeLeft = -1
 
     private val zed = ContactHit("content://com.android.contacts/contacts/lookup/fx0/0", "Zed Fixture")
     private val zoe = ContactHit("content://com.android.contacts/contacts/lookup/fx1/1", "Zoe Fixture")
@@ -65,6 +78,7 @@ class SwipeToCallScreenTest {
         direction: LayoutDirection = LayoutDirection.Ltr,
     ) {
         compose.setContent {
+            seenEdgeLeft = WindowInsets.systemGestures.getLeft(LocalDensity.current, LayoutDirection.Ltr)
             CompositionLocalProvider(LocalLayoutDirection provides direction) {
                 StrataTheme(StrataDefault.resolved(systemDark = false)) {
                     val state by h.viewModel.state.collectAsStateWithLifecycle()
@@ -209,6 +223,71 @@ class SwipeToCallScreenTest {
         assertThat(compose.onAllNodesWithTag(SearchTestTags.NUMBER_CHOOSER).fetchSemanticsNodes()).isEmpty()
         assertThat(calls(h)).isEmpty()
         compose.onNodeWithTag(SearchTestTags.contact(0)).assertExists()
+    }
+
+    /**
+     * T-SEARCH-24 (review fix): the chooser is modal. The rows behind it are hidden from accessibility services, a tap
+     * on the scrim over a contact row cancels instead of opening the contact, and a tap on the pane's own empty space
+     * keeps it open.
+     */
+    @Test
+    fun tSearch24_chooserIsModal() {
+        val h = harness()
+        show(h, "zoe")
+        val rowCentre =
+            compose
+                .onNodeWithTag(SearchTestTags.contact(0))
+                .fetchSemanticsNode()
+                .boundsInRoot.center
+        dragRow(140.dp)
+        compose.onNodeWithTag(SearchTestTags.NUMBER_CHOOSER).assertExists()
+        assertThat(compose.onAllNodesWithTag(SearchTestTags.contact(0)).fetchSemanticsNodes()).isEmpty()
+        // The pane's title area is not a control: a tap there changes nothing.
+        compose.onNodeWithTag(SearchTestTags.NUMBER_CHOOSER).performTouchInput { click(Offset(centerX, 4.dp.toPx())) }
+        compose.waitForIdle()
+        compose.onNodeWithTag(SearchTestTags.NUMBER_CHOOSER).assertExists()
+        // A tap where the contact row lies behind the scrim cancels; the contact is not opened.
+        compose.onRoot().performTouchInput { click(rowCentre) }
+        compose.waitForIdle()
+        assertThat(compose.onAllNodesWithTag(SearchTestTags.NUMBER_CHOOSER).fetchSemanticsNodes()).isEmpty()
+        assertThat(h.contacts!!.opened).isEmpty()
+        assertThat(calls(h)).isEmpty()
+        compose.onNodeWithTag(SearchTestTags.contact(0)).assertExists()
+    }
+
+    /**
+     * T-SEARCH-25 (review fix, INTERACTION_SPEC §4.2 rule 1): a drag that goes down inside the left `systemGestures`
+     * inset belongs to the system back gesture: the row does not move and nothing is called. The same drag started
+     * outside the inset calls (positive control).
+     */
+    @Test
+    fun tSearch25_systemGestureEdgeWins() {
+        val h = harness()
+        show(h, "zed")
+        val edge = 32
+        compose.runOnIdle {
+            WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false)
+            val insets =
+                WindowInsetsCompat
+                    .Builder()
+                    .setInsets(WindowInsetsCompat.Type.systemGestures(), Insets.of(edge, 0, edge, 0))
+                    .build()
+            ViewCompat.dispatchApplyWindowInsets(compose.activity.window.decorView, insets)
+        }
+        compose.waitForIdle()
+        assertThat(seenEdgeLeft).isEqualTo(edge)
+        compose.onNodeWithTag(SearchTestTags.contact(0)).performTouchInput {
+            val start = Offset(edge / 2f, centerY)
+            down(start)
+            moveBy(Offset(viewConfiguration.touchSlop + 140.dp.toPx(), 0f))
+        }
+        compose.waitForIdle()
+        assertThat(compose.onAllNodesWithTag(SearchTestTags.CALL_HINT).fetchSemanticsNodes()).isEmpty()
+        compose.onNodeWithTag(SearchTestTags.contact(0)).performTouchInput { up() }
+        compose.waitForIdle()
+        assertThat(calls(h)).isEmpty()
+        dragRow(140.dp)
+        assertThat(calls(h)).containsExactly("+1 555 0100" to CallMode.DIAL)
     }
 
     private fun customActionLabels(): List<String> =
