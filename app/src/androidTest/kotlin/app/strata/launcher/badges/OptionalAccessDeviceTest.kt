@@ -481,6 +481,18 @@ class OptionalAccessDeviceTest {
         compose.bringHomeToFront(owned!!, device)
     }
 
+    /** Polls [condition] through the compose rule (so its test dispatcher advances); fails with [what] and the focus. */
+    private fun awaitOnDevice(
+        what: String,
+        condition: () -> Boolean,
+    ) {
+        try {
+            compose.waitUntil(DEVICE_TIMEOUT_MS, condition)
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("$what. ${focusReport()}", e)
+        }
+    }
+
     /**
      * The activity that takes `ACTION_DIAL` for [number], as `package/class`, from the package manager's own resolution
      * (the shell sees every package); null when nothing resolves. A chooser resolves to the system's resolver activity.
@@ -529,15 +541,14 @@ class OptionalAccessDeviceTest {
         val startX = if (rtl) bounds.right - bounds.width() / 4 else bounds.left + bounds.width() / 4
         val endX = if (rtl) startX - 2 * threshold else startX + 2 * threshold
         device.swipe(startX, bounds.centerY(), endX, bounds.centerY(), SWIPE_STEPS)
+        // Waited through the compose rule, not UiDevice alone: with the v2 rule (#43) the composition's coroutines (the
+        // drag-stop that calls, the snackbar) run on a test dispatcher that only advances while the rule syncs. A bare
+        // device.wait never let the swipe's call run (CI run 45479694058, API 26/34/36).
         if (handler != null) {
             val pkg = handler.substringBefore('/')
-            assertWithMessage("$handler did not come to front. ${focusReport()}")
-                .that(device.wait(Until.hasObject(By.pkg(pkg).depth(0)), DEVICE_TIMEOUT_MS))
-                .isTrue()
+            awaitOnDevice("$handler did not come to front") { device.hasObject(By.pkg(pkg).depth(0)) }
         } else {
-            assertWithMessage("no dialer here, and no message either. ${focusReport()}")
-                .that(device.wait(Until.hasObject(By.text(noPhoneApp)), DEVICE_TIMEOUT_MS))
-                .isTrue()
+            awaitOnDevice("no dialer here, and no message either") { device.hasObject(By.text(noPhoneApp)) }
         }
         assertThat(device.hasObject(By.pkg(PERMISSION_CONTROLLER))).isFalse()
         assertThat(device.hasObject(By.pkg(GOOGLE_PERMISSION_CONTROLLER))).isFalse()
