@@ -47,7 +47,7 @@ import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.focusReport
-import app.strata.launcher.injectHomeFlick
+import app.strata.launcher.injectSwipe
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.resumedHomeActivity
@@ -369,48 +369,82 @@ class HomeDeviceTest {
     }
 
     /**
-     * T-GEST-10 / T-HOME-15 (FB-008, owner report on the A56): swiping up with the system Home gesture from another app
-     * returns to home at rest. Neither the tail of the gesture (FR-GEST-01) nor the Home intent it delivers (FR-HOME-05,
-     * whose "opens search" option is on here, the worst case) may open search. DeviceStateRule switches to gesture
-     * navigation before the activity starts and restores it afterwards; a device without gesture navigation (no
-     * overlay, or one that cannot be enabled) skips the test visibly.
+     * T-GEST-10 / T-HOME-15, arrival half (FB-008, owner report on the A56): returning to home from another app with the
+     * system Home action brings home to rest. The Home intent it delivers (FR-HOME-05, whose "opens search" option is on
+     * here, the worst case) must not open search, and the keyboard stays hidden.
+     *
+     * Until 2026-11 this was one test that injected the system Home gesture from the bottom edge. On the CI emulators,
+     * with Strata as the default home, quickstep handles that gesture in its fallback mode, and whether it reached
+     * home depended on the system: injected with UiDevice.swipe it ended in Overview (main nightlies since 2026-11-19);
+     * with fixed event times it ended with endTarget HOME, yet the system brought the covering app back in front of the
+     * arriving home 42 ms after its resume (nightly 45407127667, API 36). Neither outcome says anything about Strata.
+     * The arrival is therefore delivered with the Home key (the same MAIN/HOME intent the gesture delivers), and the
+     * gesture's tail is checked on its own in [tGest10_gestureTailIntoHomeOpensNothing].
      */
     @Test
-    fun tGest10_homeGestureFromAppDoesNotOpenSearch() {
-        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+    fun tGest10_homeArrivalDoesNotOpenSearch() {
         assumeTrue(isDefaultHome())
-        // DeviceStateRule switched to gesture navigation before the activity started (GESTURE_NAV_TESTS).
-        run {
-            assumeTrue(
-                "navigation_mode is not gestural",
-                shell("settings get secure navigation_mode").trim() == GESTURAL_NAV_MODE,
-            )
-            runBlocking { appGraph().settingsRepository.update { it.copy(homePressOpensSearch = true) } }
-            val instrumentation = InstrumentationRegistry.getInstrumentation()
-            val context = instrumentation.context
-            lateinit var covered: HomeActivity
-            compose.activityRule.scenario.onActivity { covered = it }
-            context.startActivity(
-                Intent()
-                    .setClassName(context, app.strata.launcher.CoverActivity::class.java.name)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-            // The cover must be fully in front (home STOPPED), not merely starting: "no resumed home" already holds at
-            // PAUSED, and a Home gesture sent during the cover's launch transition does nothing (search-smart run
-            // 44302646087, API 34: swipe 54 ms after the pause, 0.9 s before the cover was displayed).
-            compose.waitUntil(DEVICE_TIMEOUT_MS) {
-                var stage: Stage? = null
-                instrumentation.runOnMainSync {
-                    stage = ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(covered)
-                }
-                stage == Stage.STOPPED
+        val home = arriveHomeFromAnotherApp()
+        assertThat(vm(home).state.value.layer).isNotEqualTo(HomeLayer.SEARCH)
+        assertThat(imeVisible(home)).isFalse()
+    }
+
+    /**
+     * T-GEST-10, gesture half (FR-GEST-01, FB-008): the tail of a gesture that began outside home and continues into the
+     * arriving home window opens nothing, while a fresh swipe up on resting home still opens search. The tail is a
+     * swipe up (the search gesture) whose `ACTION_DOWN` time lies before home's arrival, which is what the window
+     * receives when the system hands it the rest of a Home gesture; HomeArrivalGuard must drop it whole.
+     */
+    @Test
+    fun tGest10_gestureTailIntoHomeOpensNothing() {
+        assumeTrue(isDefaultHome())
+        val beforeArrival = android.os.SystemClock.uptimeMillis()
+        val home = arriveHomeFromAnotherApp()
+        val metrics =
+            InstrumentationRegistry
+                .getInstrumentation()
+                .targetContext.resources.displayMetrics
+        val x = device.displayWidth / 2
+        val y = (device.displayHeight * 0.45f).toInt()
+        val distance = (SEARCH_SWIPE_DP * metrics.density).toInt()
+
+        // The tail: the same swipe that opens search, but its stream began before home arrived.
+        injectSwipe(x, y, y - distance, downTime = beforeArrival)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        compose.waitForIdle()
+        assertThat(vm(home).state.value.layer).isNotEqualTo(HomeLayer.SEARCH)
+
+        // The positive control: a fresh stream on resting home opens search, so the tail above was a real swipe.
+        injectSwipe(x, y, y - distance)
+        compose.waitUntil(DEVICE_TIMEOUT_MS) { vm(home).state.value.layer == HomeLayer.SEARCH }
+    }
+
+    /**
+     * Puts an opaque app in front (home STOPPED, not merely paused: a key sent during the launch transition can be lost,
+     * search-smart run 44302646087), turns "Home press opens search" on, presses the Home key, and returns the
+     * HomeActivity that arrived, resumed and focused, after its arrival work has settled.
+     */
+    private fun arriveHomeFromAnotherApp(): HomeActivity {
+        runBlocking { appGraph().settingsRepository.update { it.copy(homePressOpensSearch = true) } }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.context
+        lateinit var covered: HomeActivity
+        compose.activityRule.scenario.onActivity { covered = it }
+        context.startActivity(
+            Intent()
+                .setClassName(context, app.strata.launcher.CoverActivity::class.java.name)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        compose.waitUntil(DEVICE_TIMEOUT_MS) {
+            var stage: Stage? = null
+            instrumentation.runOnMainSync {
+                stage = ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(covered)
             }
-            val w = device.displayWidth
-            val h = device.displayHeight
-            // From the bottom edge upward, released while still moving: the system Home gesture, with planned event
-            // times so that quickstep sees a fling, not a paused drag (injectHomeFlick).
-            injectHomeFlick(w, h)
-            lateinit var home: HomeActivity
+            stage == Stage.STOPPED
+        }
+        device.pressHome()
+        lateinit var home: HomeActivity
+        try {
             compose.waitUntil(DEVICE_TIMEOUT_MS) {
                 val front = resumedHome()
                 var focused = false
@@ -419,13 +453,13 @@ class HomeDeviceTest {
                 if (front != null && focused) home = front
                 front != null && focused
             }
-            // Let the arrival finish: the Home intent, the resume and any pointer events are all handled on the main
-            // thread, then composed. Waits on state, not on time.
-            instrumentation.waitForIdleSync()
-            compose.waitForIdle()
-            assertThat(vm(home).state.value.layer).isNotEqualTo(HomeLayer.SEARCH)
-            assertThat(imeVisible(home)).isFalse()
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("No focused home after the Home key. ${focusReport()}", e)
         }
+        // Let the arrival finish: the Home intent and the resume are handled on the main thread, then composed.
+        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
+        return home
     }
 
     /** T-GEST-07: "Keep back gesture on index side" limits the exclusion to 200 dp + 16 dp around the touch. */
@@ -662,15 +696,16 @@ class HomeDeviceTest {
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
         const val EDGE_BACK_TEST = "searchClosesWithBackFromTheIndexEdge"
-        const val HOME_GESTURE_TEST = "tGest10_homeGestureFromAppDoesNotOpenSearch"
 
         /**
          * Tests that need gesture navigation (their TEST_PLAN precondition): DeviceStateRule switches to it before the
          * activity starts, in every job. A switch inside the test, after the start, left the gestures without effect
-         * (API 29 edge back; tGest10 in the three-button jobs, where quickstep re-initialised its input 0.6 s before
-         * the swipe).
+         * (API 29 edge back).
          */
-        val GESTURE_NAV_TESTS = setOf(EDGE_BACK_TEST, HOME_GESTURE_TEST)
+        val GESTURE_NAV_TESTS = setOf(EDGE_BACK_TEST)
+
+        /** T-SEARCH-01's swipe: 64 dp up from 45 % of the height opens search on resting home. */
+        const val SEARCH_SWIPE_DP = 64
         const val EDGE_SWIPE_STEPS = 10
 
         /** `settings get secure navigation_mode`: 0 three-button, 1 two-button, 2 gestural. */

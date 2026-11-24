@@ -49,7 +49,9 @@ internal val COMPAT_NIGHTLY_APIS = listOf(28, 29, 31, 33, 35)
  * Nightly API levels that run on the AOSP image (no Google Play services). The API 29 Google APIs image's system_server
  * has a 16 MB heap, and a GMS config-update push made it run out of memory and crash ("INSTRUMENTATION_ABORTED: System
  * has crashed": nightly runs 45009343354 and 45159389326, OutOfMemoryError in ConfigUpdateInstallReceiver). The device
- * tests need no GMS.
+ * tests need no GMS. What they need from the image is there: nightly 45407127667 on this image ran tHome05 (the
+ * ACTION_SHOW_ALARMS and calendar-time intents both found an app), the right-edge Back test and the system Home gesture
+ * test (its launcher is gesture-capable) and passed all three, in the compat job and both navigation-mode jobs.
  */
 internal val AOSP_IMAGE_APIS = setOf(29)
 

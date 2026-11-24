@@ -553,26 +553,23 @@ private fun restoreGlobal(
 }
 
 /**
- * The system Home gesture as a flick with planned event times: a pointer from the bottom edge up by [fraction] of the
- * display height, one move every [FLICK_STEP_MS] ms, released while moving. Each event is injected at (or after) its
- * planned time but keeps that time as its event time, so the gesture's velocity is the same however late the test
- * thread gets to inject it.
+ * A vertical one-finger swipe at [x] from [fromY] to [toY], injected with planned event times: one move every
+ * [SWIPE_STEP_MS] ms, released while moving. Each event is injected at (or after) its planned time but keeps that time,
+ * so the swipe's velocity does not depend on how late the test thread gets to inject it (UiDevice.swipe stamps each step
+ * when injected, so on a loaded emulator its gaps read as pauses).
  *
- * Why: quickstep decides Home or Overview from the event times (velocity, and a pause detector that sends a slowed drag
- * to Overview). `UiDevice.swipe` stamps each step when it is injected, so on a loaded emulator gaps between steps read
- * as a pause: main's nightly runs 45159389326 and earlier (tGest10, API 34/36) ended in the fallback Overview
- * (`FallbackRecentsView`, recents animation cancelled at once) and never reached home.
+ * [downTime] is the stream's `ACTION_DOWN` time; by default now. An earlier time makes the swipe the tail of a stream
+ * that began before (T-GEST-10: the rest of a gesture handed to an arriving window). A swipe that stops half-way sends
+ * `ACTION_CANCEL`, so no pointer stays down.
  */
-fun injectHomeFlick(
-    displayWidth: Int,
-    displayHeight: Int,
-    fraction: Float = FLICK_FRACTION,
+fun injectSwipe(
+    x: Int,
+    fromY: Int,
+    toY: Int,
+    downTime: Long = SystemClock.uptimeMillis(),
 ) {
     val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-    val x = displayWidth / 2f
-    val startY = displayHeight - 2f
-    val endY = startY - displayHeight * fraction
-    val down = SystemClock.uptimeMillis()
+    val start = SystemClock.uptimeMillis()
 
     fun event(
         action: Int,
@@ -586,13 +583,13 @@ fun injectHomeFlick(
             }
         val coords =
             android.view.MotionEvent.PointerCoords().apply {
-                this.x = x
+                this.x = x.toFloat()
                 this.y = y
                 pressure = 1f
                 size = 1f
             }
         return android.view.MotionEvent
-            .obtain(down, time, action, 1, arrayOf(properties), arrayOf(coords), 0, 0, 1f, 1f, 0, 0, 0, 0)
+            .obtain(downTime, time, action, 1, arrayOf(properties), arrayOf(coords), 0, 0, 1f, 1f, 0, 0, 0, 0)
             .apply { source = android.view.InputDevice.SOURCE_TOUCHSCREEN }
     }
 
@@ -605,24 +602,23 @@ fun injectHomeFlick(
         if (wait > 0) SystemClock.sleep(wait)
         val e = event(action, time, y)
         try {
-            check(automation.injectInputEvent(e, true)) { "Home flick: injecting action $action failed" }
+            check(automation.injectInputEvent(e, true)) { "swipe: injecting action $action failed" }
         } finally {
             e.recycle()
         }
     }
     var pointerDown = false
-    var lastY = startY
+    var lastY = fromY.toFloat()
     try {
-        inject(android.view.MotionEvent.ACTION_DOWN, down, startY)
+        inject(android.view.MotionEvent.ACTION_DOWN, minOf(downTime, start), lastY)
         pointerDown = true
-        for (i in 1..FLICK_MOVES) {
-            lastY = startY + (endY - startY) * i / FLICK_MOVES
-            inject(android.view.MotionEvent.ACTION_MOVE, down + i * FLICK_STEP_MS, lastY)
+        for (i in 1..SWIPE_MOVES) {
+            lastY = fromY + (toY - fromY) * i / SWIPE_MOVES.toFloat()
+            inject(android.view.MotionEvent.ACTION_MOVE, start + i * SWIPE_STEP_MS, lastY)
         }
-        inject(android.view.MotionEvent.ACTION_UP, down + FLICK_MOVES * FLICK_STEP_MS, endY)
+        inject(android.view.MotionEvent.ACTION_UP, start + SWIPE_MOVES * SWIPE_STEP_MS, toY.toFloat())
         pointerDown = false
     } finally {
-        // A gesture that stops half-way must not leave the pointer down for the next test.
         if (pointerDown) {
             val cancel = event(android.view.MotionEvent.ACTION_CANCEL, SystemClock.uptimeMillis(), lastY)
             try {
@@ -634,13 +630,9 @@ fun injectHomeFlick(
     }
 }
 
-// 12 moves at 8 ms (a 120 Hz touch panel's cadence) over 40 % of the height: about 10 000 px/s on a 2 400 px display,
-// a clear upward fling released in motion. 40 %: far past the swipe-up threshold (a few percent of the height) and well
-// short of the old 2/3 drag, so the whole flick is about 100 ms of steady movement; Home is decided by the fling, not
-// by how far the pointer travels.
-private const val FLICK_MOVES = 12
-private const val FLICK_STEP_MS = 8L
-private const val FLICK_FRACTION = 0.4f
+// 12 moves at 8 ms, a 120 Hz touch panel's cadence: about 100 ms of steady movement, released in motion.
+private const val SWIPE_MOVES = 12
+private const val SWIPE_STEP_MS = 8L
 
 /** A plain, opaque activity without Compose content (test APK manifest); see [coverForeignActivities]. */
 class CoverActivity : Activity()
