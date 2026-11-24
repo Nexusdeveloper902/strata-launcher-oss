@@ -14,7 +14,7 @@ import android.os.HandlerThread
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -279,16 +279,28 @@ class WidgetDeviceTest {
         compose.waitForIdle()
     }
 
+    /** Scrolls to the provider's row and clicks it, in one check: the row can move between a scroll and a click. */
     private fun pick(provider: ComponentName) {
-        val tag = scrollTo(WidgetTestTags.provider(provider.flattenToString()))
-        compose.onNodeWithTag(tag).performClick()
+        val tag = WidgetTestTags.provider(provider.flattenToString())
+        compose.waitUntil(STALL_MS) {
+            scrolledTo(tag) && runCatching { compose.onNodeWithTag(tag).performClick() }.isSuccess
+        }
     }
 
-    /** Scrolls the picker to [tag] and waits until that row is composed (the lazy list may re-lay out meanwhile). */
+    /**
+     * Scrolls the picker to [tag] until that row is composed. The provider list can still change after it first shows:
+     * restore() enables the fixture providers just before, and they can arrive with a later reload that moves the rows
+     * (PR #27 run 45410199560, API 26: tWidget02 scrolled once and waited 30 s for a row that had moved off screen;
+     * tWidget01 saw its row, which was gone at the click). So the scroll is repeated on every check.
+     */
     private fun scrollTo(tag: String): String {
-        compose.onNodeWithTag(WidgetTestTags.PICKER_LIST).performScrollToNode(hasTestTag(tag))
-        compose.waitUntil(STALL_MS) { count(tag) == 1 }
+        compose.waitUntil(STALL_MS) { scrolledTo(tag) }
         return tag
+    }
+
+    private fun scrolledTo(tag: String): Boolean {
+        runCatching { compose.onNodeWithTag(WidgetTestTags.PICKER_LIST).performScrollToNode(hasTestTag(tag)) }
+        return count(tag) == 1
     }
 
     private fun widgetOptions() {
