@@ -11,7 +11,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.ComposeTestRule
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -47,11 +47,11 @@ import app.strata.launcher.feature.home.SheetTestTags
 import app.strata.launcher.feature.home.list.AppListTestTags
 import app.strata.launcher.feature.search.SearchTestTags
 import app.strata.launcher.focusReport
+import app.strata.launcher.injectHomeFlick
 import app.strata.launcher.openAllApps
 import app.strata.launcher.passOnboarding
 import app.strata.launcher.resumedHomeActivity
 import app.strata.launcher.shell
-import app.strata.launcher.switchNavMode
 import app.strata.launcher.visitRecentsAndReturn
 import app.strata.launcher.windowMatchesNavMode
 import com.google.common.truth.Truth.assertThat
@@ -80,7 +80,7 @@ class HomeDeviceTest {
     val rules: RuleChain =
         RuleChain
             .outerRule(
-                DeviceStateRule(navModeFor = { if (it.methodName == EDGE_BACK_TEST) "gestural" else null }),
+                DeviceStateRule(navModeFor = { if (it.methodName in GESTURE_NAV_TESTS) "gestural" else null }),
             ).around(compose)
 
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -378,9 +378,8 @@ class HomeDeviceTest {
     fun tGest10_homeGestureFromAppDoesNotOpenSearch() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
         assumeTrue(isDefaultHome())
-        val restoreNav = runCatching { switchNavMode("gestural") }
-        assumeTrue("gesture navigation is not available: ${restoreNav.exceptionOrNull()}", restoreNav.isSuccess)
-        try {
+        // DeviceStateRule switched to gesture navigation before the activity started (GESTURE_NAV_TESTS).
+        run {
             assumeTrue(
                 "navigation_mode is not gestural",
                 shell("settings get secure navigation_mode").trim() == GESTURAL_NAV_MODE,
@@ -407,8 +406,9 @@ class HomeDeviceTest {
             }
             val w = device.displayWidth
             val h = device.displayHeight
-            // From the bottom edge upward, released while still moving: the system Home gesture.
-            device.swipe(w / 2, h - 2, w / 2, h / 3, EDGE_SWIPE_STEPS)
+            // From the bottom edge upward, released while still moving: the system Home gesture, with planned event
+            // times so that quickstep sees a fling, not a paused drag (injectHomeFlick).
+            injectHomeFlick(w, h)
             lateinit var home: HomeActivity
             compose.waitUntil(DEVICE_TIMEOUT_MS) {
                 val front = resumedHome()
@@ -424,8 +424,6 @@ class HomeDeviceTest {
             compose.waitForIdle()
             assertThat(vm(home).state.value.layer).isNotEqualTo(HomeLayer.SEARCH)
             assertThat(imeVisible(home)).isFalse()
-        } finally {
-            restoreNav.getOrNull()?.invoke()
         }
     }
 
@@ -663,6 +661,15 @@ class HomeDeviceTest {
         const val FIXTURE_PACKAGE = "app.strata.fixture.zz"
         const val FIXTURE_LABEL = "Zz Test"
         const val EDGE_BACK_TEST = "searchClosesWithBackFromTheIndexEdge"
+        const val HOME_GESTURE_TEST = "tGest10_homeGestureFromAppDoesNotOpenSearch"
+
+        /**
+         * Tests that need gesture navigation (their TEST_PLAN precondition): DeviceStateRule switches to it before the
+         * activity starts, in every job. A switch inside the test, after the start, left the gestures without effect
+         * (API 29 edge back; tGest10 in the three-button jobs, where quickstep re-initialised its input 0.6 s before
+         * the swipe).
+         */
+        val GESTURE_NAV_TESTS = setOf(EDGE_BACK_TEST, HOME_GESTURE_TEST)
         const val EDGE_SWIPE_STEPS = 10
 
         /** `settings get secure navigation_mode`: 0 three-button, 1 two-button, 2 gestural. */

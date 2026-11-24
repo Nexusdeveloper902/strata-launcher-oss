@@ -525,6 +525,81 @@ private fun restoreGlobal(
     }
 }
 
+/**
+ * The system Home gesture as a flick with planned event times: a pointer from the bottom edge up by [fraction] of the
+ * display height, one move every [FLICK_STEP_MS] ms, released while moving. Each event is injected at (or after) its
+ * planned time but keeps that time as its event time, so the gesture's velocity is the same however late the test
+ * thread gets to inject it.
+ *
+ * Why: quickstep decides Home or Overview from the event times (velocity, and a pause detector that sends a slowed drag
+ * to Overview). `UiDevice.swipe` stamps each step when it is injected, so on a loaded emulator gaps between steps read
+ * as a pause: main's nightly runs 45159389326 and earlier (tGest10, API 34/36) ended in the fallback Overview
+ * (`FallbackRecentsView`, recents animation cancelled at once) and never reached home.
+ */
+fun injectHomeFlick(
+    displayWidth: Int,
+    displayHeight: Int,
+    fraction: Float = FLICK_FRACTION,
+) {
+    val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    val x = displayWidth / 2f
+    val startY = displayHeight - 2f
+    val endY = startY - displayHeight * fraction
+    val down = SystemClock.uptimeMillis()
+
+    fun event(
+        action: Int,
+        time: Long,
+        y: Float,
+    ): android.view.MotionEvent {
+        val properties =
+            android.view.MotionEvent.PointerProperties().apply {
+                id = 0
+                toolType = android.view.MotionEvent.TOOL_TYPE_FINGER
+            }
+        val coords =
+            android.view.MotionEvent.PointerCoords().apply {
+                this.x = x
+                this.y = y
+                pressure = 1f
+                size = 1f
+            }
+        return android.view.MotionEvent
+            .obtain(down, time, action, 1, arrayOf(properties), arrayOf(coords), 0, 0, 1f, 1f, 0, 0, 0, 0)
+            .apply { source = android.view.InputDevice.SOURCE_TOUCHSCREEN }
+    }
+
+    fun inject(
+        action: Int,
+        time: Long,
+        y: Float,
+    ) {
+        val wait = time - SystemClock.uptimeMillis()
+        if (wait > 0) SystemClock.sleep(wait)
+        val e = event(action, time, y)
+        try {
+            check(automation.injectInputEvent(e, true)) { "Home flick: injecting action $action failed" }
+        } finally {
+            e.recycle()
+        }
+    }
+    inject(android.view.MotionEvent.ACTION_DOWN, down, startY)
+    for (i in 1..FLICK_MOVES) {
+        inject(
+            android.view.MotionEvent.ACTION_MOVE,
+            down + i * FLICK_STEP_MS,
+            startY + (endY - startY) * i / FLICK_MOVES,
+        )
+    }
+    inject(android.view.MotionEvent.ACTION_UP, down + FLICK_MOVES * FLICK_STEP_MS, endY)
+}
+
+// 12 moves at 8 ms (a 120 Hz touch panel's cadence) over 40 % of the height: about 10 000 px/s on a 2 400 px display,
+// a clear upward fling released in motion.
+private const val FLICK_MOVES = 12
+private const val FLICK_STEP_MS = 8L
+private const val FLICK_FRACTION = 0.4f
+
 /** A plain, opaque activity without Compose content (test APK manifest); see [coverForeignActivities]. */
 class CoverActivity : Activity()
 
