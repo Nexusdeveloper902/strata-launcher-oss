@@ -41,15 +41,17 @@ import java.util.concurrent.Executor
  * page instead of the wallpaper, and sticks there when scrolling").
  *
  * Root cause: the renderer decides once, when the window is added, whether its surface is opaque
- * (`ViewRootImpl.enableHardwareAcceleration`: translucent = the window's pixel format is not `OPAQUE`), and an opaque
- * renderer never clears a buffer before drawing into it. Home's format followed its window background, which is opaque
- * under an opaque theme (battery fix), so a home started under such a theme kept an opaque renderer; after a switch to a
- * see-through theme its translucent backdrop was drawn over what the reused buffer still held.
+ * (`ViewRootImpl.enableHardwareAcceleration`, API 36 framework classes: translucent = the window's pixel format is not
+ * `OPAQUE`), and an opaque renderer never clears a buffer before drawing into it. Home's format followed its window
+ * background, which is opaque under an opaque theme (battery fix), so a home started under such a theme kept an opaque
+ * renderer; after a switch to a see-through theme its translucent backdrop was drawn over what the reused buffer held.
  *
- * Robolectric has no GPU buffers, so the pixel check replays the frames into one reused bitmap with the renderer's rule
- * (clear before drawing only when the window was added with a translucent format), from the real format recorded by
- * the real `ViewRootImpl` and the real composition's pixels (native graphics). Before the fix the window is added
- * `OPAQUE` and the favourites page still shows the list; after it, the reused buffer equals a clean render.
+ * What this test establishes, and what it does not: the **format check** is the real assertion. It reads the format
+ * the real `ViewRootImpl` added the window with and asserts it is not `PixelFormat.OPAQUE`, the renderer's own rule.
+ * Robolectric has no GPU buffers, so the frames are then **replayed** into one reused bitmap under that rule (clear
+ * before drawing only for a non-opaque format), with the real composition's pixels (native graphics). The replay is a
+ * model: given a non-opaque format it equals a clean render by construction; it illustrates what an `OPAQUE` format
+ * leaves behind (the list) and checks that the list frame really differs. The real renderer is checked on the device.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
@@ -143,8 +145,8 @@ class StaleBackdropTest {
 
     /**
      * T-HOME-16: home started under an opaque theme, then switched to a see-through one (Settings → Themes), opens the
-     * list and goes back to the favourites page. The window was added with a translucent format, and the favourites
-     * page drawn into the reused buffer is exactly a clean render: no pixel of the list is left behind the backdrop.
+     * list and goes back to the favourites page. The window was added with a format other than `OPAQUE` (the real check),
+     * and the modelled replay of the frames into a reused buffer equals a clean render.
      */
     @Test
     fun tHome16_listDoesNotStayBehindTheFavouritesPage() {
@@ -164,9 +166,10 @@ class StaleBackdropTest {
         idle()
         assertWithMessage("home is not under the opaque theme at start").that(showsWallpaper(activity)).isFalse()
         assertWithMessage("window added with format $format: an opaque renderer never clears its buffers")
-            .that(PixelFormat.formatHasAlpha(format))
-            .isTrue()
-        val translucent = PixelFormat.formatHasAlpha(format)
+            .that(format)
+            .isNotEqualTo(PixelFormat.OPAQUE)
+        // The renderer's rule (enableHardwareAcceleration): a surface is translucent unless the format is OPAQUE.
+        val translucent = format != PixelFormat.OPAQUE
 
         compose.mainClock.autoAdvance = false
         repo.apply("see-through")
@@ -175,8 +178,8 @@ class StaleBackdropTest {
         assertWithMessage("the see-through theme does not show the wallpaper").that(showsWallpaper(activity)).isTrue()
         assertWithMessage("window background").that(background(activity)).isEqualTo(Color.TRANSPARENT)
         assertWithMessage("format after the switch")
-            .that(PixelFormat.formatHasAlpha(activity.window.attributes.format))
-            .isTrue()
+            .that(activity.window.attributes.format)
+            .isNotEqualTo(PixelFormat.OPAQUE)
 
         val view = activity.window.decorView
         val buffer = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
@@ -237,7 +240,7 @@ class StaleBackdropTest {
         compose.mainClock.autoAdvance = true
         assertWithMessage("wallpaper after load").that(showsWallpaper(activity)).isTrue()
         assertWithMessage("window background after load").that(background(activity)).isEqualTo(Color.TRANSPARENT)
-        assertWithMessage("format").that(PixelFormat.formatHasAlpha(activity.window.attributes.format)).isTrue()
+        assertWithMessage("format").that(activity.window.attributes.format).isNotEqualTo(PixelFormat.OPAQUE)
     }
 
     private companion object {

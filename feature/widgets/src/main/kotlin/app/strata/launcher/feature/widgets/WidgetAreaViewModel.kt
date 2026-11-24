@@ -172,9 +172,11 @@ class WidgetAreaViewModel(
                 val minWidth = host.minWidthDp(p.appWidgetId)
                 // isBound published the provider info, so hostView needs no binder call on main.
                 local.update {
+                    // A replaced widget never inherits the previous one's minimum width (unknown = 0).
+                    val sameWidget = it.verifiedId == p.appWidgetId
                     it.copy(
                         minHeightDp = min ?: it.minHeightDp,
-                        minWidthDp = minWidth ?: it.minWidthDp,
+                        minWidthDp = minWidth ?: if (sameWidget) it.minWidthDp else 0,
                         verifiedId = p.appWidgetId,
                     )
                 }

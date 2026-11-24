@@ -53,10 +53,12 @@ import app.strata.launcher.feature.home.R as HomeR
 /** Home with every preset, a badged favourite and (optionally) a header widget; layout reads for FB-014 and FB-016. */
 internal class AlignmentScreen(
     private val compose: androidx.compose.ui.test.junit4.ComposeTestRule,
+    /** The badged favourite's label (it must start with "M": it sits in the "M" section). */
+    mapsLabel: String = "Maps",
 ) {
     private val clocks = ClockScreen(compose)
 
-    val maps = KeyboardFixture.maps.copy(badge = 3)
+    val maps = KeyboardFixture.visible(mapsLabel).copy(badge = 3)
     val alpha = KeyboardFixture.alpha
 
     lateinit var widgetHost: FakeWidgetHost
@@ -175,8 +177,8 @@ private fun Float.dp(density: Float) = this / density
  * preset, with `favorites.alignment` and `clock.alignment` both `start`, `center` or `end`, in LTR and RTL (6 × 3 × 2 =
  * 36 cases): centred, each favourite label and the "All apps" label are centred on the window within ±1 dp, also with the
  * alphabet index reserved on one side and a notification badge after a label (it hangs beside it). Start or end aligned,
- * the favourite labels share the clock's and the date's start (or end) edge within ±1 dp (end aligned, the unbadged
- * label: a badge holds the end edge). Icons are off, so the label is the row's content (with icons, icon and label are
+ * the favourite labels share the clock's and the date's start (or end) edge within ±1 dp, the badged one too (end
+ * aligned, its badge sits on the label's inner side). Icons are off, so the label is the row's content (with icons, icon and label are
  * centred together).
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -242,9 +244,8 @@ class FavoritesAlignmentTest(
                 val atLeft = (alignment == Alignment.START) != rtl
 
                 fun edge(r: Rect) = if (atLeft) r.left else r.right
-                // End aligned, the badge (after the label) holds the end edge, so only the unbadged label is compared.
-                val edged = if (alignment == Alignment.END) labels.drop(1) else labels
-                for ((name, b) in edged) {
+                // End aligned, the badge sits on the label's inner side, so the label itself holds the end edge.
+                for ((name, b) in labels) {
                     for ((headerName, h) in listOf("clock" to clock, "date" to date)) {
                         val off = (edge(b) - edge(h)).dp(density)
                         assertWithMessage(
@@ -273,6 +274,45 @@ class FavoritesAlignmentTest(
             ClockScreen.presets().flatMap { p ->
                 Alignment.entries.flatMap { a -> listOf(false, true).map { r -> arrayOf<Any>(p, a, r) } }
             }
+    }
+}
+
+/**
+ * T-THEME-57, wrapping: a centred favourite whose label wraps to two lines, with a badge, stays centred: the badge's
+ * reserve on both sides is decided from the wrapped width (the longest word), not from the unwrapped label. Each preset.
+ */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = "w411dp-h891dp-xxhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class FavoritesWrapTest(
+    private val preset: String,
+) {
+    @get:Rule
+    val compose = createEmptyComposeRule()
+
+    private val screen = AlignmentScreen(compose, mapsLabel = "Maps and Routes for Long Journeys Across Many Lands")
+
+    @Test
+    fun wrappedBadgedLabelIsCentred() {
+        val activity =
+            screen.start(preset, rtl = false) { t ->
+                t.copy(favorites = t.favorites.copy(alignment = Alignment.CENTER, showLabels = true, showIcons = false))
+            }
+        val density = activity.resources.displayMetrics.density
+        val width =
+            activity.window.decorView.width
+                .toFloat()
+        val long = screen.bounds(activity, HomeTestTags.favoriteLabel(screen.maps))
+        val short = screen.bounds(activity, HomeTestTags.favoriteLabel(screen.alpha))
+        assertWithMessage("$preset: the long label does not wrap").that(long.height).isGreaterThan(short.height * 1.5f)
+        val off = (long.center.x - width / 2) / density
+        assertWithMessage("$preset: wrapped badged label off-centre by %.2f dp".format(off)).that(abs(off)).isAtMost(1f)
+    }
+
+    companion object {
+        @JvmStatic
+        @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
+        fun parameters(): List<Array<Any>> = ClockScreen.presets().map { arrayOf<Any>(it) }
     }
 }
 
@@ -390,14 +430,43 @@ class WidgetCentreTest(
 
     @Test
     fun wideProviderKeepsItsMinimumWidth() {
-        val (activity, _) = startWithView(minWidthDp = 320)
+        val (activity, view) = startWithView(minWidthDp = 320)
         val density = activity.resources.displayMetrics.density
+        val width =
+            activity.window.decorView.width
+                .toFloat()
         val area = screen.bounds(activity, WidgetTestTags.HOST)
-        assertWithMessage("$preset rtl=$rtl: area narrower than the provider minimum")
+        val where = "$preset rtl=$rtl"
+        assertWithMessage("$where: area narrower than the provider minimum")
             .that(area.width / density)
             .isAtLeast(320f - 1f)
         val index = screen.indexBounds(activity)
-        if (index != null) assertWithMessage("widget overlaps the index").that(area.overlaps(index)).isFalse()
+        val off = (area.center.x - width / 2) / density
+        if (index == null) {
+            // No index on home: the symmetric span (the window minus padding) holds 320 dp, so it stays centred.
+            assertWithMessage("$where: wide widget off-centre by %.2f dp without an index".format(off))
+                .that(abs(off))
+                .isAtMost(1f)
+        } else {
+            assertWithMessage("$where: widget overlaps the index").that(area.overlaps(index)).isFalse()
+            // The span is too narrow: the area is as close to the centre as the column allows, so its index-side edge
+            // sits on the column's edge (index reserve + content padding) and it is off-centre only towards the other side.
+            val indexAtRight = index.center.x > width / 2
+            val columnEdge = (INDEX_RESERVE_DP + PADDING_DP) * density
+            val edgeGap = if (indexAtRight) width - area.right else area.left
+            assertWithMessage("$where: index-side gap %.1f px, column edge %.1f px".format(edgeGap, columnEdge))
+                .that(edgeGap)
+                .isWithin(density)
+                .of(columnEdge)
+            assertWithMessage(
+                "$where: shifted towards the index",
+            ).that(if (indexAtRight) off <= 0f else off >= 0f).isTrue()
+        }
+        assertWithMessage("hosted view width").that(view.width.toFloat()).isWithin(1f).of(area.width)
+        val reported = screen.widgetHost.sizes[screen.widgetHost.boundIds.first()]
+        assertWithMessage("size passed to the provider").that(reported).isNotNull()
+        assertWithMessage("reported width (dp)").that(reported!!.first).isWithin(1f).of(view.width / density)
+        assertWithMessage("reported height (dp)").that(reported.second).isWithin(1f).of(view.height / density)
     }
 
     private fun startWithView(minWidthDp: Int): Pair<HomeActivity, StrataWidgetHostView> {
@@ -409,6 +478,11 @@ class WidgetCentreTest(
     }
 
     companion object {
+        private const val INDEX_RESERVE_DP = 48f
+
+        /** `list.horizontalPaddingDp` of every preset that shows the index on home. */
+        private const val PADDING_DP = 16f
+
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0}-rtl={1}")
         fun parameters(): List<Array<Any>> =

@@ -146,7 +146,8 @@ internal fun favoriteTextAlign(): TextAlign =
 /**
  * One favourite (VISUAL_SPEC §9.2): text-first, label in `type.favorite`, min 48 dp, optional icon at 1.25 × the
  * list icon size, badges after the label. One accessibility node with the sheet actions (FR-A11Y-01). Centred
- * (FB-014): icon and label are centred and the badges hang after them, so a badge never moves the label.
+ * (FB-014): icon and label are centred and the badges hang after them, so a badge never moves the label; end aligned,
+ * the badges sit on the label's inner side, so the label keeps the end edge.
  */
 @Composable
 fun FavoriteRow(
@@ -188,6 +189,7 @@ fun FavoriteRow(
             }
         HangingRow(
             centred = favorites.alignment == ThemeAlignment.CENTER,
+            trailingFirst = favorites.alignment == ThemeAlignment.END,
             gap = FAVORITE_GAP,
             core = {
                 Row(
@@ -234,14 +236,19 @@ fun FavoriteRow(
 private val FAVORITE_GAP = 12.dp
 
 /**
- * [core] followed by [trailing] (badges), [gap] apart. With [centred], the box reserves the trailing width on both
- * sides, so the box's centre is the centre of [core] (like the clock's day period, FB-007); when [core] does not fit
- * beside two reserves, it falls back to core + trailing, which the parent then centres as a whole. Never wider than
- * the given width: [core] is measured with the trailing width deducted.
+ * [core] and the [trailing] badges, [gap] apart, so that [core] alone sits where the alignment puts it:
+ * - start: core, then the badges after it (VISUAL_SPEC §9.2);
+ * - centred: the badge width is reserved on both sides, so the box's centre is the centre of [core] (like the clock's
+ *   day period, FB-007). Whether both reserves fit is decided from the wrapped width ([core]'s longest unbreakable
+ *   part, `minIntrinsicWidth`), so a long label wraps between the reserves and stays centred. Only when even that does
+ *   not fit does it fall back to core + badges, which the parent then centres as a whole;
+ * - [trailingFirst] (end alignment): the badges go on [core]'s inner side, so [core] holds the end edge (FB-014).
+ * Never wider than the given width: [core] is measured with the reserved width deducted.
  */
 @Composable
 private fun HangingRow(
     centred: Boolean,
+    trailingFirst: Boolean,
     gap: Dp,
     core: @Composable () -> Unit,
     trailing: @Composable () -> Unit,
@@ -250,10 +257,11 @@ private fun HangingRow(
         val maxWidth = constraints.maxWidth
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val t = trailingMeasurables.firstOrNull()?.measure(loose.copy(maxWidth = maxWidth / 2))
-        val hang = if (t == null) 0 else t.width + gap.roundToPx()
+        val gapPx = gap.roundToPx()
+        val hang = if (t == null) 0 else t.width + gapPx
         val coreMeasurable = coreMeasurables.firstOrNull()
-        val wanted = coreMeasurable?.maxIntrinsicWidth(Constraints.Infinity) ?: 0
-        val both = centred && hang > 0 && (!constraints.hasBoundedWidth || wanted <= maxWidth - 2 * hang)
+        val narrowest = coreMeasurable?.minIntrinsicWidth(Constraints.Infinity) ?: 0
+        val both = centred && hang > 0 && (!constraints.hasBoundedWidth || narrowest <= maxWidth - 2 * hang)
         val reserve = if (both) 2 * hang else hang
         val coreMax = if (constraints.hasBoundedWidth) (maxWidth - reserve).coerceAtLeast(0) else Constraints.Infinity
         val c = coreMeasurable?.measure(loose.copy(maxWidth = coreMax))
@@ -261,9 +269,11 @@ private fun HangingRow(
         val width = (cw + reserve).coerceIn(constraints.minWidth, maxWidth)
         val height = maxOf(c?.height ?: 0, t?.height ?: 0).coerceIn(constraints.minHeight, constraints.maxHeight)
         layout(width, height) {
-            val coreX = if (both) hang else 0
+            val first = trailingFirst && !both
+            val coreX = if (both || first) hang else 0
+            val trailingX = if (first) 0 else coreX + cw + gapPx
             c?.placeRelative(coreX, (height - c.height) / 2)
-            t?.placeRelative(coreX + cw + gap.roundToPx(), (height - t.height) / 2)
+            t?.placeRelative(trailingX, (height - t.height) / 2)
         }
     }
 }

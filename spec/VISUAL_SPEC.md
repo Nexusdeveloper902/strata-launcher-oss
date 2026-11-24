@@ -42,8 +42,10 @@ One focal action per region; no decorative chrome, cards or shadows on the home 
   clock and date, `center`-aligned favourites (and "All apps"), and the widget area are laid out
   over a span symmetric about the window: the larger side inset (index reserve or display
   cutout) is kept on both sides, so nothing sits under the index or a cutout. A centred
-  favourite centres its icon and label; badges hang after the label and never move it, and a
-  wrapped label is centred line by line. The widget area is centred whatever the alignments, and
+  favourite centres its icon and label; badges hang after the label and never move it (the
+  badge width is reserved on both sides whenever the label's longest word fits between the
+  reserves, so a long label wraps there and stays centred), and a wrapped label is centred line
+  by line. Start- or end-aligned, the label itself holds the edge (end: badges on its inner side). The widget area is centred whatever the alignments, and
   is never laid out narrower than the provider's `minWidth` when the column can hold it (it then
   grows towards the side without the index). The hosted view fills the area; the platform
   centres the widget's content inside it. Portrait only: in landscape (§8.1) header and
@@ -181,7 +183,8 @@ overflow (opens S-HMENU, 48 dp target). In S-SEARCH the same shape becomes the f
 element), with a clear button when there is text.
 ### 9.2 Favourites
 Text-first rows (`showIcons=false` default): label in `type.favorite`, min height 48 dp, row
-spacing `favorites.spacingDp`, alignment `favorites.alignment`. Badges sit after the label.
+spacing `favorites.spacingDp`, alignment `favorites.alignment`. Badges sit after the label;
+end-aligned, they sit on the label's inner side, so the label keeps the end edge (FB-014, Proposed).
 The "All apps ›" row ends the block.
 ### 9.3 Alphabet index
 - Idle: a column of letters (or dots, `glyphs=dots`) in `type.index`, `textSecondary` at

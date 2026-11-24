@@ -57,7 +57,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-HOME-12 | Tablet always rotates | API 36 tablet, sw ≥ 600 dp, setting off | Rotate | Layout re-flows to two-column per VISUAL_SPEC §8. No letterboxing | I | FR-HOME-08, NFR-COMPAT-03 |
 | T-HOME-14 | Focused text field keeps the keyboard (Proposed; owner report on the Galaxy A56) | home window; each field type: Edit favourites → "Add apps" search, onboarding favourites search shown as home's first layer, search field, rename field | Focus the field. The window reports the IME visible (IME insets). Settle a few frames. Then close search and report the IME visible again | The field keeps focus and the stray-keyboard guard hides nothing while a field is focused. With no field (home at rest, search closed) a visible keyboard is still hidden (T-HOME-09 fix kept) | C + R + I | FR-FAV-02, FR-ONBOARD-01, FR-SEARCH-01, FR-APPS-05, ANDROID_PLATFORM §14 |
 | T-HOME-15 | Arrival is not a Home press (FB-008) | setting "Home press opens search" on; another app in front | Return to home with the Home gesture or button. Then press Home again on resting home | The arrival resets home to rest and search stays closed. The second press, made while home is in front, opens search | C + I | FR-HOME-05 |
-| T-HOME-16 | No stale layer behind the favourites page (FB-017) | home started under an opaque theme (window background opaque, wallpaper not requested); then a theme that lets the wallpaper through; also a cold start under a remembered see-through theme before the theme is loaded | Record the pixel format the window was added with (the renderer builds its surface from it). Open the list and go back to the favourites page, replaying the frames into one reused buffer with the renderer's rule (cleared only on a translucent surface). Separately: settle frames before the theme loads, then load it | The window is added with a translucent pixel format and keeps it, whatever its background; the favourites page drawn into the reused buffer equals a clean render (no pixel of the list remains). Before the theme is loaded the wallpaper stays requested and the window transparent, and the built-in default's state is not remembered. The wallpaper flag still follows the theme (T-PERF-13) | R | FR-THEME-07, NFR-PERF-05 |
+| T-HOME-16 | No stale layer behind the favourites page (FB-017) | home started under an opaque theme (window background opaque, wallpaper not requested); then a theme that lets the wallpaper through; also a cold start under a remembered see-through theme before the theme is loaded | **Format check:** read the pixel format the window was added with (the renderer builds its surface from it, opaque only for `OPAQUE`). **Modelled replay** (no GPU buffers in Robolectric): open the list and go back to the favourites page, replaying the frames into one reused buffer with the renderer's rule (cleared unless the format is `OPAQUE`). Separately: settle frames before the theme loads, then load it | The window is added with a format other than `OPAQUE` and keeps it, whatever its background. The replay equals a clean render (a model of the renderer, not a measurement of it; the real renderer is checked on the device). Before the theme is loaded the wallpaper stays requested and the window transparent, and the built-in default's state is not remembered. The wallpaper flag still follows the theme (T-PERF-13) | R | FR-THEME-07 |
 
 ## 3. LIST
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -176,7 +176,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-WIDGET-09 | Provider lost → placeholder | widget added; uninstall `WIDGET_FIX`; reinstall | Show home. Tap "Re-add" | "Widget unavailable — Re-add / Remove" placeholder. Re-add restarts the bind flow for the same provider | I | FR-WIDGET-04 |
 | T-WIDGET-10 | Restore via backup file | backup with 1 widget placement | Restore the file | Placeholder with "Re-add" (state NEEDS_REBIND). One tap starts binding | I | FR-WIDGET-04, FR-BACKUP-02 |
 | T-WIDGET-11 | Full-backup widget state (U-017) | device with `bmgr` | `bmgr backup` → clear data → `bmgr restore` | Records whether HOST_RESTORED fires. Either way: placeholder or remapped widget, never a blank area | I/MAN | FR-WIDGET-04, FR-BACKUP-04 |
-| T-WIDGET-12 | Widget centred in its slot (FB-016) | a header widget; each built-in preset (alphabet index on home or not); LTR and RTL; providers with `minWidth` 180 and 320 dp | Show home. Read the widget area's bounds, the hosted `AppWidgetHostView`'s position and padding, and the size passed with `updateAppWidgetSize` | The area and the hosted view are centred on the window within ±1 dp and never overlap the index; the host view fills the area with equal left and right padding; the size passed to the provider is the hosted view's size. A provider wider than the centred span gets its minimum width, still clear of the index | R | FR-WIDGET-01, FR-WIDGET-03 |
+| T-WIDGET-12 | Widget centred in its slot (FB-016) | a header widget; each built-in preset (alphabet index on home or not); LTR and RTL; providers with `minWidth` 180 and 320 dp | Show home. Read the widget area's bounds, the hosted `AppWidgetHostView`'s position and padding, and the size passed with `updateAppWidgetSize` | The area and the hosted view are centred on the window within ±1 dp and never overlap the index; the host view fills the area with equal left and right padding; the size passed to the provider is the hosted view's size. A provider wider than the centred span gets its minimum width, still clear of the index | R | FR-WIDGET-01 |
 
 ## 10. SET
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -438,7 +438,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-NOTIF-03 | T-NOTIF-06, T-NOTIF-07 |
 | FR-WIDGET-01 | T-WIDGET-01, T-GEST-02, T-WIDGET-12 |
 | FR-WIDGET-02 | T-WIDGET-02, T-WIDGET-03, T-WIDGET-04, T-WIDGET-05 |
-| FR-WIDGET-03 | T-WIDGET-06, T-WIDGET-07, T-WIDGET-12 |
+| FR-WIDGET-03 | T-WIDGET-06, T-WIDGET-07 |
 | FR-WIDGET-04 | T-WIDGET-08, T-WIDGET-09, T-WIDGET-10, T-WIDGET-11 |
 | FR-SET-01 | T-SET-01, T-SET-02, T-FAV-09 |
 | FR-SET-02 | T-SET-03 |
@@ -513,7 +513,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | NFR-PERF-02 | T-PERF-03, T-PERF-04, T-PERF-11 |
 | NFR-PERF-03 | T-PERF-05, T-PERF-06 |
 | NFR-PERF-04 | T-PERF-07, T-PERF-08 |
-| NFR-PERF-05 | T-PERF-09, T-PERF-13, T-PERF-14, T-HOME-16 |
+| NFR-PERF-05 | T-PERF-09, T-PERF-13, T-PERF-14 |
 | NFR-PERF-06 | T-PERF-10, T-LIST-08, T-THEME-53 |
 | NFR-PERF-07 | T-CI-07 |
 | NFR-A11Y-01 | T-A11Y-08, T-A11Y-07 |

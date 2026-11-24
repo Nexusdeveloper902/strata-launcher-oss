@@ -16,6 +16,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -234,8 +235,10 @@ class HomeActivity : ComponentActivity() {
                         // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                         ReportDrawnWhen { state.listReady }
                         WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
-                        val themeState by appGraph.themeRepository.state.collectAsStateWithLifecycle()
-                        HomeWallpaperWindow(window, windowMemory, themeLoaded = themeState.loaded)
+                        // Only the loaded flag is read here: other theme-state emissions do not recompose this scope.
+                        val themeState = appGraph.themeRepository.state.collectAsStateWithLifecycle()
+                        val themeLoaded by remember { derivedStateOf { themeState.value.loaded } }
+                        HomeWallpaperWindow(window, windowMemory, themeLoaded = themeLoaded)
                         HideStrayIme(state.imeAllowed)
                         val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
                         HomeRoute(
