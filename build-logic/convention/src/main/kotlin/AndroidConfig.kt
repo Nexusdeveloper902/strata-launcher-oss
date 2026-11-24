@@ -46,6 +46,14 @@ internal fun Project.addAndroidTestDependencies() {
 internal val COMPAT_NIGHTLY_APIS = listOf(28, 29, 31, 33, 35)
 
 /**
+ * Nightly API levels that run on the AOSP image (no Google Play services). The API 29 Google APIs image's system_server
+ * has a 16 MB heap, and a GMS config-update push made it run out of memory and crash ("INSTRUMENTATION_ABORTED: System
+ * has crashed": nightly runs 45009343354 and 45159389326, OutOfMemoryError in ConfigUpdateInstallReceiver). The device
+ * tests need no GMS.
+ */
+internal val AOSP_IMAGE_APIS = setOf(29)
+
+/**
  * Gradle Managed Devices for the per-PR smoke matrix (ARCHITECTURE 14.3: API 26, 34, 36 phones, x86_64) and the
  * AndroidX Test Orchestrator (each test in its own process; `clearPackageData` in the application plugin clears the
  * app's state before each test). Window and transition animations are off for every test, not only the classes that
@@ -76,7 +84,7 @@ internal fun TestOptions.configureStrataManagedDevices() {
             create("api$api") {
                 device = "Pixel 6"
                 apiLevel = api
-                systemImageSource = "google"
+                systemImageSource = if (api in AOSP_IMAGE_APIS) "aosp" else "google"
             }
         }
     }
