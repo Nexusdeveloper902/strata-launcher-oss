@@ -64,8 +64,10 @@ class PermissionSetupDeviceTest {
         return found
     }
 
+    /** Called on the instrumentation thread: [liveSettings] uses `runOnMainSync`, which must not be nested on main. */
     private fun finishSettings() {
-        instrumentation.runOnMainSync { liveSettings().forEach { it.finish() } }
+        val live = liveSettings()
+        instrumentation.runOnMainSync { live.forEach { it.finish() } }
         val end = SystemClock.uptimeMillis() + DEVICE_TIMEOUT_MS
         while (SystemClock.uptimeMillis() < end && liveSettings().isNotEmpty()) SystemClock.sleep(POLL_MS)
     }
