@@ -17,6 +17,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import app.strata.launcher.CoverActivity
 import app.strata.launcher.DEVICE_TIMEOUT_MS
+import app.strata.launcher.DeviceStateRule
 import app.strata.launcher.bringHomeToFront
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.openAllApps
@@ -26,6 +27,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import java.io.File
 
@@ -36,8 +38,15 @@ import java.io.File
  */
 @RunWith(AndroidJUnit4::class)
 class ListDeviceTest {
-    @get:Rule
     val compose = createAndroidComposeRule<HomeActivity>()
+
+    /**
+     * Set before the activity starts (DeviceState.kt): system error dialogs suppressed, animations off, Strata as home.
+     * Without it a System UI "isn't responding" dialog right after boot could sit over home and take the first click
+     * (PR #26 run 45407840566, API 36: "Failed to inject touch input" in this class's onboarding pass).
+     */
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(DeviceStateRule()).around(compose)
 
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
