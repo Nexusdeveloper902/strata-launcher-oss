@@ -41,3 +41,11 @@ seen on a device yet), `Proposed` (design choice).
 2. The icon in the other launcher still shows Strata; if a home-screen shortcut to it disappeared after the update,
    add it again.
 3. Recents after opening Strata's settings from the app info gear: the settings task is listed as before.
+
+## Local checks
+All with `--max-workers=1`, green. Before merging `main` (#43): `:app` unit tests per package (all packages) and
+`assembleDebug lintDebug ktlintCheck checkPermissions checkDependencies checkModuleGraph checkEntitlements checkLicences
+assembleDebugAndroidTest :build-logic:convention:test :app:checkReleaseApk :benchmark:assembleBenchmark`. After the merge:
+`:app` `a11y`, `settings` and `onboarding` unit tests, `ktlintCheck checkPermissions checkEntitlements
+assembleDebugAndroidTest lintDebug`. The new device test uses UiAutomator and the shell only (no Compose rule), so the
+#43 move to `junit4.v2` does not apply to it. Device tests not run (no emulator).
