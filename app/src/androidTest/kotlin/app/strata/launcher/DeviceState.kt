@@ -325,7 +325,20 @@ class DeviceStateRule(
  * were enabled before (two-button, gestural variants, or none), or null when nothing changed.
  */
 private fun applyNavMode(testWants: String?): (() -> Unit)? {
-    val wanted = testWants ?: InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
+    if (testWants != null) {
+        // A mode the test needs (its precondition): where the device cannot provide it (no such overlay, or it cannot
+        // be enabled; the overlay is then put back), the test is skipped visibly, as it was when the test switched by
+        // itself. A switch that applies and then breaks (the mode is never reported) is restored and fails.
+        return try {
+            switchNavMode(testWants)
+        } catch (e: NavModeUnavailable) {
+            throw org.junit.AssumptionViolatedException(
+                "navigation mode '$testWants' is not available: ${e.message}",
+                e,
+            )
+        }
+    }
+    val wanted = InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
     return switchNavMode(wanted)
 }
 
@@ -340,6 +353,7 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     val before = enabledNavOverlays()
     val settingBefore = navModeSetting()
     if (before == listOf(overlay)) return null
+    if (overlay !in installedNavOverlays()) throw NavModeUnavailable("$overlay is not installed on this device")
     // Built before the switch, so a switch that fails half-way (overlay enabled, mode never reported) is undone too.
     val restore = {
         if (before.isEmpty()) {
@@ -357,9 +371,9 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     try {
         setNavOverlay(overlay)
         val after = enabledNavOverlays()
-        check(
-            overlay in after,
-        ) { "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)" }
+        if (overlay !in after) {
+            throw NavModeUnavailable("$overlay could not be enabled (enabled after enable-exclusive: $after)")
+        }
         awaitNavModeSetting(NAV_MODE_SETTING.getValue(wanted), "strata.navMode=$wanted")
     } catch (e: Throwable) {
         runCatching(restore).onFailure { e.addSuppressed(it) }
@@ -367,6 +381,19 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     }
     return restore
 }
+
+/** The device has no such navigation mode, or it cannot be enabled. */
+class NavModeUnavailable(
+    message: String,
+) : IllegalStateException(message)
+
+/** Every overlay of the `com.android.internal.systemui.navbar.*` family, enabled or not. */
+private fun installedNavOverlays(): List<String> =
+    shell("cmd overlay list android")
+        .lines()
+        .map(String::trim)
+        .map { it.removePrefix("[x]").removePrefix("[ ]").trim() }
+        .filter { it.startsWith(NAV_OVERLAY_PREFIX) }
 
 private fun navModeSetting(): String = shell("settings get secure navigation_mode").trim()
 
@@ -583,19 +610,34 @@ fun injectHomeFlick(
             e.recycle()
         }
     }
-    inject(android.view.MotionEvent.ACTION_DOWN, down, startY)
-    for (i in 1..FLICK_MOVES) {
-        inject(
-            android.view.MotionEvent.ACTION_MOVE,
-            down + i * FLICK_STEP_MS,
-            startY + (endY - startY) * i / FLICK_MOVES,
-        )
+    var pointerDown = false
+    var lastY = startY
+    try {
+        inject(android.view.MotionEvent.ACTION_DOWN, down, startY)
+        pointerDown = true
+        for (i in 1..FLICK_MOVES) {
+            lastY = startY + (endY - startY) * i / FLICK_MOVES
+            inject(android.view.MotionEvent.ACTION_MOVE, down + i * FLICK_STEP_MS, lastY)
+        }
+        inject(android.view.MotionEvent.ACTION_UP, down + FLICK_MOVES * FLICK_STEP_MS, endY)
+        pointerDown = false
+    } finally {
+        // A gesture that stops half-way must not leave the pointer down for the next test.
+        if (pointerDown) {
+            val cancel = event(android.view.MotionEvent.ACTION_CANCEL, SystemClock.uptimeMillis(), lastY)
+            try {
+                automation.injectInputEvent(cancel, true)
+            } finally {
+                cancel.recycle()
+            }
+        }
     }
-    inject(android.view.MotionEvent.ACTION_UP, down + FLICK_MOVES * FLICK_STEP_MS, endY)
 }
 
 // 12 moves at 8 ms (a 120 Hz touch panel's cadence) over 40 % of the height: about 10 000 px/s on a 2 400 px display,
-// a clear upward fling released in motion.
+// a clear upward fling released in motion. 40 %: far past the swipe-up threshold (a few percent of the height) and well
+// short of the old 2/3 drag, so the whole flick is about 100 ms of steady movement; Home is decided by the fling, not
+// by how far the pointer travels.
 private const val FLICK_MOVES = 12
 private const val FLICK_STEP_MS = 8L
 private const val FLICK_FRACTION = 0.4f

@@ -308,7 +308,7 @@ class HomeDeviceTest {
 
     /**
      * Owner report (A56): search closed only with the back gesture from the left. With search open the index is covered,
-     * so no exclusion may remain on its edge, and a swipe from the right edge closes search. The test switches the
+     * so no exclusion may remain on its edge, and a swipe from the right edge closes search. DeviceStateRule switches the
      * device to gesture navigation for its run (restored afterwards); without the gestural overlay it is skipped
      * visibly, never passed without the swipe.
      */
@@ -371,8 +371,9 @@ class HomeDeviceTest {
     /**
      * T-GEST-10 / T-HOME-15 (FB-008, owner report on the A56): swiping up with the system Home gesture from another app
      * returns to home at rest. Neither the tail of the gesture (FR-GEST-01) nor the Home intent it delivers (FR-HOME-05,
-     * whose "opens search" option is on here, the worst case) may open search. Gesture navigation is switched on for
-     * the run and restored; without it the test is skipped visibly.
+     * whose "opens search" option is on here, the worst case) may open search. DeviceStateRule switches to gesture
+     * navigation before the activity starts and restores it afterwards; a device without gesture navigation (no
+     * overlay, or one that cannot be enabled) skips the test visibly.
      */
     @Test
     fun tGest10_homeGestureFromAppDoesNotOpenSearch() {
