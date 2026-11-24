@@ -284,6 +284,10 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
                     }
 
                     else -> {
+                        // A system error dialog (System UI "isn't responding" on a loaded emulator) hides home from
+                        // UiAutomator: answer it here, not only in findOrFail (PR #27 run 45410199560: the dialog sat
+                        // over onboarding for the whole wait).
+                        answerForeignErrorDialog()
                         // Neither screen visible to UiAutomator: record what the window manager says, so a run like
                         // 44298771296 (onboarding in the tree, not visible for over 10 s) shows why.
                         if (SystemClock.uptimeMillis() >= nextProbe) {
@@ -298,12 +302,18 @@ internal fun UiDevice.passOnboardingAndWaitForHome() {
                     }
                 }
             }
+        // Neither screen within the timeout is a failure here, never "no onboarding": that fell through to a wait for
+        // home while onboarding was showing, and failed as "'home_all_apps' not on screen" (run 45410199560).
+        checkNotNull(first) {
+            "neither onboarding nor home visible after ${Strata.TIMEOUT_MS} ms: ${targetWindowState()}"
+        }
         if (first != ONBOARDING_ROOT_TAG) break
         // The set-default step shows its buttons once the role check (off main) has finished. After the last click
         // ("Not now" / "Go to home") the layer is still leaving when the root is checked above, so the poll also ends
         // when the root is gone (CI run 43563634680, BackgroundCostTest: it waited 10 s for buttons of a closed layer).
         val next =
             pollFor(Strata.TIMEOUT_MS) {
+                answerForeignErrorDialog()
                 if (!hasObject(By.res(ONBOARDING_ROOT_TAG))) {
                     ONBOARDING_GONE
                 } else {
