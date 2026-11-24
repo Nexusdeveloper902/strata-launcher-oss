@@ -144,4 +144,8 @@ the index. On `main` code the centring cases fail by 24 dp in Strata Default/Har
 4. Widget menu → Resize: the area keeps its centre at every step.
 
 ## Local checks
-See the report for the full command. Device tests were not run (no emulator here).
+All green, run with `--max-workers=1`: `testDebugUnitTest` (`:app` run per package after the first full run was
+killed for memory on the shared machine: 756 tests, 0 failures; every other module green in the full run),
+`assembleDebug lintDebug ktlintCheck checkPermissions checkDependencies checkModuleGraph checkEntitlements checkLicences
+assembleDebugAndroidTest :build-logic:convention:test :app:checkReleaseApk :benchmark:assembleBenchmark`. Device tests
+were not run (no emulator here). `python3 tools/trace/build.py` regenerated the traceability matrix.
