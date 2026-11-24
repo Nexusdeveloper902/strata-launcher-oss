@@ -78,16 +78,28 @@
             </intent-filter>
         </activity>
 
-        <!-- Entry activity (D-008): the app icon in other launchers. MAIN/LAUNCHER → onboarding if
-             not done, else explicit intent to HomeActivity; APPLICATION_PREFERENCES → settings. -->
+        <!-- Entry activity (D-008, FB-019): the app icon in other launchers. Window-less (Theme.NoDisplay): it routes
+             and finishes in onCreate. onboarding_done → explicit intent to HomeActivity; otherwise SettingsActivity
+             (same task) hosts onboarding. Not excluded from Recents: as the settings task's root that would hide the
+             whole task. -->
         <activity
-            android:name=".settings.SettingsActivity"
+            android:name=".settings.EntryActivity"
             android:exported="true"
-            android:taskAffinity="app.strata.launcher.settings">
+            android:noHistory="true"
+            android:taskAffinity="app.strata.launcher.settings"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Settings (APPLICATION_PREFERENCES → settings root), and the D-008 router when EntryActivity hands over an
+             explicit MAIN/LAUNCHER intent (onboarding). -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="true"
+            android:taskAffinity="app.strata.launcher.settings">
             <intent-filter>
                 <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -47,7 +47,7 @@ are cited only to show which capability areas exist (feature inventory).
 | API | `<activity>` with an intent filter for `Intent.ACTION_MAIN` + `Intent.CATEGORY_HOME` + `Intent.CATEGORY_DEFAULT`. `CATEGORY_HOME` = "the first activity that is displayed when the device boots". |
 | Min API | 1 (all attributes used are ≤ 21) |
 | Manifest | The HOME role requires an activity that matches `MAIN`+`HOME` (AOSP `roles.xml`). Proposed attributes, following the AOSP Launcher3 reference manifest: `launchMode="singleTask"`, `clearTaskOnLaunch="true"`, `stateNotNeeded="true"`, `resumeWhilePausing="true"`, `taskAffinity=""`, `exported="true"`, `resizeableActivity="true"`, `screenOrientation="unspecified"`, `windowSoftInputMode="adjustResize|stateAlwaysHidden"`, `configChanges` covering `orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|mcc|mnc|density|uiMode|fontScale|locale|layoutDirection`, see §15. |
-| Implementation | • `singleTask` + `taskAffinity=""`: one home task, separate from our settings task. Pressing Home while home is in front arrives as `onNewIntent(ACTION_MAIN/CATEGORY_HOME)`. Proposed: collapse open sheets/search and scroll the list to the top. • `stateNotNeeded="true"`: `onSaveInstanceState` "might not be called, and onCreate() is passed null". Home UI state must therefore be rebuildable from persisted data (§21). • `resumeWhilePausing`: home resumes without waiting for the previous app's pause, so it must not take exclusive resources (camera, audio) during launch. • Proposed (D-008): **a separate `SettingsActivity` holds `MAIN`+`LAUNCHER`** (plus `APPLICATION_PREFERENCES`), and the home activity is not listed as an app. When started by `MAIN`+`LAUNCHER` (the icon in another launcher), `SettingsActivity` acts as the entry router: if `onboarding_done` is false it hosts onboarding; otherwise it starts `HomeActivity` with an **explicit** intent (`FLAG_ACTIVITY_NEW_TASK`; `HomeActivity` is exported for the HOME filter, so no LAUNCHER filter is needed) and finishes. The home activity then runs in APP_MODE if the role is not held. When started by `APPLICATION_PREFERENCES` it opens settings directly. `HomeActivity.onCreate` also checks `onboarding_done` and shows onboarding as its first layer when the system starts it before the user ever opened the icon. Strata's own `LAUNCHER` entry is left out of its own app list (the list-end "Settings" row replaces it). • Do **not** use the APK-004 pattern (a disabled second HOME activity toggled to force a chooser). Its purpose is only Inferred, it is fragile, and the role API supersedes it. |
+| Implementation | • `singleTask` + `taskAffinity=""`: one home task, separate from our settings task. Pressing Home while home is in front arrives as `onNewIntent(ACTION_MAIN/CATEGORY_HOME)`. Proposed: collapse open sheets/search and scroll the list to the top. • `stateNotNeeded="true"`: `onSaveInstanceState` "might not be called, and onCreate() is passed null". Home UI state must therefore be rebuildable from persisted data (§21). • `resumeWhilePausing`: home resumes without waiting for the previous app's pause, so it must not take exclusive resources (camera, audio) during launch. • Proposed (D-008): **a separate entry holds `MAIN`+`LAUNCHER`**, and the home activity is not listed as an app. Since FB-019 the icon belongs to a **window-less `EntryActivity`** (`Theme.NoDisplay`, settings task affinity) that routes and finishes in `onCreate`: an activity that is started with a normal window and finishes without drawing it makes the window manager wait for a focused window (about 5 s) and can show "isn't responding". If `onboarding_done` is true it starts `HomeActivity` with an **explicit** intent (`FLAG_ACTIVITY_NEW_TASK`; `HomeActivity` is exported for the HOME filter, so no LAUNCHER filter is needed). Otherwise, or when the flag cannot be read within 250 ms (the main thread only waits; the store reads on its own thread), it hands the same `MAIN`+`LAUNCHER` intent explicitly to `SettingsActivity` in the same task, which hosts onboarding (or, once the flag is read, starts home) exactly as before. `SettingsActivity` keeps `APPLICATION_PREFERENCES`. The home activity then runs in APP_MODE if the role is not held. When started by `APPLICATION_PREFERENCES` it opens settings directly. `HomeActivity.onCreate` also checks `onboarding_done` and shows onboarding as its first layer when the system starts it before the user ever opened the icon. Strata's own `LAUNCHER` entry is left out of its own app list (the list-end "Settings" row replaces it). • Do **not** use the APK-004 pattern (a disabled second HOME activity toggled to force a chooser). Its purpose is only Inferred, it is fragile, and the role API supersedes it. |
 | Failure | If our activity is not the preferred home, Home opens the other launcher. Detect this with `RoleManager.isRoleHeld(ROLE_HOME)` (29+). On API 26–28, resolve `MAIN/HOME` with `PackageManager.resolveActivity(…, MATCH_DEFAULT_ONLY)` and compare the package. |
 | Confidence | Verified (attributes and their semantics); Proposed (choice of values) |
 | DOC | DOC-001, DOC-002, DOC-003, DOC-004, DOC-006 |
@@ -399,16 +399,26 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
             </intent-filter>
         </activity>
 
-        <!-- Entry activity (D-008): the app icon in other launchers. MAIN/LAUNCHER → onboarding if
-             not done, else explicit intent to HomeActivity; APPLICATION_PREFERENCES → settings. -->
+        <!-- Entry activity (D-008, FB-019): the app icon in other launchers, window-less. Routes in onCreate:
+             onboarding_done → explicit intent to HomeActivity; otherwise MAIN/LAUNCHER handed to SettingsActivity
+             (same task), which hosts onboarding. -->
         <activity
-            android:name=".settings.SettingsActivity"
+            android:name=".settings.EntryActivity"
             android:exported="true"
-            android:taskAffinity="app.strata.launcher.settings">
+            android:noHistory="true"
+            android:taskAffinity="app.strata.launcher.settings"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Settings: APPLICATION_PREFERENCES → settings root; the D-008 router for EntryActivity's hand-over. -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="true"
+            android:taskAffinity="app.strata.launcher.settings">
             <intent-filter>
                 <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
                 <category android:name="android.intent.category.DEFAULT" />

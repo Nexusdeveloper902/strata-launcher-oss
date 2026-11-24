@@ -54,6 +54,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-HOME-10 | Home press opens search | setting "Home press opens search" on, home at rest | Press Home | Search opens with focus and IME. With the setting off, nothing happens | I | FR-HOME-05 |
 | T-HOME-11 | Phone rotation lock | phone (< 600 dp), "Allow rotation" off then on | Rotate the device | Off: stays portrait. On: layout rotates. The search query survives | I | FR-HOME-08 |
 | T-HOME-13 | Launcher-icon routing | fresh install, another launcher default; then `onboarding_done` = true; then Strata default | Tap the Strata icon in the other launcher in each state. Separately, start `SettingsActivity` with `APPLICATION_PREFERENCES` | Not onboarded: onboarding opens. Onboarded, not default: HomeActivity in APP_MODE (explicit intent, the entry activity finishes). Default: HomeActivity. `APPLICATION_PREFERENCES`: settings root, no routing. Strata's own icon is absent from its app list | I | FR-HOME-01, FR-ONBOARD-01 |
+| T-HOME-17 | Window-less launcher entry (FB-019) | Strata installed; `onboarding_done` true, then false | Robolectric: start the entry (`MAIN`+`LAUNCHER`). Device: `am start --user <numeric> -a MAIN -c LAUNCHER -n …/.settings.EntryActivity` | The entry is the only `MAIN`+`LAUNCHER` activity, declared `Theme.NoDisplay`; it installs no decor view, starts the D-008 target and finishes in `onCreate` (onboarded: `HomeActivity`, explicit, new task; first run: `SettingsActivity` with the same intent in the same task, showing onboarding). On the device the target's window is focused within 5 s (`DEVICE_TIMEOUT_MS` / 3), the entry never holds focus, and no `am_anr` is recorded for Strata | R + I | FR-HOME-01, FR-ONBOARD-01 |
 | T-HOME-12 | Tablet always rotates | API 36 tablet, sw ≥ 600 dp, setting off | Rotate | Layout re-flows to two-column per VISUAL_SPEC §8. No letterboxing | I | FR-HOME-08, NFR-COMPAT-03 |
 | T-HOME-14 | Focused text field keeps the keyboard (Proposed; owner report on the Galaxy A56) | home window; each field type: Edit favourites → "Add apps" search, onboarding favourites search shown as home's first layer, search field, rename field | Focus the field. The window reports the IME visible (IME insets). Settle a few frames. Then close search and report the IME visible again | The field keeps focus and the stray-keyboard guard hides nothing while a field is focused. With no field (home at rest, search closed) a visible keyboard is still hidden (T-HOME-09 fix kept) | C + R + I | FR-FAV-02, FR-ONBOARD-01, FR-SEARCH-01, FR-APPS-05, ANDROID_PLATFORM §14 |
 | T-HOME-15 | Arrival is not a Home press (FB-008) | setting "Home press opens search" on; another app in front | Return to home with the Home gesture or button. Then press Home again on resting home | The arrival resets home to rest and search stays closed. The second press, made while home is in front, opens search | C + I | FR-HOME-05 |
@@ -390,7 +391,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 Every P0/P1 requirement maps to at least one test. P2 items are not covered until scheduled.
 | Requirement | Tests |
 |---|---|
-| FR-HOME-01 | T-HOME-01, T-HOME-02, T-HOME-13, T-ONBOARD-09, T-SEC-03 |
+| FR-HOME-01 | T-HOME-01, T-HOME-02, T-HOME-13, T-HOME-17, T-ONBOARD-09, T-SEC-03 |
 | FR-HOME-02 | T-HOME-03, T-HOME-04 |
 | FR-HOME-03 | T-HOME-05, T-HOME-06 |
 | FR-HOME-04 | T-HOME-07, T-HOME-08 |
@@ -448,7 +449,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-BACKUP-02 | T-BACKUP-04 … T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-WIDGET-10 |
 | FR-BACKUP-03 | T-BACKUP-08 |
 | FR-BACKUP-04 | T-BACKUP-11, T-WIDGET-11 |
-| FR-ONBOARD-01 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-NOTIF-01 |
+| FR-ONBOARD-01 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-HOME-17, T-NOTIF-01 |
 | FR-ONBOARD-02 | T-ONBOARD-03, T-ONBOARD-04, T-ONBOARD-05, T-ONBOARD-06, T-HOME-02 |
 | FR-ONBOARD-03 | T-ONBOARD-07, T-COMPAT-04 |
 | FR-ONBOARD-04 | T-ONBOARD-08, T-LIFE-10 |

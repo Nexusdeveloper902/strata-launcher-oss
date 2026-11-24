@@ -17,7 +17,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-HOME-01 | P0 | Works as default home and as ordinary launcher icon | Inferred (capability, APK-003); Proposed (routing) | APK-003, DOC-002, DOC-004, D-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-01, T-HOME-02, T-HOME-13, T-ONBOARD-09, T-SEC-03 | M0, M6 [spec Rel: v1] |
+| FR-HOME-01 | P0 | Works as default home and as ordinary launcher icon | Inferred (capability, APK-003); Proposed (routing) | APK-003, DOC-002, DOC-004, D-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-01, T-HOME-02, T-HOME-13, T-HOME-17, T-ONBOARD-09, T-SEC-03 | M0, M6 [spec Rel: v1] |
 | FR-HOME-02 | P0 | Home layout order: header, favourites, search pill, insets | Corroborated (list home); Proposed (bottom anchoring) | PUB-008, PUB-034, APK-026 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-03, T-HOME-04, T-THEME-56^ | M3 [spec Rel: v1] |
 | FR-HOME-03 | P1 | Clock tap opens alarms, date opens calendar, toast fallback | Inferred | PUB-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-05, T-HOME-06 | M3 [spec Rel: v1] |
 | FR-HOME-04 | P1 | Hide status bar, clock, date and alphabet index | Corroborated | APK-026, PUB-063 | :feature:home, :app (area); cited ARCH §4.2 | PRODUCT_SPEC §4.1 | T-HOME-07, T-HOME-08 | M3 [spec Rel: v1] |
@@ -135,7 +135,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-ONBOARD-01 | P0 | First run of at most four screens, no permissions | Corroborated (sequence); Proposed (content) | SEC-002, APK-033 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-NOTIF-01, T-HOME-14^ | M6 [spec Rel: v1] |
+| FR-ONBOARD-01 | P0 | First run of at most four screens, no permissions | Corroborated (sequence); Proposed (content) | SEC-002, APK-033 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-HOME-17, T-NOTIF-01, T-HOME-14^ | M6 [spec Rel: v1] |
 | FR-ONBOARD-02 | P0 | Set-default flow via role API with fallbacks | Inferred | APK-033, DOC-005, DOC-006, DOC-007, DOC-008, P-2 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-03, T-ONBOARD-04, T-ONBOARD-05, T-ONBOARD-06, T-HOME-02 | M6 [spec Rel: v1] |
 | FR-ONBOARD-03 | P0 | OEM failure detection with help card | Inferred | PUB-076, U-016 | :feature:onboarding, :platform:system (area); cited ARCH §14.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-07, T-COMPAT-04 | M6 [spec Rel: v1] |
 | FR-ONBOARD-04 | P0 | Lost-default banner, at most once per day | Inferred | PUB-050 | :feature:onboarding, :platform:system (area); cited ARCH §4.2, §10 | PRODUCT_SPEC §4.11 | T-ONBOARD-08, T-LIFE-10 | M6 [spec Rel: v1] |
@@ -281,7 +281,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
 - Requirements with at least one test: 145; without: 11.
 - Requirements with a roadmap milestone: 152; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 274; §22 rows: 144.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 275; §22 rows: 144.
 
 ### P0/P1 requirements lacking tests
 - None.

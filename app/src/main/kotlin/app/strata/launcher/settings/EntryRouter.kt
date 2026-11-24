@@ -27,4 +27,14 @@ object EntryRouter {
             EntryKind.SETTINGS -> EntryRoute.SETTINGS_ROOT
             EntryKind.LAUNCHER_ICON -> if (onboardingDone) EntryRoute.HOME else EntryRoute.ONBOARDING
         }
+
+    /** FB-019: the window-less entry's hand-over. Null = the flag was not read in time: the router decides. */
+    fun entryTarget(onboardingDone: Boolean?): EntryTarget =
+        if (onboardingDone ==
+            true
+        ) {
+            EntryTarget.HOME
+        } else {
+            EntryTarget.ROUTER
+        }
 }

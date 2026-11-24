@@ -22,6 +22,7 @@ Status values: `queued`, `in progress (<branch>)`, `in review (#PR)`, `done (#PR
 | FB-016 | P2 | Widgets look off-centre (e.g. a music player widget) | Check widget host sizing, padding and gravity against the column | queued |
 | FB-017 | P1 | A launcher screen (e.g. the app list) stays frozen behind the favourites page instead of the wallpaper when swiping or scrolling | Stale backdrop: the previous layer is not cleared or redrawn when it should show the wallpaper | queued |
 | FB-018 | P1 | The nightly CI run fails every night and sends failure notifications | Make the scheduled nightly on main green; see docs/ci/RELIABILITY.md | in progress (compose-test-v2) |
+| FB-019 | P2 | Opening Strata's Settings icon could show an "isn't responding" dialog | Found by the monkey test: the icon's entry started home from a window it never drew. Window-less entry activity | in review (fb-settings-trampoline) |
 
 ## Found during review (not owner feedback)
 
