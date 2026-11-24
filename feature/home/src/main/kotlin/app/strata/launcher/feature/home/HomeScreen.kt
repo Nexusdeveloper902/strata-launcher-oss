@@ -134,6 +134,8 @@ object HomeTestTags {
     const val HOME_INDEX = "home_index"
 
     fun favorite(app: VisibleApp) = "home_favorite_${app.key.component}_${app.key.userSerial}"
+
+    fun favoriteLabel(app: VisibleApp) = "home_favorite_label_${app.key.component}_${app.key.userSerial}"
 }
 
 /**
@@ -473,6 +475,8 @@ internal fun Modifier.sheetKey(
  */
 class HomeWidgetSlot(
     val replacesClock: Boolean,
+    /** The provider's minimum width in dp (FB-016: the area is never laid out narrower when the window allows it). */
+    val minWidthDp: Int = 0,
     val content: @Composable (Modifier) -> Unit,
 )
 
@@ -560,13 +564,14 @@ fun HomeScreen(
             }
             // INTERACTION_SPEC §10 / VISUAL_SPEC §8.1: below 360 dp of height the widget is hidden (clock only).
             val widget = widgetSlot.takeIf { widgetFits }
-            // FB-007: a centred clock is centred on the window, not in the column, whose start and end differ by the
-            // index reserve and by one-sided insets (a display cutout). Portrait only: in landscape it has its pane.
+            // FB-007/FB-014/FB-016: what is centred is centred on the window, not in the column, whose start and end
+            // differ by the index reserve and by one-sided insets (a display cutout). The column's insets, start and end
+            // (layout direction relative), in px. Portrait only: in landscape the header and favourites have their panes.
             val direction = LocalLayoutDirection.current
             val safe = WindowInsets.safeDrawing
-            val headerSides =
-                if (!landscape && theme.clock.alignment == ThemeAlignment.CENTER) {
-                    val density = LocalDensity.current
+            val density = LocalDensity.current
+            val columnSides =
+                if (!landscape) {
                     val padding = safe.asPaddingValues(density)
                     val startInset = with(density) { padding.calculateStartPadding(direction).roundToPx() }
                     val endInset = with(density) { padding.calculateEndPadding(direction).roundToPx() }
@@ -575,6 +580,11 @@ fun HomeScreen(
                 } else {
                     null
                 }
+            val headerSides = columnSides.takeIf { theme.clock.alignment == ThemeAlignment.CENTER }
+            val favoritesSides = columnSides.takeIf { theme.favorites.alignment == ThemeAlignment.CENTER }
+            // VISUAL_SPEC §2: header, widget and favourites share the theme's horizontal content padding, so a start (or
+            // end) aligned clock and the favourites share one edge.
+            val contentPadding = theme.list.horizontalPaddingDp.dp
             val header: @Composable (Modifier) -> Unit = { m ->
                 Column(modifier = m) {
                     if (widget == null || !widget.replacesClock) {
@@ -585,15 +595,23 @@ fun HomeScreen(
                             modifier =
                                 Modifier
                                     .then(headerSides?.let { (st, en) -> Modifier.centredOnWindow(st, en) } ?: Modifier)
-                                    .padding(top = HEADER_TOP, start = 16.dp, end = 16.dp),
+                                    .padding(top = HEADER_TOP, start = contentPadding, end = contentPadding),
                         )
                     }
+                    // FB-016: the widget is a block in the header: centred on the window like the clock, never under the
+                    // index; wider (towards the side without the index) only when the provider's minimum width needs it.
+                    val widgetMinPx =
+                        widget?.let { with(density) { (it.minWidthDp.dp + contentPadding * 2).roundToPx() } } ?: 0
                     widget?.content(
-                        Modifier.padding(
-                            top = if (widget.replacesClock) HEADER_TOP else WIDGET_GAP,
-                            start = 16.dp,
-                            end = 16.dp,
-                        ),
+                        Modifier
+                            .then(
+                                columnSides?.let { (st, en) -> Modifier.centredOnWindow(st, en, widgetMinPx) }
+                                    ?: Modifier,
+                            ).padding(
+                                top = if (widget.replacesClock) HEADER_TOP else WIDGET_GAP,
+                                start = contentPadding,
+                                end = contentPadding,
+                            ),
                     )
                 }
             }
@@ -618,7 +636,7 @@ fun HomeScreen(
             } else {
                 header(Modifier)
                 if (theme.search.position == SearchPosition.TOP) pill()
-                FavoritesRegion(state, onAction, appActions, favoritesScroll, Modifier.weight(1f))
+                FavoritesRegion(state, onAction, appActions, favoritesScroll, Modifier.weight(1f), favoritesSides)
                 if (theme.search.position == SearchPosition.BOTTOM) pill()
             }
         }
@@ -656,6 +674,8 @@ private fun FavoritesRegion(
     appActions: (VisibleApp) -> List<CustomAccessibilityAction>,
     scroll: ScrollState,
     modifier: Modifier,
+    /** FB-014: the column's start and end insets in px when the block is centred on the window, else null. */
+    centredSides: Pair<Int, Int>? = null,
 ) {
     val theme = Strata.theme
     val density = LocalDensity.current
@@ -711,6 +731,7 @@ private fun FavoritesRegion(
             appActions = appActions,
             modifier =
                 Modifier
+                    .then(centredSides?.let { (st, en) -> Modifier.centredOnWindow(st, en) } ?: Modifier)
                     .widthIn(max = FAVORITES_MAX_WIDTH)
                     .verticalScroll(scroll, enabled = scroll.maxValue > 0, overscrollEffect = null),
         )
@@ -733,6 +754,7 @@ private fun FavoritesBlock(
                 .semantics { collectionInfo = CollectionInfo(rowCount = favorites.size, columnCount = 1) }
                 .testTag(HomeTestTags.FAVORITES),
         verticalArrangement = Arrangement.spacedBy(theme.favorites.spacingDp.dp),
+        horizontalAlignment = favoriteHorizontalAlignment(),
     ) {
         if (favorites.isEmpty() && state.list != null) {
             // INTERACTION_SPEC §8 "No favourites".
@@ -776,6 +798,7 @@ private fun AllAppsRow(onOpen: () -> Unit) {
             text = stringResource(R.string.home_all_apps),
             style = favoriteTextStyle(),
             color = Strata.colors.textSecondary,
+            textAlign = favoriteTextAlign(),
         )
     }
 }
@@ -1051,20 +1074,33 @@ private const val HEADER_WEIGHT = 0.4f
  * Lays the content out over a symmetric span of the window: the parent is inset by [startPx] and [endPx] (layout
  * direction relative), and the content gets the parent's width minus the difference, placed so that it keeps the
  * larger inset on both sides. Its centre is then the window's centre, and it still never covers what the insets keep
- * clear (FB-007).
+ * clear (FB-007). Content narrower than the span is centred on the window too (FB-014).
+ *
+ * [minWidthPx] (FB-016, a widget's minimum width): when the symmetric span is narrower, the content gets that width (at
+ * most the parent's) and stays as close to the window's centre as the parent allows, so it grows towards the side with
+ * the smaller inset and still never covers the other one.
  */
 internal fun Modifier.centredOnWindow(
     startPx: Int,
     endPx: Int,
+    minWidthPx: Int = 0,
 ): Modifier =
     layout { measurable, constraints ->
-        val side = maxOf(startPx, endPx)
         if (!constraints.hasBoundedWidth) {
             val placeable = measurable.measure(constraints)
             return@layout layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
         }
-        val width = (constraints.maxWidth + startPx + endPx - 2 * side).coerceAtLeast(0)
+        val parent = constraints.maxWidth
+        val side = maxOf(startPx, endPx)
+        val symmetric = (parent + startPx + endPx - 2 * side).coerceAtLeast(0)
+        val width = maxOf(symmetric, minOf(minWidthPx, parent))
         val placeable =
             measurable.measure(constraints.copy(minWidth = minOf(constraints.minWidth, width), maxWidth = width))
-        layout(constraints.maxWidth, placeable.height) { placeable.placeRelative(side - startPx, 0) }
+        // The window's centre in the parent is (parent + endPx - startPx) / 2; keep the content inside the parent.
+        val x =
+            ((parent + endPx - startPx - placeable.width) / 2).coerceIn(
+                0,
+                (parent - placeable.width).coerceAtLeast(0),
+            )
+        layout(parent, placeable.height) { placeable.placeRelative(x, 0) }
     }

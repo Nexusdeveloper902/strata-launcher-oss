@@ -211,6 +211,8 @@ class HomeActivity : ComponentActivity() {
             // Battery: start with the wallpaper flag the theme needs, before the window is added (no wallpaper
             // composed and then dropped). The loaded theme on a recreate, else what the last run applied, if the
             // application's prefetch has it already; otherwise the manifest default stands.
+            // FB-017: the pixel format is fixed before the window is added, so the renderer always clears its buffers.
+            HomeWindow.keepTranslucent(window)
             initialWallpaperState()?.let { HomeWindow.applyInitial(window, it) }
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -232,7 +234,8 @@ class HomeActivity : ComponentActivity() {
                         // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                         ReportDrawnWhen { state.listReady }
                         WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
-                        HomeWallpaperWindow(window, windowMemory)
+                        val themeState by appGraph.themeRepository.state.collectAsStateWithLifecycle()
+                        HomeWallpaperWindow(window, windowMemory, themeLoaded = themeState.loaded)
                         HideStrayIme(state.imeAllowed)
                         val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
                         HomeRoute(
@@ -309,7 +312,7 @@ class HomeActivity : ComponentActivity() {
         val area by widgetArea.state.collectAsStateWithLifecycle()
         if (!area.shown) return null
         val graph = appGraph
-        return HomeWidgetSlot(replacesClock = area.replacesClock) { modifier ->
+        return HomeWidgetSlot(replacesClock = area.replacesClock, minWidthDp = area.minWidthDp) { modifier ->
             WidgetArea(
                 state = area,
                 onAction = widgetArea::onAction,

@@ -34,8 +34,20 @@ One focal action per region; no decorative chrome, cards or shadows on the home 
 └──────────────────────────────┘ ← navigation-bar / gesture inset (safeDrawing bottom)
   ▐ ALPHABET INDEX on `side` edge (FR-THEME-15): visual width 24 dp, touch width 48 dp
 ```
-- Horizontal content padding: `list.horizontalPaddingDp` (default 16). Rows reserve 48 dp
-  on the index side when the index is visible, so labels never sit under the index.
+- Horizontal content padding: `list.horizontalPaddingDp` (default 16), shared by the header
+  (clock, date), the widget area and the favourites, so a start- or end-aligned clock and the
+  favourite labels share one edge (FB-014). The search pill keeps its 16 dp side margin. Rows
+  reserve 48 dp on the index side when the index is visible, so labels never sit under the index.
+- **Centred means centred on the window** (FB-007, FB-014, FB-016; Proposed): a `center`-aligned
+  clock and date, `center`-aligned favourites (and "All apps"), and the widget area are laid out
+  over a span symmetric about the window: the larger side inset (index reserve or display
+  cutout) is kept on both sides, so nothing sits under the index or a cutout. A centred
+  favourite centres its icon and label; badges hang after the label and never move it, and a
+  wrapped label is centred line by line. The widget area is centred whatever the alignments, and
+  is never laid out narrower than the provider's `minWidth` when the column can hold it (it then
+  grows towards the side without the index). The hosted view fills the area; the platform
+  centres the widget's content inside it. Portrait only: in landscape (§8.1) header and
+  favourites are centred in their own panes.
 - `favorites.verticalPosition = top|center` moves the block below the header or centres it.
   `search.position = top` puts the pill under the header.
 - **All-apps list (S-LIST):** full window, top inset + 8 dp, then an optional search field

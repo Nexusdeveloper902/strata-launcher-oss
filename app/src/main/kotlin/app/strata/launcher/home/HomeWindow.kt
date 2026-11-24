@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.graphics.Color
+import android.graphics.PixelFormat
 import android.graphics.drawable.ColorDrawable
 import android.view.Window
 import android.view.WindowManager
@@ -79,13 +80,32 @@ object HomeWindow {
     fun opaque(background: Int): Int = background or OPAQUE
 
     /**
+     * FB-017: fixes home's surface format to translucent, whatever the window background is. Call in `onCreate`, before
+     * the window is added.
+     *
+     * Without an explicit format the window takes it from its background drawable, so the opaque background of an
+     * opaque theme made the format `OPAQUE`. The renderer decides once, when the window is added, whether the surface
+     * is opaque (`ViewRootImpl.enableHardwareAcceleration`: translucent = format is not `OPAQUE`), and an opaque renderer
+     * never clears a buffer before drawing it. A later switch to a theme that lets the wallpaper through changes the
+     * format only for the compositor, so home's see-through backdrop was drawn over whatever the reused buffer still
+     * held: an earlier layer (the app list) stayed visible behind the favourites page and smeared as it scrolled. With a
+     * fixed translucent format the renderer clears every frame. The wallpaper flag still follows the theme, so the
+     * system composes no wallpaper behind an opaque home (the battery fix stays).
+     */
+    fun keepTranslucent(window: Window) {
+        if (window.attributes.format != PixelFormat.TRANSLUCENT) window.setFormat(PixelFormat.TRANSLUCENT)
+    }
+
+    /**
      * The state to start in, applied in `onCreate` before `setContent` (before the window is added), so a start never
-     * composes a wallpaper it then drops: the wallpaper flag and an opaque or transparent background.
+     * composes a wallpaper it then drops: the wallpaper flag and an opaque or transparent background. The pixel format
+     * stays translucent ([keepTranslucent]).
      */
     fun applyInitial(
         window: Window,
         state: WallpaperWindowState,
     ) {
+        keepTranslucent(window)
         setShowsWallpaper(window, state.show)
         setBackground(window, if (state.show) Color.TRANSPARENT else opaque(state.background))
     }
@@ -193,12 +213,19 @@ class HomeWindowMemory(
 internal fun HomeWallpaperWindow(
     window: Window,
     memory: HomeWindowMemory?,
+    /**
+     * The active theme has been loaded. Before that the composition shows the built-in default, which is not the
+     * user's theme: acting on it would drop the wallpaper of a see-through theme for a moment at every cold start and
+     * remember the wrong state for the next one.
+     */
+    themeLoaded: Boolean,
 ) {
     val theme = Strata.theme
     val show = HomeWindow.showsWallpaper(theme.wallpaper)
     val background = theme.colors.background
     val fade: BackdropFade? = Strata.backdropFade
-    LaunchedEffect(show, background) {
+    LaunchedEffect(show, background, themeLoaded) {
+        if (!themeLoaded) return@LaunchedEffect
         val flagged = HomeWindow.showsWallpaper(window)
         if (show) {
             HomeWindow.setShowsWallpaper(window, true)
