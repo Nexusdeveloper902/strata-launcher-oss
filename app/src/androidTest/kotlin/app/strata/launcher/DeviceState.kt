@@ -325,7 +325,20 @@ class DeviceStateRule(
  * were enabled before (two-button, gestural variants, or none), or null when nothing changed.
  */
 private fun applyNavMode(testWants: String?): (() -> Unit)? {
-    val wanted = testWants ?: InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
+    if (testWants != null) {
+        // A mode the test needs (its precondition): where the device cannot provide it (no such overlay, or it cannot
+        // be enabled; the overlay is then put back), the test is skipped visibly, as it was when the test switched by
+        // itself. A switch that applies and then breaks (the mode is never reported) is restored and fails.
+        return try {
+            switchNavMode(testWants)
+        } catch (e: NavModeUnavailable) {
+            throw org.junit.AssumptionViolatedException(
+                "navigation mode '$testWants' is not available: ${e.message}",
+                e,
+            )
+        }
+    }
+    val wanted = InstrumentationRegistry.getArguments().getString("strata.navMode") ?: return null
     return switchNavMode(wanted)
 }
 
@@ -340,6 +353,7 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     val before = enabledNavOverlays()
     val settingBefore = navModeSetting()
     if (before == listOf(overlay)) return null
+    if (overlay !in installedNavOverlays()) throw NavModeUnavailable("$overlay is not installed on this device")
     // Built before the switch, so a switch that fails half-way (overlay enabled, mode never reported) is undone too.
     val restore = {
         if (before.isEmpty()) {
@@ -357,9 +371,9 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     try {
         setNavOverlay(overlay)
         val after = enabledNavOverlays()
-        check(
-            overlay in after,
-        ) { "strata.navMode=$wanted: $overlay not active after enable-exclusive (enabled: $after)" }
+        if (overlay !in after) {
+            throw NavModeUnavailable("$overlay could not be enabled (enabled after enable-exclusive: $after)")
+        }
         awaitNavModeSetting(NAV_MODE_SETTING.getValue(wanted), "strata.navMode=$wanted")
     } catch (e: Throwable) {
         runCatching(restore).onFailure { e.addSuppressed(it) }
@@ -367,6 +381,19 @@ fun switchNavMode(wanted: String): (() -> Unit)? {
     }
     return restore
 }
+
+/** The device has no such navigation mode, or it cannot be enabled. */
+class NavModeUnavailable(
+    message: String,
+) : IllegalStateException(message)
+
+/** Every overlay of the `com.android.internal.systemui.navbar.*` family, enabled or not. */
+private fun installedNavOverlays(): List<String> =
+    shell("cmd overlay list android")
+        .lines()
+        .map(String::trim)
+        .map { it.removePrefix("[x]").removePrefix("[ ]").trim() }
+        .filter { it.startsWith(NAV_OVERLAY_PREFIX) }
 
 private fun navModeSetting(): String = shell("settings get secure navigation_mode").trim()
 
@@ -524,6 +551,88 @@ private fun restoreGlobal(
         shell("settings put global $key $previous")
     }
 }
+
+/**
+ * A vertical one-finger swipe at [x] from [fromY] to [toY], injected with planned event times: one move every
+ * [SWIPE_STEP_MS] ms, released while moving. Each event is injected at (or after) its planned time but keeps that time,
+ * so the swipe's velocity does not depend on how late the test thread gets to inject it (UiDevice.swipe stamps each step
+ * when injected, so on a loaded emulator its gaps read as pauses).
+ *
+ * [downTime] is the stream's `ACTION_DOWN` time; by default now. An earlier time makes the swipe the tail of a stream
+ * that began before (T-GEST-10: the rest of a gesture handed to an arriving window). A swipe that stops half-way sends
+ * `ACTION_CANCEL`, so no pointer stays down.
+ */
+fun injectSwipe(
+    x: Int,
+    fromY: Int,
+    toY: Int,
+    downTime: Long = SystemClock.uptimeMillis(),
+) {
+    val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    val start = SystemClock.uptimeMillis()
+
+    fun event(
+        action: Int,
+        time: Long,
+        y: Float,
+    ): android.view.MotionEvent {
+        val properties =
+            android.view.MotionEvent.PointerProperties().apply {
+                id = 0
+                toolType = android.view.MotionEvent.TOOL_TYPE_FINGER
+            }
+        val coords =
+            android.view.MotionEvent.PointerCoords().apply {
+                this.x = x.toFloat()
+                this.y = y
+                pressure = 1f
+                size = 1f
+            }
+        return android.view.MotionEvent
+            .obtain(downTime, time, action, 1, arrayOf(properties), arrayOf(coords), 0, 0, 1f, 1f, 0, 0, 0, 0)
+            .apply { source = android.view.InputDevice.SOURCE_TOUCHSCREEN }
+    }
+
+    fun inject(
+        action: Int,
+        time: Long,
+        y: Float,
+    ) {
+        val wait = time - SystemClock.uptimeMillis()
+        if (wait > 0) SystemClock.sleep(wait)
+        val e = event(action, time, y)
+        try {
+            check(automation.injectInputEvent(e, true)) { "swipe: injecting action $action failed" }
+        } finally {
+            e.recycle()
+        }
+    }
+    var pointerDown = false
+    var lastY = fromY.toFloat()
+    try {
+        inject(android.view.MotionEvent.ACTION_DOWN, minOf(downTime, start), lastY)
+        pointerDown = true
+        for (i in 1..SWIPE_MOVES) {
+            lastY = fromY + (toY - fromY) * i / SWIPE_MOVES.toFloat()
+            inject(android.view.MotionEvent.ACTION_MOVE, start + i * SWIPE_STEP_MS, lastY)
+        }
+        inject(android.view.MotionEvent.ACTION_UP, start + SWIPE_MOVES * SWIPE_STEP_MS, toY.toFloat())
+        pointerDown = false
+    } finally {
+        if (pointerDown) {
+            val cancel = event(android.view.MotionEvent.ACTION_CANCEL, SystemClock.uptimeMillis(), lastY)
+            try {
+                automation.injectInputEvent(cancel, true)
+            } finally {
+                cancel.recycle()
+            }
+        }
+    }
+}
+
+// 12 moves at 8 ms, a 120 Hz touch panel's cadence: about 100 ms of steady movement, released in motion.
+private const val SWIPE_MOVES = 12
+private const val SWIPE_STEP_MS = 8L
 
 /** A plain, opaque activity without Compose content (test APK manifest); see [coverForeignActivities]. */
 class CoverActivity : Activity()
