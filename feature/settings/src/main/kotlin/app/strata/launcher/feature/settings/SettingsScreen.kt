@@ -471,7 +471,7 @@ private fun LockDisclosure(onAction: (SettingsAction) -> Unit) {
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.LOCK_DISCLOSURE),
+        modifier = Modifier.dialogTag(SettingsTestTags.LOCK_DISCLOSURE),
     )
 }
 
@@ -647,7 +647,7 @@ private fun BadgeDisclosure(
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.BADGE_DISCLOSURE),
+        modifier = Modifier.dialogTag(SettingsTestTags.BADGE_DISCLOSURE),
     )
 }
 
@@ -669,7 +669,7 @@ private fun ContactsDisclosure(onAction: (SettingsAction) -> Unit) {
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.CONTACTS_DISCLOSURE),
+        modifier = Modifier.dialogTag(SettingsTestTags.CONTACTS_DISCLOSURE),
     )
 }
 
@@ -691,9 +691,15 @@ private fun UninstallGuidance(onAction: (SettingsAction) -> Unit) {
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.UNINSTALL_GUIDANCE),
+        modifier = Modifier.dialogTag(SettingsTestTags.UNINSTALL_GUIDANCE),
     )
 }
+
+/**
+ * Test tag of a dialog pane, visible to UiAutomator too. A dialog is its own window with its own semantics root, so the
+ * `testTagsAsResourceId` set on the settings screen does not reach it; the dialog sets it for itself and its buttons.
+ */
+internal fun Modifier.dialogTag(tag: String): Modifier = semantics { testTagsAsResourceId = true }.testTag(tag)
 
 internal fun LazyListScope.group(
     title: Int,

@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Looper
+import androidx.compose.ui.semantics.SemanticsPropertiesAndroid
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
@@ -171,12 +173,14 @@ class PermissionSetupSettingsTest {
 
         onPrivacy(SettingsPageTags.PRIVACY_NOTIFICATIONS + "_action").performClick()
         idle()
+        assertDialogTagsVisibleToUiAutomator(SettingsTestTags.BADGE_DISCLOSURE)
         compose.onNodeWithTag(SettingsTestTags.BADGE_CONTINUE).performClick()
         idle()
         assertThat(g.badges.grantScreensOpened).isEqualTo(1)
 
         onPrivacy(SettingsPageTags.PRIVACY_LOCK + "_action").performClick()
         idle()
+        assertDialogTagsVisibleToUiAutomator(SettingsTestTags.LOCK_DISCLOSURE)
         compose.onNodeWithTag(SettingsTestTags.LOCK_CONTINUE).performClick()
         idle()
         assertThat(g.systemIntents.started).contains(FakeSystemIntents.ACCESSIBILITY)
@@ -184,6 +188,15 @@ class PermissionSetupSettingsTest {
         onPrivacy(SettingsPageTags.PRIVACY_DEFAULT_HOME + "_action").performClick()
         idle()
         assertThat(shadowOf(controller.get()).nextStartedActivityForResult).isNotNull()
+    }
+
+    /**
+     * T-SET-14's precondition: a disclosure is its own window with its own semantics root, so it must turn on
+     * `testTagsAsResourceId` itself, or UiAutomator never finds its tag or its Continue button (CI run 45305632400).
+     */
+    private fun assertDialogTagsVisibleToUiAutomator(tag: String) {
+        val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        assertThat(node.config.getOrNull(SemanticsPropertiesAndroid.TestTagsAsResourceId)).isTrue()
     }
 
     /** T-SET-12: everything given → "Allowed: 5 of 5", no guide, and each action opens where it is withdrawn. */
