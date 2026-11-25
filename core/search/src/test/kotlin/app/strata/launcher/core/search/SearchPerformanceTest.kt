@@ -63,6 +63,31 @@ class SearchPerformanceTest {
         assertThat(p95Ms).isAtMost(FUZZY_P95_CEILING_MS)
     }
 
+    /**
+     * T-PERF-05 with neighbouring-key slips (FB-015, Proposed): two- and three-letter slips that the earlier fuzzy pass
+     * never saw, plus longer ones. Reported, with the same loose ceilings as the typo set.
+     */
+    @Test
+    fun tPerf05_adjacentQueriesLatency500Apps() {
+        val idx = index(apps, counts)
+        val queries = listOf("pg", "oh", "pgo", "phpne", "cslendsr", "mapz")
+        repeat(WARMUP) { queries.forEach { q -> idx.rank(q, includeHidden = true) } }
+        val samples = ArrayList<Long>()
+        repeat(RUNS) {
+            for (q in queries) {
+                val t0 = System.nanoTime()
+                idx.rank(q, includeHidden = true)
+                samples += System.nanoTime() - t0
+            }
+        }
+        samples.sort()
+        val medianMs = samples[samples.size / 2] / 1e6
+        val p95Ms = samples[(samples.size * 95) / 100] / 1e6
+        println("T-PERF-05 JVM slips: median=%.3f ms p95=%.3f ms (n=%d)".format(medianMs, p95Ms, samples.size))
+        assertThat(medianMs).isAtMost(FUZZY_MEDIAN_CEILING_MS)
+        assertThat(p95Ms).isAtMost(FUZZY_P95_CEILING_MS)
+    }
+
     @Test
     fun indexBuild500Apps() {
         val cache = HashMap<String, String>()

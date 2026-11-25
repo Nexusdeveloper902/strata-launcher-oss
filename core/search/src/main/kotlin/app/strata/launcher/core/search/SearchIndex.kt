@@ -9,6 +9,12 @@ enum class MatchTier(val base: Int) {
     PREFIX(500),
     WORD_PREFIX(400),
     INITIALS(300),
+
+    /**
+     * A word start typed with neighbouring keys ("pg" → "Phone", FB-015, D-016): below the intentional tiers T1–T4,
+     * above substring, package and generic fuzzy matches.
+     */
+    ADJACENT(250),
     SUBSTRING(200),
 
     /** A package-name match (D-016): below every label match, above fuzzy. */
@@ -39,6 +45,9 @@ fun interface Transliterate {
  */
 class SearchIndex private constructor(
     private val entries: Array<Entry>,
+    private val keyboard: KeyboardLayout,
+    /** The longest label form in code points: no adjacent or fuzzy match is possible beyond it (R-002). */
+    private val maxFormLength: Int,
 ) {
     val size: Int get() = entries.size
 
@@ -47,9 +56,11 @@ class SearchIndex private constructor(
      * (FR-SEARCH-03). Order: tier (one lower for a transliterated form), then score, then collation of the display
      * label, so usage and bonuses never move a result across tiers.
      *
-     * Two passes: tiers T1–T5 and the package tier over every entry, then T6 (fuzzy) over the entries that did not
-     * match, but only when the first pass found fewer than [FUZZY_WHEN_FEWER_THAN] label matches (package-only hits do
-     * not count) and the query is long enough and contains a letter (FR-SEARCH-02).
+     * Two passes: tiers T1–T5 and the package tier over every entry, then the forgiving tiers over the entries that
+     * did not match, only when the first pass found fewer than [FUZZY_WHEN_FEWER_THAN] label matches (package-only hits
+     * do not count) and the query contains a letter (FR-SEARCH-02): [MatchTier.ADJACENT] (neighbouring keys at a word
+     * start, 2+ characters) first, else T6 fuzzy (4+ characters).
+     * Lengths are code points; a query longer than every label form plus the edit budget skips the second pass.
      */
     fun rank(
         query: String,
@@ -76,41 +87,52 @@ class SearchIndex private constructor(
                 unmatched[index] = true
             }
         }
-        // Lengths in code points: an emoji or another supplementary character is one character, not two.
-        val edits = if (Fuzzy.hasLetter(q)) Fuzzy.maxEdits(q.codePointCount(0, q.length)) else 0
-        if (edits > 0 && labelMatches < FUZZY_WHEN_FEWER_THAN && unmatched != null) {
-            val scratch = Fuzzy.Scratch(q.length + edits + 1)
-            for (index in entries.indices) {
-                if (!unmatched[index]) continue
-                val entry = entries[index]
-                var best: Match? = null
-                for (form in entry.forms) {
-                    val at = form.fuzzy(q, edits, scratch)
-                    if (at != Form.NO_FUZZY) {
-                        best =
-                            better(
-                                best,
-                                entry,
-                                form,
-                                MatchTier.FUZZY,
-                                if (at ==
-                                    Form.FUZZY_AT_START
-                                ) {
-                                    START_BONUS
-                                } else {
-                                    0
-                                },
-                            )
-                    }
-                }
-                if (best != null) matches += best
-            }
-        }
+        if (unmatched != null) forgiving(q, labelMatches, unmatched, matches)
         matches.sortWith(ORDER)
         return matches.map {
             SearchHit(it.entry.app, it.score, it.tier, it.form.display, it.form.transliterated)
         }
     }
+
+    /** The second pass: [MatchTier.ADJACENT], then [MatchTier.FUZZY], over the [unmatched] entries. */
+    private fun forgiving(
+        q: String,
+        labelMatches: Int,
+        unmatched: BooleanArray,
+        out: MutableList<Match>,
+    ) {
+        if (labelMatches >= FUZZY_WHEN_FEWER_THAN || !Fuzzy.hasLetter(q)) return
+        // Lengths in code points: an emoji or another supplementary character is one character, not two.
+        val length = q.codePointCount(0, q.length)
+        val edits = Fuzzy.maxEdits(length)
+        val slips = Adjacent.maxSlips(length)
+        // One key typed says nothing about which key was meant: slips start at two characters (FB-015).
+        val adjacent = length in Adjacent.MIN_LENGTH..maxFormLength
+        val fuzzy = edits > 0 && length <= maxFormLength + edits
+        if (!adjacent && !fuzzy) return
+        val cps = q.codePoints().toArray()
+        val scratch = if (fuzzy) Fuzzy.Scratch(minOf(length, maxFormLength) + edits + 1) else null
+        for (index in entries.indices) {
+            if (!unmatched[index]) continue
+            val entry = entries[index]
+            var best: Match? = null
+            if (adjacent) {
+                for (form in entry.forms) {
+                    val at = form.adjacent(cps, slips, keyboard)
+                    if (at != Form.NO_FUZZY) best = better(best, entry, form, MatchTier.ADJACENT, startBonus(at))
+                }
+            }
+            if (best == null && scratch != null) {
+                for (form in entry.forms) {
+                    val at = form.fuzzy(cps, edits, scratch)
+                    if (at != Form.NO_FUZZY) best = better(best, entry, form, MatchTier.FUZZY, startBonus(at))
+                }
+            }
+            if (best != null) out += best
+        }
+    }
+
+    private fun startBonus(at: Int): Int = if (at == Form.FUZZY_AT_START) START_BONUS else 0
 
     private fun better(
         current: Match?,
@@ -164,9 +186,19 @@ class SearchIndex private constructor(
         /** [FormKind.PACKAGE] only: the whole folded package name ("com example chatty"). */
         val full: String = folded,
     ) {
-        /** Start offsets of words after the first (the first is the label prefix). */
+        /** Start offsets of words after the first (the first is the label prefix), in UTF-16 units. */
         private val wordStarts: IntArray
         private val initials: String
+
+        /** The folded form as code points, for the adjacent and fuzzy tiers (labels and camel splits; else empty). */
+        private val cps: IntArray =
+            if (kind == FormKind.PACKAGE) EMPTY_INTS else folded.codePoints().toArray()
+
+        /** Start offsets of words after the first, in code points (indexes into [cps]). */
+        private val cpWordStarts: IntArray
+
+        /** Length in code points (0 for package forms, which are never matched forgivingly). */
+        val length: Int get() = cps.size
 
         init {
             val starts = ArrayList<Int>()
@@ -179,6 +211,9 @@ class SearchIndex private constructor(
             }
             wordStarts = starts.toIntArray()
             initials = init.toString()
+            val cpStarts = ArrayList<Int>()
+            for (i in 1 until cps.size) if (cps[i - 1] == ' '.code) cpStarts += i
+            cpWordStarts = cpStarts.toIntArray()
         }
 
         fun match(q: String): MatchTier? {
@@ -217,24 +252,43 @@ class SearchIndex private constructor(
             q.length >= 2 && wordStarts.isNotEmpty() && initials.startsWith(q)
 
         /**
-         * T6: [q] is within [edits] of a prefix of the label ([FUZZY_AT_START]) or of one of its later words
-         * ([FUZZY_AT_WORD]); [NO_FUZZY] otherwise. Labels only, never package names.
+         * [MatchTier.ADJACENT]: [q] equals the start of the label ([FUZZY_AT_START]) or of a later word
+         * ([FUZZY_AT_WORD]) except for 1..[slips] substitutions by a neighbouring key of [keyboard]; [NO_FUZZY]
+         * otherwise. Labels and camel-case splits, never package names.
+         */
+        fun adjacent(
+            q: IntArray,
+            slips: Int,
+            keyboard: KeyboardLayout,
+        ): Int {
+            if (kind == FormKind.PACKAGE || cps.size < q.size) return NO_FUZZY
+            if (Adjacent.slipsAt(q, cps, 0, slips, keyboard)) return FUZZY_AT_START
+            for (start in cpWordStarts) {
+                if (Adjacent.slipsAt(q, cps, start, slips, keyboard)) return FUZZY_AT_WORD
+            }
+            return NO_FUZZY
+        }
+
+        /**
+         * T6: [q] (code points) is within [edits] of a prefix of the label ([FUZZY_AT_START]) or of one of its later
+         * words ([FUZZY_AT_WORD]); [NO_FUZZY] otherwise. Labels only, never package names or camel splits.
          */
         fun fuzzy(
-            q: String,
+            q: IntArray,
             edits: Int,
             scratch: Fuzzy.Scratch,
         ): Int {
-            if (kind != FormKind.LABEL || folded.length < q.length - edits) return NO_FUZZY
-            if (Fuzzy.withinEditsOfPrefix(q, folded, 0, edits, scratch)) return FUZZY_AT_START
-            for (start in wordStarts) {
-                if (folded.length - start < q.length - edits) continue
-                if (Fuzzy.withinEditsOfPrefix(q, folded, start, edits, scratch)) return FUZZY_AT_WORD
+            if (kind != FormKind.LABEL || cps.size < q.size - edits) return NO_FUZZY
+            if (Fuzzy.withinEditsOfPrefix(q, cps, 0, edits, scratch)) return FUZZY_AT_START
+            for (start in cpWordStarts) {
+                if (cps.size - start < q.size - edits) continue
+                if (Fuzzy.withinEditsOfPrefix(q, cps, start, edits, scratch)) return FUZZY_AT_WORD
             }
             return NO_FUZZY
         }
 
         companion object {
+            private val EMPTY_INTS = IntArray(0)
             const val NO_FUZZY = 0
             const val FUZZY_AT_WORD = 1
             const val FUZZY_AT_START = 2
@@ -260,7 +314,7 @@ class SearchIndex private constructor(
         /** A package name is matched only for queries of at least this length. */
         const val PACKAGE_MIN: Int = 3
 
-        val EMPTY: SearchIndex = SearchIndex(emptyArray())
+        val EMPTY: SearchIndex = SearchIndex(emptyArray(), KeyboardLayout.QWERTY, 0)
 
         /**
          * Package segments that say nothing about the app: domains and platform words ("com", "android"…) and the
@@ -321,6 +375,7 @@ class SearchIndex private constructor(
          * [launchCounts] are 30-day counts (pass an empty map while the log is paused).
          * [transliterate] is applied to non-Latin labels only; [translitCache] keeps its results across
          * rebuilds so the ICU cost is paid once per label.
+         * [keyboard] gives the neighbouring keys of [MatchTier.ADJACENT] (FB-015; QWERTY, the owner's keyboard).
          */
         fun build(
             apps: List<VisibleApp>,
@@ -328,6 +383,7 @@ class SearchIndex private constructor(
             comparator: Comparator<String>?,
             transliterate: Transliterate? = null,
             translitCache: MutableMap<String, String>? = null,
+            keyboard: KeyboardLayout = KeyboardLayout.QWERTY,
         ): SearchIndex {
             val entries =
                 Array(apps.size) { i ->
@@ -370,7 +426,9 @@ class SearchIndex private constructor(
                     }
                 order.forEachIndexed { rank, i -> entries[i].collationRank = rank }
             }
-            return SearchIndex(entries)
+            var maxLength = 0
+            for (e in entries) for (f in e.forms) if (f.length > maxLength) maxLength = f.length
+            return SearchIndex(entries, keyboard, maxLength)
         }
 
         private fun addForms(
@@ -441,25 +499,29 @@ internal object Fuzzy {
         }
     }
 
-    /** True when [q] is within one edit of `f[0, L)` for some L in `q.length - 1 .. q.length + 1`. */
+    /** True when [q] is within one edit of `f[0, L)` for some L in `q.length - 1 .. q.length + 1` (code points). */
     fun withinOneEditOfPrefix(
         q: String,
         f: String,
-    ): Boolean = withinEditsOfPrefix(q, f, 0, 1, Scratch(q.length + 2))
+    ): Boolean {
+        val qc = q.codePoints().toArray()
+        return withinEditsOfPrefix(qc, f.codePoints().toArray(), 0, 1, Scratch(qc.size + 2))
+    }
 
     /**
      * True when the OSA distance between [q] and `f[start, start + L)` is at most [k] for some prefix length L
-     * (`q.length - k ≤ L ≤ q.length + k`). The prefix may run across word boundaries ("grandmaps" → "grand maps").
+     * (`q.size - k ≤ L ≤ q.size + k`). Both are code points, so a surrogate pair is one character (R-002). The prefix
+     * may run across word boundaries ("grandmaps" → "grand maps"). [scratch] grows to the label side only.
      */
     fun withinEditsOfPrefix(
-        q: String,
-        f: String,
+        q: IntArray,
+        f: IntArray,
         start: Int,
         k: Int,
         scratch: Scratch,
     ): Boolean {
-        val n = q.length
-        val m = minOf(f.length - start, n + k)
+        val n = q.size
+        val m = minOf(f.size - start, n + k)
         if (m < n - k || n == 0) return false
         scratch.ensure(m + 1)
         var prev2 = scratch.prev2
@@ -486,5 +548,44 @@ internal object Fuzzy {
         // `prev` holds row n: the distance from q to each prefix f[start, start + j).
         for (j in maxOf(0, n - k)..m) if (prev[j] <= k) return true
         return false
+    }
+}
+
+/**
+ * [MatchTier.ADJACENT] (FB-015, FR-SEARCH-02 as amended, Proposed): the query is a word start of the label typed with
+ * one or more fingers on a neighbouring key: substitutions only, each between neighbouring keys of the layout, no
+ * insertions, deletions or other substitutions.
+ */
+internal object Adjacent {
+    /** Neighbour-key substitutions allowed for a query of [length] code points: 1 up to 4, 2 for 5–9, 3 from 10. */
+    fun maxSlips(length: Int): Int =
+        when {
+            length < TWO_FROM -> 1
+            length < THREE_FROM -> 2
+            else -> 3
+        }
+
+    /** A single key never slips. */
+    const val MIN_LENGTH = 2
+    private const val TWO_FROM = 5
+    private const val THREE_FROM = 10
+
+    /** True when `f[start, start + q.size)` differs from [q] in 1..[slips] places, each a neighbouring key. */
+    fun slipsAt(
+        q: IntArray,
+        f: IntArray,
+        start: Int,
+        slips: Int,
+        keyboard: KeyboardLayout,
+    ): Boolean {
+        if (f.size - start < q.size) return false
+        var used = 0
+        for (i in q.indices) {
+            val a = q[i]
+            val b = f[start + i]
+            if (a == b) continue
+            if (++used > slips || !keyboard.isNeighbour(a, b)) return false
+        }
+        return used > 0
     }
 }

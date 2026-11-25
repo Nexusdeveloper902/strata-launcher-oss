@@ -18,7 +18,7 @@ Status values: `queued`, `in progress (<branch>)`, `in review (#PR)`, `done (#PR
 | FB-010 | P3 | Use platform features up to Android 17 where useful (personal build) | Raise compileSdk/targetSdk to the newest available; minSdk stays unless a feature needs it (decision) | queued |
 | FB-011 | P3 | Glyph tweaks the owner may ask for later | The current set is approved | queued |
 | FB-014 | P2 | Now that the clock is centred, the app list looks off-centre | Check the list's horizontal alignment and padding against the centred header in every theme | in review (fb-ui-batch-3) |
-| FB-015 | P2 | Search should forgive pressing a neighbouring key ("pg" for "ph" when looking for Phone) | Keyboard-adjacency-aware matching: a substitution with a neighbouring key costs less than any other typo, also for short queries | queued |
+| FB-015 | P2 | Search should forgive pressing a neighbouring key ("pg" for "ph" when looking for Phone) | Keyboard-adjacency-aware matching: a substitution with a neighbouring key costs less than any other typo, also for short queries | in review (fb-search-keys) |
 | FB-016 | P2 | Widgets look off-centre (e.g. a music player widget) | Check widget host sizing, padding and gravity against the column | in review (fb-ui-batch-3) |
 | FB-017 | P1 | A launcher screen (e.g. the app list) stays frozen behind the favourites page instead of the wallpaper when swiping or scrolling | Stale backdrop: the previous layer is not cleared or redrawn when it should show the wallpaper | in review (fb-ui-batch-3) |
 | FB-018 | P1 | The nightly CI run fails every night and sends failure notifications | Make the scheduled nightly on main green; see docs/ci/RELIABILITY.md | in progress (compose-test-v2) |
@@ -30,7 +30,7 @@ Gaps and follow-ups found by reviewers or spec checks. Same status values; IDs R
 | ID | Pri | Item | Notes | Status |
 |---|---|---|---|---|
 | R-001 | P3 | Clock size is not capped at 40 % of the screen width per line (THEME_SYSTEM `sizeSp`) | Owner chose to keep the app as is; THEME_SYSTEM amended, no cap | done (#40) |
-| R-002 | P3 | Fuzzy search: scratch arrays sized to the whole query; surrogate pairs count as two edits | Codex findings on #38; skip fuzzy for queries longer than any indexed form; compute distance over code points | queued |
+| R-002 | P3 | Fuzzy search: scratch arrays sized to the whole query; surrogate pairs count as two edits | Codex findings on #38; skip fuzzy for queries longer than any indexed form; compute distance over code points | in review (fb-search-keys) |
 
 ## Done
 

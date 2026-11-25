@@ -189,7 +189,8 @@ class ForgivingSearchTest {
     /** T-SEARCH-22: fuzzy matching runs only when the earlier tiers found fewer than 5 results. */
     @Test
     fun tSearch22_fuzzyOnlyWhenFewResults() {
-        val nite = visible("Nite Mode")
+        // "Nate Mode": one substitution that is not a neighbouring key (o, a), so fuzzy, not a slip.
+        val nite = visible("Nate Mode")
         val four = listOf("Notes", "Keep Notes", "Notebook", "Footnote").map { visible(it) }
         val withFour = index(four + nite)
         assertThat(withFour.labels("note")).hasSize(5)
@@ -202,7 +203,7 @@ class ForgivingSearchTest {
         assertThat(withFour.rank("note", true).last().tier).isEqualTo(MatchTier.FUZZY)
         val withFive = index(four + visible("Denote") + nite)
         assertThat(withFive.labels("note")).hasSize(5)
-        assertThat(withFive.labels("note")).doesNotContain("Nite Mode")
+        assertThat(withFive.labels("note")).doesNotContain("Nate Mode")
         assertThat(SearchIndex.FUZZY_WHEN_FEWER_THAN).isEqualTo(5)
     }
 
@@ -218,9 +219,11 @@ class ForgivingSearchTest {
         assertThat(Fuzzy.maxEdits(7)).isEqualTo(1)
         assertThat(Fuzzy.maxEdits(8)).isEqualTo(2)
         val s = Fuzzy.Scratch(4)
-        assertThat(Fuzzy.withinEditsOfPrefix("grandmaps", "grand maps", 0, 2, s)).isTrue()
-        assertThat(Fuzzy.withinEditsOfPrefix("pixlgram", "pixelgram", 0, 1, s)).isTrue()
-        assertThat(Fuzzy.withinEditsOfPrefix("keybaord", "northwind quicktype keyboard", 20, 1, s)).isTrue()
-        assertThat(Fuzzy.withinEditsOfPrefix("keybaord", "northwind quicktype keyboard", 0, 1, s)).isFalse()
+
+        fun cp(t: String) = t.codePoints().toArray()
+        assertThat(Fuzzy.withinEditsOfPrefix(cp("grandmaps"), cp("grand maps"), 0, 2, s)).isTrue()
+        assertThat(Fuzzy.withinEditsOfPrefix(cp("pixlgram"), cp("pixelgram"), 0, 1, s)).isTrue()
+        assertThat(Fuzzy.withinEditsOfPrefix(cp("keybaord"), cp("northwind quicktype keyboard"), 20, 1, s)).isTrue()
+        assertThat(Fuzzy.withinEditsOfPrefix(cp("keybaord"), cp("northwind quicktype keyboard"), 0, 1, s)).isFalse()
     }
 }
