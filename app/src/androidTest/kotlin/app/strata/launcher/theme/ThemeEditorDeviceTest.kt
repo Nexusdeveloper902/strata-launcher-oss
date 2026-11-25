@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
+import android.os.Build
 import android.os.StrictMode
 import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
@@ -36,6 +37,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executor
 
 /**
  * Level I editor flows in the real app over real storage (AtomicFile, DataStore):
@@ -229,61 +232,81 @@ class ThemeEditorDeviceTest {
         assertThat(requested.intersect(storage)).isEmpty()
     }
 
+    /**
+     * The flows run with StrictMode on every thread involved: the app's main thread detects everything (no network and
+     * no disk access during the editor flows), the test thread network, the VM cleartext traffic.
+     *
+     * On API 28+ each violation is recorded with its stack and fails the test, together with the flows' own failure
+     * if any. Penalty death, used before, killed the instrumentation process instead: twice on API 34 the run lost
+     * this test ("Expected 92 tests, received 91", runs 44227087271 and 45479694058) and no log named the violation,
+     * because GMD keeps no logcat for a test whose process died. The coverage is unchanged: `penaltyDeath()` applied
+     * to the whole main-thread policy, which already detected everything (the app's debug `detectAll()`). Below API 28
+     * StrictMode has no listener, so death stays there.
+     */
     @Test
     fun tTheme51_editorFlowsMakeNoNetworkAccess() {
         val id = storeTheme(ID_51, "No network", ""","colors":{"mode":"light","light":{"textSecondary":"#BBBBBB"}}""")
         val instr = InstrumentationRegistry.getInstrumentation()
         // Prepared before StrictMode is armed (the copy is test set-up, not an editor flow).
         val uri = fixtureImageUri()
-        val policy =
-            StrictMode.ThreadPolicy
-                .Builder()
-                .detectNetwork()
-                .penaltyDeath()
-                .build()
+        val violations = ConcurrentLinkedQueue<Pair<String, Throwable>>()
+        // Runs on the violating thread, before any other penalty.
+        val direct = Executor { it.run() }
         val oldThread = StrictMode.getThreadPolicy()
         val oldVm = StrictMode.getVmPolicy()
         var oldMain: StrictMode.ThreadPolicy? = null
         instr.runOnMainSync {
             oldMain = StrictMode.getThreadPolicy()
-            StrictMode.setThreadPolicy(
-                StrictMode.ThreadPolicy
-                    .Builder(oldMain!!)
-                    // The app's main thread: no network and no disk access at all during the editor flows.
-                    .detectNetwork()
-                    .detectDiskReads()
-                    .detectDiskWrites()
-                    .penaltyDeath()
-                    .build(),
-            )
-        }
-        StrictMode.setThreadPolicy(policy)
-        StrictMode.setVmPolicy(
-            StrictMode.VmPolicy
-                .Builder()
-                .detectCleartextNetwork()
-                .penaltyDeathOnCleartextNetwork()
-                .build(),
-        )
-        try {
-            launch(EditorRequest.Edit(id)).use { s ->
-                s.await("banner") { it.contrast?.failing?.isNotEmpty() == true }
-                s.action(EditorAction.Set("colors.light.accent", "#224488"))
-                s.action(EditorAction.Fix)
-                s.await("fixed") { it.contrast?.allPass == true }
-                s.action(EditorAction.OpenJson)
-                s.action(EditorAction.CloseJson)
-                s.action(EditorAction.KeepImageAsWallpaper(true))
-                s.onActivity { it.onImagePicked(uri) }
-                s.await("seed") { it.document?.colors?.sourceKind == SourceKind.SEED && !it.busy }
-                s.action(EditorAction.Apply)
-                s.await("saved") { !it.dirty }
+            val main = StrictMode.ThreadPolicy.Builder().detectAll()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                main.penaltyListener(direct) { violations += "main thread" to it }
+            } else {
+                main.penaltyDeath()
             }
-        } finally {
-            instr.runOnMainSync { oldMain?.let(StrictMode::setThreadPolicy) }
-            StrictMode.setThreadPolicy(oldThread)
-            StrictMode.setVmPolicy(oldVm)
+            StrictMode.setThreadPolicy(main.build())
         }
+        val test = StrictMode.ThreadPolicy.Builder().detectNetwork()
+        val vm = StrictMode.VmPolicy.Builder().detectCleartextNetwork()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            test.penaltyListener(direct) { violations += "test thread" to it }
+            vm.penaltyListener(direct) { violations += "VM" to it }
+        } else {
+            test.penaltyDeath()
+            vm.penaltyDeathOnCleartextNetwork()
+        }
+        StrictMode.setThreadPolicy(test.build())
+        StrictMode.setVmPolicy(vm.build())
+        val flows =
+            try {
+                runCatching {
+                    launch(EditorRequest.Edit(id)).use { s ->
+                        s.await("banner") { it.contrast?.failing?.isNotEmpty() == true }
+                        s.action(EditorAction.Set("colors.light.accent", "#224488"))
+                        s.action(EditorAction.Fix)
+                        s.await("fixed") { it.contrast?.allPass == true }
+                        s.action(EditorAction.OpenJson)
+                        s.action(EditorAction.CloseJson)
+                        s.action(EditorAction.KeepImageAsWallpaper(true))
+                        s.onActivity { it.onImagePicked(uri) }
+                        s.await("seed") { it.document?.colors?.sourceKind == SourceKind.SEED && !it.busy }
+                        s.action(EditorAction.Apply)
+                        s.await("saved") { !it.dirty }
+                    }
+                }
+            } finally {
+                // StrictMode reports a main-thread violation after the message that raised it: let those arrive.
+                instr.waitForIdleSync()
+                instr.runOnMainSync { oldMain?.let(StrictMode::setThreadPolicy) }
+                StrictMode.setThreadPolicy(oldThread)
+                StrictMode.setVmPolicy(oldVm)
+            }
+        if (violations.isNotEmpty()) {
+            val report = violations.joinToString("\n\n") { (where, v) -> "$where: ${v.stackTraceToString()}" }
+            throw AssertionError("StrictMode violations during the editor flows:\n$report").apply {
+                flows.exceptionOrNull()?.let(::addSuppressed)
+            }
+        }
+        flows.getOrThrow()
     }
 
     private companion object {
