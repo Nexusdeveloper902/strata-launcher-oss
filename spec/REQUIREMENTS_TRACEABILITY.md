@@ -51,6 +51,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-SEARCH-06 | P1 | Opt-in contact results, runtime permission, at most five | Corroborated | PUB-067, APK-028, APK-005 | :core:search, :feature:search, :platform:system (area); cited ARCH §4.2, §8 | PRODUCT_SPEC §4.3 | T-SEARCH-12, T-SEARCH-13, T-SEARCH-14 | M7 [spec Rel: v1] |
 | FR-SEARCH-07 | P1 (web P2) | Store-search hand-off when empty; web search in v1.x | Corroborated (capability); Proposed (intent hand-off) | APK-028, PUB-015 | :core:search, :feature:search, :platform:system (area); cited ARCH §8 | PRODUCT_SPEC §4.3 | T-SEARCH-15 | M2, v1.x [spec Rel: v1 / v1.x] |
 | FR-SEARCH-08 | P2 | Calculator in search (acceptance undefined) | Corroborated | PUB-016, APK-018 | :core:search, :feature:search, :platform:system (area); not cited in ARCH | PRODUCT_SPEC §4.3 — NONE (placeholder: “defined when scheduled”) | NONE | NONE [spec Rel: later] |
+| FR-SEARCH-09 | P2 | Swipe a contact to call; dialer fallback, opt-in direct calls | Proposed | — | :core:search, :feature:search, :platform:system (area); cited ARCH §3, §4.2 | PRODUCT_SPEC §4.3 | T-SEARCH-23, T-SEARCH-24, T-SEARCH-25, T-SEARCH-26, T-SEARCH-27, T-SET-11 | v1.x [spec Rel: v1.x] |
 
 ## FR-APPS (PRODUCT_SPEC §4)
 
@@ -116,11 +117,12 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 |---|---|---|---|---|---|---|---|---|
 | FR-SET-01 | P0 | Settings entry points and top-level groups | Corroborated (entry points); Proposed (groups) | APK-012, PUB-012 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-01, T-SET-02, T-FAV-09 | M8 [spec Rel: v1] |
 | FR-SET-02 | P0 | Default-home row and guided Strata uninstall | Corroborated | PUB-049, APK-033 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-03 | M6 [spec Rel: v1] |
-| FR-SET-03 | P0 | Privacy and permissions screen showing optional-access states | Inferred (entry); Proposed | APK-012, P-4 | :feature:settings, :core:data (area); cited ARCH §13 | PRODUCT_SPEC §4.9 | T-SET-04, T-SEC-04 | M8 [spec Rel: v1] |
+| FR-SET-03 | P0 | Privacy and permissions screen showing optional-access states | Inferred (entry); Proposed | APK-012, P-4 | :feature:settings, :core:data (area); cited ARCH §13 | PRODUCT_SPEC §4.9 | T-SET-04, T-SEC-04, T-SET-12 | M8 [spec Rel: v1] |
 | FR-SET-04 | P1 | Per-app language through localeConfig | Inferred | APK-016, DOC-069 | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-05 | M8 [spec Rel: v1] |
 | FR-SET-05 | P0 | Haptics master toggle and launch-log controls | Inferred (haptics); Proposed (log) | APK-029 | :feature:settings, :core:data (area); cited ARCH §3, §4.2 | PRODUCT_SPEC §4.9 | T-SET-06, T-SET-07, T-LIST-04, T-SEARCH-16 | M3 [spec Rel: v1] |
 | FR-SET-06 | P0 | About screen: version, licences, privacy statement | Proposed | — | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-08, T-CI-05 | M8 [spec Rel: v1] |
 | FR-SET-07 | P2 | Icon coverage tool with export list | Proposed | — | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-09, T-SET-10 | M8 [spec Rel: v1 (M8; cuttable)] |
+| FR-SET-08 | P2 | Permission setup checklist with deep links and restricted-settings guide | Proposed | — | :feature:settings, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.9 | T-SET-12, T-SET-13, T-SET-14 | v1.x [spec Rel: v1.x] |
 
 ## FR-BACKUP (PRODUCT_SPEC §4)
 
@@ -154,7 +156,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-A11Y-01 | P0 | Sheet actions exposed as custom accessibility actions | Proposed | DOC-065, U-010 | :core:ui, :feature:home (area); cited ARCH §5 | PRODUCT_SPEC §4.13 | T-A11Y-01, T-FAV-03 | M3 [spec Rel: v1] |
+| FR-A11Y-01 | P0 | Sheet actions exposed as custom accessibility actions | Proposed | DOC-065, U-010 | :core:ui, :feature:home (area); cited ARCH §5 | PRODUCT_SPEC §4.13 | T-A11Y-01, T-FAV-03, T-SEARCH-25^ | M3 [spec Rel: v1] |
 | FR-A11Y-02 | P0 | Index alternative: headings, letter buttons, jump action | Proposed | DOC-065 | :core:ui, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.13 | T-A11Y-02, T-A11Y-03 | M3 [spec Rel: v1] |
 | FR-A11Y-03 | P0 | Spoken labels combine custom label and state | Proposed | — | :core:ui, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.13 | T-A11Y-04, T-A11Y-05, T-APPS-17, T-NOTIF-05 | M3 [spec Rel: v1] |
 | FR-A11Y-04 | P0 | Keyboard, D-pad and switch navigation with focus ring | Inferred (keyboard); Proposed | PUB-054 | :core:ui, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.13 | T-A11Y-06, T-A11Y-07, T-SEARCH-02, T-SEARCH-09 | M2, M8 [spec Rel: v1] |
@@ -229,7 +231,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | NFR-PRIV-02 | P0 | No analytics, ads, crash upload, accounts or billing | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PRIV-02, T-CI-02 | M0 |
 | NFR-PRIV-03 | P0 | Least-permission set diffed against approved list | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §17 | PRODUCT_SPEC §5 | T-PRIV-03, T-CI-01 | M0 |
 | NFR-PRIV-04 | P0 | Sensitive data never persisted | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §4 | PRODUCT_SPEC §5 | T-PRIV-04, T-PRIV-06, T-NOTIF-07, T-APPS-16, T-BACKUP-01 | M7 |
-| NFR-PRIV-05 | P0 | Local 30-day launch log: pausable, clearable, not backed up | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | D-010 (cited in statement) | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §4, §4.2 | PRODUCT_SPEC §5 | T-PRIV-05, T-SET-07, T-BACKUP-11 | M3 |
+| NFR-PRIV-05 | P0 | Local 30-day launch log: pausable, clearable, not backed up | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | D-010 (cited in statement) | :app (manifest), build-logic, :platform:notifications (area); cited ARCH §4, §4.2 | PRODUCT_SPEC §5 | T-PRIV-05, T-SET-07, T-BACKUP-11, T-SEARCH-24^ | M3 |
 
 ## NFR-REL (PRODUCT_SPEC §5)
 
@@ -277,19 +279,19 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 ## Validation report
 
 ### Counts
-- Requirements: **156** (116 FR, 40 NFR). PRODUCT_SPEC: 109 (81 FR, 28 NFR). THEME_SYSTEM: 47 (35 FR, 12 NFR).
-- Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 12, —: 47.
-- Requirements with at least one test: 145; without: 11.
-- Requirements with a roadmap milestone: 152; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 277; §22 rows: 144.
+- Requirements: **158** (118 FR, 40 NFR). PRODUCT_SPEC: 111 (83 FR, 28 NFR). THEME_SYSTEM: 47 (35 FR, 12 NFR).
+- Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 14, —: 47.
+- Requirements with at least one test: 147; without: 11.
+- Requirements with a roadmap milestone: 154; without: 4.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 286; §22 rows: 146.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
 - Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
-- §22-only pairs (~): none. Covers-only pairs (^): FR-APPS-05/T-HOME-14, FR-FAV-02/T-HOME-14, FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-LIST-04/T-LIST-13, FR-LIST-04/T-LIST-14, FR-ONBOARD-01/T-HOME-14, FR-SEARCH-01/T-HOME-14, FR-SEARCH-02/T-SEARCH-17, FR-SEARCH-02/T-SEARCH-18, FR-SEARCH-02/T-SEARCH-19, FR-SEARCH-02/T-SEARCH-20, FR-SEARCH-02/T-SEARCH-21, FR-SEARCH-02/T-SEARCH-22, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-03/T-SEARCH-22, NFR-PERF-06/T-LIST-13, NFR-PERF-06/T-LIST-14, NFR-PRIV-01/T-SET-09.
-- §22/Covers disagreements in total: 0 §22-only pairs, 24 Covers-only pairs (suffixes in the matrix).
+- §22-only pairs (~): none. Covers-only pairs (^): FR-A11Y-01/T-SEARCH-25, FR-APPS-05/T-HOME-14, FR-FAV-02/T-HOME-14, FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-LIST-04/T-LIST-13, FR-LIST-04/T-LIST-14, FR-ONBOARD-01/T-HOME-14, FR-SEARCH-01/T-HOME-14, FR-SEARCH-02/T-SEARCH-17, FR-SEARCH-02/T-SEARCH-18, FR-SEARCH-02/T-SEARCH-19, FR-SEARCH-02/T-SEARCH-20, FR-SEARCH-02/T-SEARCH-21, FR-SEARCH-02/T-SEARCH-22, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-03/T-SEARCH-22, NFR-PERF-06/T-LIST-13, NFR-PERF-06/T-LIST-14, NFR-PRIV-01/T-SET-09, NFR-PRIV-05/T-SEARCH-24.
+- §22/Covers disagreements in total: 0 §22-only pairs, 26 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria
@@ -313,6 +315,6 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 ### Other observations
 - IDs cited in ARCHITECTURE.md that do not exist as requirements: None.
-- Requirements never cited in ARCHITECTURE.md (component is area-derived only): 87 of 156.
+- Requirements never cited in ARCHITECTURE.md (component is area-derived only): 88 of 158.
 - THEME_SYSTEM §15 has no priority and no release column: all 47 THEME rows show `—` for Pri. PRODUCT_SPEC §4.9 declares the theme area P0 / v1 as a block; this is not repeated per row.
 - PRODUCT_SPEC §5 NFR rows have no per-row evidence or label; they inherit “Proposed” from the §5 intro. Several NFRs cite platform constraints informally (for example DOC-052, SEC-006).

@@ -7,6 +7,7 @@ import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.common.log.Logger
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.Settings
+import app.strata.launcher.core.model.SwipeToCall
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.platformapi.apps.AppListSource
 import app.strata.launcher.core.platformapi.apps.LaunchLogRepository
@@ -129,7 +130,63 @@ data class SettingsUiState(
             if (optional.contactsPermission != PermissionState.DENIED) return false
             return optional.contactsDenied || settings?.contactsSearchEnabled == true
         }
+
+    /** FR-SEARCH-09 / settings field 25: `CALL` is effective only while `CALL_PHONE` is granted, else it acts as `DIAL`. */
+    val swipeToCall: SwipeToCall
+        get() {
+            val s = settings?.swipeToCall ?: return SwipeToCall.DIAL
+            return if (s == SwipeToCall.CALL &&
+                optional.callPermission != PermissionState.GRANTED
+            ) {
+                SwipeToCall.DIAL
+            } else {
+                s
+            }
+        }
+
+    /** FR-SEARCH-09 / T-SET-11: "Permission needed" after a denied request, or `CALL` chosen and the permission revoked. */
+    val callPermissionNeeded: Boolean
+        get() {
+            if (optional.callPermission != PermissionState.DENIED) return false
+            return optional.callDenied || settings?.swipeToCall == SwipeToCall.CALL
+        }
+
+    /**
+     * FR-SET-08: every access this build and device offer, in checklist order, with whether it is given. Only rows whose
+     * state is known are listed (the default-home role is read off main; listener access after the first check).
+     */
+    val accessItems: List<AccessItem>
+        get() =
+            buildList {
+                defaultHome?.let { add(AccessItem(AccessKind.DEFAULT_HOME, it)) }
+                optional.badgeAccess
+                    ?.takeIf { it != ListenerAccess.UNSUPPORTED }
+                    ?.let { add(AccessItem(AccessKind.NOTIFICATIONS, it.granted)) }
+                optional.contactsPermission?.let { add(AccessItem(AccessKind.CONTACTS, it == PermissionState.GRANTED)) }
+                optional.callPermission?.let { add(AccessItem(AccessKind.PHONE, it == PermissionState.GRANTED)) }
+                if (lockSupported) add(AccessItem(AccessKind.SCREEN_LOCK, lockServiceEnabled))
+            }
+
+    /**
+     * FR-SET-08: the Android 13+ "Allow restricted settings" guide, while a switch it blocks (notification access, the
+     * accessibility service) is still off, for an app that did not come from an app store.
+     */
+    val showRestrictedGuide: Boolean
+        get() =
+            optional.restrictedSettingsHint &&
+                accessItems.any {
+                    (it.kind == AccessKind.NOTIFICATIONS || it.kind == AccessKind.SCREEN_LOCK) &&
+                        !it.granted
+                }
 }
+
+/** FR-SET-08 checklist rows (ANDROID_PLATFORM §23 optional accesses plus the default-home role, FR-SET-02). */
+enum class AccessKind { DEFAULT_HOME, NOTIFICATIONS, CONTACTS, PHONE, SCREEN_LOCK }
+
+data class AccessItem(
+    val kind: AccessKind,
+    val granted: Boolean,
+)
 
 /** The opt-in access rows (S-DISC flows): state the system owns, read on resume, plus transient UI. */
 data class OptionalAccessUi(
@@ -143,8 +200,15 @@ data class OptionalAccessUi(
     /** The last permission request was denied. */
     val contactsDenied: Boolean = false,
     val showContactsDisclosure: Boolean = false,
-    /** Android 13+: a sideloaded app needs "Allow restricted settings" before listener access can be granted (J-09). */
+    /**
+     * Android 13+: an app not installed from a store needs "Allow restricted settings" before listener access or an
+     * accessibility service can be turned on (J-09, FR-SET-08).
+     */
     val restrictedSettingsHint: Boolean = false,
+    /** FR-SEARCH-09: `CALL_PHONE`; null until the first check (or without a contacts source). */
+    val callPermission: PermissionState? = null,
+    /** The last `CALL_PHONE` request was denied. */
+    val callDenied: Boolean = false,
 )
 
 sealed interface SettingsAction {
@@ -195,6 +259,15 @@ sealed interface SettingsAction {
      * lives here, so it survives the activity being recreated.
      */
     data class ContactsPermissionResult(val granted: Boolean) : SettingsAction
+
+    /** FR-SEARCH-09: settings field 25. `CALL` without `CALL_PHONE` asks for it first ([SettingsEffect.RequestCallPhone]). */
+    data class SetSwipeToCall(val mode: SwipeToCall) : SettingsAction
+
+    /** The `CALL_PHONE` request returned. Acted on only when this view model asked for it (in flight in saved state). */
+    data class CallPermissionResult(val granted: Boolean) : SettingsAction
+
+    /** FR-SET-08 "Phone calls" row: ask for `CALL_PHONE` (direct calls), or App info once it is granted. */
+    data object ManageCallAccess : SettingsAction
 
     /** Strata's App info page: allow a denied permission, or "Allow restricted settings" (Android 13+). */
     data object OpenAppDetails : SettingsAction
@@ -260,6 +333,9 @@ sealed interface SettingsEffect {
     /** Request `READ_CONTACTS` (runtime dialog) in the host; the result comes back as [SettingsAction.ContactsPermissionResult]. */
     data object RequestContacts : SettingsEffect
 
+    /** Request `CALL_PHONE` in the host; the result comes back as [SettingsAction.CallPermissionResult] (FR-SEARCH-09). */
+    data object RequestCallPhone : SettingsEffect
+
     /** Open the theme library (FR-THEME-27) in the host. */
     data object OpenThemes : SettingsEffect
 
@@ -286,7 +362,13 @@ class SettingsViewModel(
     private val badges: BadgeSource? = null,
     /** FR-SEARCH-06; null = no contacts row. */
     private val contacts: ContactsSource? = null,
+    /** The platform has restricted settings (Android 13+); see [installedFromStore]. */
     restrictedSettingsHint: Boolean = false,
+    /**
+     * FR-SET-08: whether an app store installed Strata (then nothing is restricted); called once on [ioDispatcher]. Null =
+     * unknown, so the guide is shown on Android 13+.
+     */
+    private val installedFromStore: (() -> Boolean)? = null,
     /** Holds the system screens in flight across process death (the grant page and the permission dialog). */
     private val handle: SavedStateHandle = SavedStateHandle(),
     private val versionName: String = "",
@@ -301,6 +383,7 @@ class SettingsViewModel(
             OptionalAccessUi(
                 contactsPermission = contacts?.permission(),
                 restrictedSettingsHint = restrictedSettingsHint,
+                callPermission = contacts?.callPermission(),
             ),
         )
 
@@ -316,6 +399,13 @@ class SettingsViewModel(
         get() = handle[KEY_CONTACTS_REQUEST] ?: false
         set(value) {
             handle[KEY_CONTACTS_REQUEST] = value
+        }
+
+    /** The `CALL_PHONE` request started by this view model is due to return. */
+    private var callRequestInFlight: Boolean
+        get() = handle[KEY_CALL_REQUEST] ?: false
+        set(value) {
+            handle[KEY_CALL_REQUEST] = value
         }
 
     /** Resumes seen by this instance; a grant is resolved only by a check started on a resume after the page opened. */
@@ -359,6 +449,21 @@ class SettingsViewModel(
         )
 
     init {
+        val fromStore = installedFromStore
+        if (restrictedSettingsHint && fromStore != null) {
+            viewModelScope.launch {
+                val store =
+                    try {
+                        withContext(ioDispatcher) { fromStore() }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        logger.w(TAG, "install source check failed", e)
+                        false
+                    }
+                if (store) optional.update { it.copy(restrictedSettingsHint = false) }
+            }
+        }
         val source = badges
         if (source != null) {
             viewModelScope.launch {
@@ -416,7 +521,14 @@ class SettingsViewModel(
                 checkRole()
                 val resume = ++resumes
                 badges?.let { source -> viewModelScope.launch { refreshBadgeAccess(source, resume) } }
-                contacts?.let { c -> optional.update { it.copy(contactsPermission = c.permission()) } }
+                contacts?.let { c ->
+                    optional.update {
+                        it.copy(
+                            contactsPermission = c.permission(),
+                            callPermission = c.callPermission(),
+                        )
+                    }
+                }
             }
 
             is SettingsAction.Badges -> {
@@ -466,6 +578,28 @@ class SettingsViewModel(
                     )
                 }
                 if (granted) guardedWrite("contacts on") { settings.update { it.copy(contactsSearchEnabled = true) } }
+            }
+
+            is SettingsAction.SetSwipeToCall -> {
+                setSwipeToCall(action.mode)
+            }
+
+            is SettingsAction.CallPermissionResult -> {
+                if (!callRequestInFlight) return
+                callRequestInFlight = false
+                val source = contacts ?: return
+                // The dialog's answer is checked against the platform, never assumed.
+                val granted = action.granted && source.callPermission() == PermissionState.GRANTED
+                optional.update { it.copy(callPermission = source.callPermission(), callDenied = !granted) }
+                if (granted) guardedWrite("call on") { settings.update { it.copy(swipeToCall = SwipeToCall.CALL) } }
+            }
+
+            SettingsAction.ManageCallAccess -> {
+                if (contacts?.callPermission() == PermissionState.GRANTED) {
+                    onAction(SettingsAction.OpenAppDetails)
+                } else {
+                    setSwipeToCall(SwipeToCall.CALL)
+                }
             }
 
             SettingsAction.OpenAppDetails -> {
@@ -687,6 +821,28 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * FR-SEARCH-09: `OFF` and `DIAL` are written at once. `CALL` is written once `CALL_PHONE` is granted: the runtime
+     * request is made only here, when the user picks direct calls (ANDROID_PLATFORM §23).
+     */
+    private fun setSwipeToCall(mode: SwipeToCall) {
+        val source = contacts ?: return
+        if (mode != SwipeToCall.CALL) {
+            optional.update { it.copy(callDenied = false) }
+            guardedWrite("swipe to call") { settings.update { it.copy(swipeToCall = mode) } }
+            return
+        }
+        val permission = source.callPermission()
+        optional.update { it.copy(callPermission = permission) }
+        if (permission == PermissionState.GRANTED) {
+            optional.update { it.copy(callDenied = false) }
+            guardedWrite("call on") { settings.update { it.copy(swipeToCall = SwipeToCall.CALL) } }
+        } else {
+            callRequestInFlight = true
+            effectChannel.trySend(SettingsEffect.RequestCallPhone)
+        }
+    }
+
     /** Re-reads the role off main; [then] runs with the result on the main thread. */
     private fun checkRole(then: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
@@ -740,3 +896,4 @@ class SettingsViewModel(
 private const val TAG = "Settings"
 private const val KEY_BADGE_GRANT = "settings_badge_grant_in_flight"
 private const val KEY_CONTACTS_REQUEST = "settings_contacts_request_in_flight"
+private const val KEY_CALL_REQUEST = "settings_call_request_in_flight"

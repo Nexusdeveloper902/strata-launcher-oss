@@ -6,6 +6,7 @@ class ReleaseApkLogicTest {
     private val approved =
         setOf(
             "android.permission.ACCESS_HIDDEN_PROFILES",
+            "android.permission.CALL_PHONE",
             "android.permission.READ_CONTACTS",
             "android.permission.REQUEST_DELETE_PACKAGES",
         )
@@ -25,6 +26,7 @@ class ReleaseApkLogicTest {
                 "uses-permission: name='android.permission.REQUEST_DELETE_PACKAGES'",
                 "uses-permission: name='android.permission.ACCESS_HIDDEN_PROFILES'",
                 "uses-permission: name='android.permission.READ_CONTACTS'",
+                "uses-permission: name='android.permission.CALL_PHONE'",
                 "uses-permission: name='$own'",
                 "locales: '--_--' 'ar' 'de'",
             ) + extra

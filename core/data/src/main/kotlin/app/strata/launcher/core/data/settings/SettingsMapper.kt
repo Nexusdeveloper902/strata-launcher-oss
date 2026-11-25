@@ -5,12 +5,14 @@ import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.OnboardingProgress
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.model.SwipeDownAction
+import app.strata.launcher.core.model.SwipeToCall
 import java.util.UUID
 import app.strata.launcher.core.data.settings.AppearanceOverride as ProtoAppearance
 import app.strata.launcher.core.data.settings.BadgeStyle as ProtoBadgeStyle
 import app.strata.launcher.core.data.settings.OnboardingProgress as ProtoOnboarding
 import app.strata.launcher.core.data.settings.Settings as ProtoSettings
 import app.strata.launcher.core.data.settings.SwipeDownAction as ProtoSwipeDown
+import app.strata.launcher.core.data.settings.SwipeToCall as ProtoSwipeToCall
 
 /**
  * Proto ↔ model mapping (ARCHITECTURE §4.2). An absent field reads as the catalogue default; values
@@ -65,6 +67,7 @@ internal object SettingsMapper {
             lockGestureEnabled = if (p.hasLockGestureEnabled()) p.lockGestureEnabled else d.lockGestureEnabled,
             onboardingProgress =
                 if (p.hasOnboardingProgress()) onboarding(p.onboardingProgress) else d.onboardingProgress,
+            swipeToCall = if (p.hasSwipeToCall()) swipeToCall(p.swipeToCall) else d.swipeToCall,
         )
     }
 
@@ -107,6 +110,7 @@ internal object SettingsMapper {
         if (old.swipeDownAction != new.swipeDownAction) b.swipeDownAction = proto(new.swipeDownAction)
         if (old.lockGestureEnabled != new.lockGestureEnabled) b.lockGestureEnabled = new.lockGestureEnabled
         if (old.onboardingProgress != new.onboardingProgress) b.onboardingProgress = proto(new.onboardingProgress)
+        if (old.swipeToCall != new.swipeToCall) b.swipeToCall = proto(new.swipeToCall)
         return b.build()
     }
 
@@ -143,6 +147,22 @@ internal object SettingsMapper {
             ProtoOnboarding.ONBOARDING_ROLE_REQUESTED -> OnboardingProgress.ROLE_REQUESTED
             ProtoOnboarding.ONBOARDING_DONE -> OnboardingProgress.DONE
             else -> OnboardingProgress.WELCOME
+        }
+
+    /** An unknown value (a newer catalogue) reads as the default. */
+    private fun swipeToCall(p: ProtoSwipeToCall): SwipeToCall =
+        when (p) {
+            ProtoSwipeToCall.SWIPE_TO_CALL_OFF -> SwipeToCall.OFF
+            ProtoSwipeToCall.SWIPE_TO_CALL_CALL -> SwipeToCall.CALL
+            ProtoSwipeToCall.SWIPE_TO_CALL_DIAL -> SwipeToCall.DIAL
+            else -> Settings.DEFAULT.swipeToCall
+        }
+
+    private fun proto(v: SwipeToCall): ProtoSwipeToCall =
+        when (v) {
+            SwipeToCall.OFF -> ProtoSwipeToCall.SWIPE_TO_CALL_OFF
+            SwipeToCall.DIAL -> ProtoSwipeToCall.SWIPE_TO_CALL_DIAL
+            SwipeToCall.CALL -> ProtoSwipeToCall.SWIPE_TO_CALL_CALL
         }
 
     private fun proto(v: OnboardingProgress): ProtoOnboarding =
