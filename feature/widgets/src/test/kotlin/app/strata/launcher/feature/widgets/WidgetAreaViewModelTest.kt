@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.core.model.WidgetHeights
 import app.strata.launcher.core.model.WidgetPlacement
 import app.strata.launcher.core.model.WidgetPlacementState
+import app.strata.launcher.core.model.WidgetProviderRef
 import app.strata.launcher.feature.widgets.WidgetFixtures.clock
 import app.strata.launcher.testing.fakes.FakeWidgetHost
 import app.strata.launcher.testing.fakes.FakeWidgetRepository
@@ -63,6 +64,24 @@ class WidgetAreaViewModelTest {
         assertThat(vm.state.value.shown).isTrue()
         assertThat(vm.state.value.replacesClock).isTrue()
         assertThat(vm.state.value.minHeightDp).isEqualTo(clock.minHeightDp)
+    }
+
+    /**
+     * T-WIDGET-12 (FB-016): the minimum width belongs to the placed widget. Replacing it with a widget whose minimum is
+     * unknown resets it, instead of keeping the previous widget's.
+     */
+    @Test
+    fun tWidget12_minimumWidthFollowsTheReplacedWidget() {
+        placed()
+        val vm = vm()
+        vm.refresh()
+        assertThat(vm.state.value.minWidthDp).isEqualTo(clock.minWidthDp)
+        val unknown = WidgetProviderRef("com.example.unknown/.Widget", 0L)
+        val id = host.bindDirect(unknown)
+        repo.state.value = WidgetPlacement(id, unknown)
+        vm.refresh()
+        assertThat(vm.state.value.hostReady).isTrue()
+        assertThat(vm.state.value.minWidthDp).isEqualTo(0)
     }
 
     @Test

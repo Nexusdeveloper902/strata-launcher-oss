@@ -57,6 +57,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-HOME-12 | Tablet always rotates | API 36 tablet, sw ≥ 600 dp, setting off | Rotate | Layout re-flows to two-column per VISUAL_SPEC §8. No letterboxing | I | FR-HOME-08, NFR-COMPAT-03 |
 | T-HOME-14 | Focused text field keeps the keyboard (Proposed; owner report on the Galaxy A56) | home window; each field type: Edit favourites → "Add apps" search, onboarding favourites search shown as home's first layer, search field, rename field | Focus the field. The window reports the IME visible (IME insets). Settle a few frames. Then close search and report the IME visible again | The field keeps focus and the stray-keyboard guard hides nothing while a field is focused. With no field (home at rest, search closed) a visible keyboard is still hidden (T-HOME-09 fix kept) | C + R + I | FR-FAV-02, FR-ONBOARD-01, FR-SEARCH-01, FR-APPS-05, ANDROID_PLATFORM §14 |
 | T-HOME-15 | Arrival is not a Home press (FB-008) | setting "Home press opens search" on; another app in front | Return to home with the Home gesture or button. Then press Home again on resting home | The arrival resets home to rest and search stays closed. The second press, made while home is in front, opens search | C + I | FR-HOME-05 |
+| T-HOME-16 | No stale layer behind the favourites page (FB-017) | home started under an opaque theme (window background opaque, wallpaper not requested); then a theme that lets the wallpaper through; also a cold start under a remembered see-through theme before the theme is loaded | **Format check:** read the pixel format the window was added with (the renderer builds its surface from it, opaque only for `OPAQUE`). **Modelled replay** (no GPU buffers in Robolectric): open the list and go back to the favourites page, replaying the frames into one reused buffer with the renderer's rule (cleared unless the format is `OPAQUE`). Separately: settle frames before the theme loads, then load it | The window is added with a format other than `OPAQUE` and keeps it, whatever its background. The replay equals a clean render (a model of the renderer, not a measurement of it; the real renderer is checked on the device). Before the theme is loaded the wallpaper stays requested and the window transparent, and the built-in default's state is not remembered. The wallpaper flag still follows the theme (T-PERF-13) | R | FR-THEME-07 |
 
 ## 3. LIST
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -180,6 +181,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-WIDGET-09 | Provider lost → placeholder | widget added; uninstall `WIDGET_FIX`; reinstall | Show home. Tap "Re-add" | "Widget unavailable — Re-add / Remove" placeholder. Re-add restarts the bind flow for the same provider | I | FR-WIDGET-04 |
 | T-WIDGET-10 | Restore via backup file | backup with 1 widget placement | Restore the file | Placeholder with "Re-add" (state NEEDS_REBIND). One tap starts binding | I | FR-WIDGET-04, FR-BACKUP-02 |
 | T-WIDGET-11 | Full-backup widget state (U-017) | device with `bmgr` | `bmgr backup` → clear data → `bmgr restore` | Records whether HOST_RESTORED fires. Either way: placeholder or remapped widget, never a blank area | I/MAN | FR-WIDGET-04, FR-BACKUP-04 |
+| T-WIDGET-12 | Widget centred in its slot (FB-016) | a header widget; each built-in preset (alphabet index on home or not); LTR and RTL; providers with `minWidth` 180 and 320 dp | Show home. Read the widget area's bounds, the hosted `AppWidgetHostView`'s position and padding, and the size passed with `updateAppWidgetSize` | The area and the hosted view are centred on the window within ±1 dp and never overlap the index; the host view fills the area with equal left and right padding; the size passed to the provider is the hosted view's size. A provider wider than the centred span gets its minimum width, still clear of the index | R | FR-WIDGET-01 |
 
 ## 10. SET
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -323,6 +325,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-THEME-54 | Icon source precedence | fake inputs, 12 cases: override, pack, glyph, monochrome layer (usable, empty, opaque), none; tint `none`/`monochrome`/`accent`; `pack.fallback` system/monochrome; API 32 and 33 | Call `IconSourceResolver.resolve` for each, and the layer check on fixture layers | Order is override, pack, platform monochrome (API 33+ only), glyph, desaturated (D-020). An app with a glyph and a monochrome layer gets the layer on API 33+ and the glyph on API 32. An empty or fully opaque layer counts as absent, so the glyph (else desaturated) is used; no layer: the glyph. Tint `none` with fallback `system` yields `Plain` (coverage label "System icon (untinted)"), never a glyph, monochrome or desaturated; override and pack still win over `Plain`. `pack.fallback: monochrome` follows monochrome, glyph, desaturated. An uninstalled pack drops step 2 only | U | FR-THEME-35, FR-THEME-11 |
 | T-THEME-55 | Glyph index and bundle | test `glyph_index.txt` plus the production index | Parse; look up present, absent and malformed lines; check drawables | Present package returns its id, absent returns null. Malformed lines are skipped and reported. Production index: no duplicate packages, every id has a single-colour vector drawable. A fixture glyph added by data only appears in `resolve` with no code change. Bundle version: changing only one glyph drawable's bytes (index unchanged) changes the build-time bundle version and makes the old cached bitmap a cache miss; an identical bundle keeps the same version | U + R | FR-THEME-35 |
 | T-THEME-56 | Centred clock is centred (FB-007) | each built-in preset forced to `clock.alignment: center`; 12 h and 24 h; seconds off and on; LTR and RTL; plus a one-sided display cutout | Render home (native graphics) and measure the inked pixels of the clock time (the day period hangs beside it) and of the date | The ink's centre is within ±1 dp of the window's centre in every case, also with the alphabet index shown on one side (when the period cannot be reserved on both sides, time and period together are centred). On a 360 dp screen at `sizeSp` 128, 12 h with seconds, the clock's ink stays inside the header span and the period never reaches the index. The clock shows a fixed time | C | FR-THEME-12, FR-HOME-02 |
+| T-THEME-57 | Favourites align with the header (FB-014) | each built-in preset with `favorites.alignment` and `clock.alignment` both `start`, `center` or `end`; LTR and RTL; one favourite with a notification badge; plus centred favourites with a one-sided display cutout | Render home; read the bounds of each favourite label, the "All apps" label, the clock and the date | Centred: every label's centre is within ±1 dp of the window's centre (the badge hangs beside its label), also with the alphabet index on one side or a cutout. Start or end: the labels share the clock's and the date's start (or end) edge within ±1 dp. No label overlaps the index | R | FR-THEME-13, FR-HOME-02 |
 
 ## 16. PERF (RD-1, `APPS500`, release-like `benchmark` build with Baseline Profile)
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -400,7 +403,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | Requirement | Tests |
 |---|---|
 | FR-HOME-01 | T-HOME-01, T-HOME-02, T-HOME-13, T-ONBOARD-09, T-SEC-03 |
-| FR-HOME-02 | T-HOME-03, T-HOME-04 |
+| FR-HOME-02 | T-HOME-03, T-HOME-04, T-THEME-56, T-THEME-57 |
 | FR-HOME-03 | T-HOME-05, T-HOME-06 |
 | FR-HOME-04 | T-HOME-07, T-HOME-08 |
 | FR-HOME-05 | T-HOME-09, T-HOME-10 |
@@ -443,7 +446,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-NOTIF-01 | T-NOTIF-01, T-NOTIF-02, T-NOTIF-03 |
 | FR-NOTIF-02 | T-NOTIF-04, T-NOTIF-05 |
 | FR-NOTIF-03 | T-NOTIF-06, T-NOTIF-07 |
-| FR-WIDGET-01 | T-WIDGET-01, T-GEST-02 |
+| FR-WIDGET-01 | T-WIDGET-01, T-GEST-02, T-WIDGET-12 |
 | FR-WIDGET-02 | T-WIDGET-02, T-WIDGET-03, T-WIDGET-04, T-WIDGET-05 |
 | FR-WIDGET-03 | T-WIDGET-06, T-WIDGET-07 |
 | FR-WIDGET-04 | T-WIDGET-08, T-WIDGET-09, T-WIDGET-10, T-WIDGET-11 |
@@ -477,13 +480,13 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-THEME-04 | T-THEME-05 |
 | FR-THEME-05 | T-THEME-06 |
 | FR-THEME-06 | T-THEME-07, T-THEME-25 |
-| FR-THEME-07 | T-THEME-08 |
+| FR-THEME-07 | T-THEME-08, T-HOME-16 |
 | FR-THEME-08 | T-THEME-09, T-A11Y-05 |
 | FR-THEME-09 | T-THEME-10 |
 | FR-THEME-10 | T-THEME-11, T-APPS-10 |
 | FR-THEME-11 | T-THEME-12, T-THEME-54 |
-| FR-THEME-12 | T-THEME-13, T-HOME-04, T-I18N-05 |
-| FR-THEME-13 | T-THEME-14, T-HOME-04 |
+| FR-THEME-12 | T-THEME-13, T-HOME-04, T-I18N-05, T-THEME-56 |
+| FR-THEME-13 | T-THEME-14, T-HOME-04, T-THEME-57 |
 | FR-THEME-14 | T-THEME-15, T-HOME-04 |
 | FR-THEME-15 | T-THEME-16, T-A11Y-02, T-HOME-08 |
 | FR-THEME-16 | T-THEME-17, T-A11Y-12 |

@@ -32,6 +32,8 @@ data class WidgetAreaState(
     val placement: WidgetPlacement? = null,
     /** The provider's `minHeight` in dp (step 1, FR-WIDGET-03). */
     val minHeightDp: Int = DEFAULT_MIN_HEIGHT_DP,
+    /** The provider's `minWidth` in dp, 0 when unknown (FB-016: the area is never laid out narrower if it fits). */
+    val minWidthDp: Int = 0,
     /**
      * Widgets are not inflated and the header shows the clock: safe mode (ARCHITECTURE §10), or the theme boot has not
      * finished yet, so whether this start is in safe mode is not known.
@@ -99,6 +101,7 @@ class WidgetAreaViewModel(
 ) : ViewModel() {
     private data class Local(
         val minHeightDp: Int = WidgetAreaState.DEFAULT_MIN_HEIGHT_DP,
+        val minWidthDp: Int = 0,
         val menuOpen: Boolean = false,
         val resizing: Boolean = false,
         val verifiedId: Int? = null,
@@ -119,6 +122,7 @@ class WidgetAreaViewModel(
             WidgetAreaState(
                 placement = placement,
                 minHeightDp = l.minHeightDp,
+                minWidthDp = l.minWidthDp,
                 suppressed = off,
                 hostReady = placement != null && placement.available && placement.appWidgetId == l.verifiedId,
                 menuOpen = l.menuOpen && placement != null,
@@ -165,8 +169,17 @@ class WidgetAreaViewModel(
             if (bound) {
                 valid = p.state == WidgetPlacementState.BOUND
                 val min = host.minHeightDp(p.appWidgetId)
+                val minWidth = host.minWidthDp(p.appWidgetId)
                 // isBound published the provider info, so hostView needs no binder call on main.
-                local.update { it.copy(minHeightDp = min ?: it.minHeightDp, verifiedId = p.appWidgetId) }
+                local.update {
+                    // A replaced widget never inherits the previous one's minimum width (unknown = 0).
+                    val sameWidget = it.verifiedId == p.appWidgetId
+                    it.copy(
+                        minHeightDp = min ?: it.minHeightDp,
+                        minWidthDp = minWidth ?: if (sameWidget) it.minWidthDp else 0,
+                        verifiedId = p.appWidgetId,
+                    )
+                }
             }
         }
         // A placement that is not bound may still be waiting for its restore remap: then its new ID is kept. IDs a bind
