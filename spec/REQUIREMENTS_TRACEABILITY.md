@@ -18,7 +18,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
 | FR-HOME-01 | P0 | Works as default home and as ordinary launcher icon | Inferred (capability, APK-003); Proposed (routing) | APK-003, DOC-002, DOC-004, D-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-01, T-HOME-02, T-HOME-13, T-HOME-17, T-ONBOARD-09, T-SEC-03 | M0, M6 [spec Rel: v1] |
-| FR-HOME-02 | P0 | Home layout order: header, favourites, search pill, insets | Corroborated (list home); Proposed (bottom anchoring) | PUB-008, PUB-034, APK-026 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-03, T-HOME-04, T-THEME-56^ | M3 [spec Rel: v1] |
+| FR-HOME-02 | P0 | Home layout order: header, favourites, search pill, insets | Corroborated (list home); Proposed (bottom anchoring) | PUB-008, PUB-034, APK-026 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-03, T-HOME-04, T-THEME-56, T-THEME-57 | M3 [spec Rel: v1] |
 | FR-HOME-03 | P1 | Clock tap opens alarms, date opens calendar, toast fallback | Inferred | PUB-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-05, T-HOME-06 | M3 [spec Rel: v1] |
 | FR-HOME-04 | P1 | Hide status bar, clock, date and alphabet index | Corroborated | APK-026, PUB-063 | :feature:home, :app (area); cited ARCH §4.2 | PRODUCT_SPEC §4.1 | T-HOME-07, T-HOME-08 | M3 [spec Rel: v1] |
 | FR-HOME-05 | P0 | Home press resets overlays; optional open-search setting | Inferred (reset); Proposed (default off) | PUB-051 | :feature:home, :app (area); cited ARCH §4.2, §5 | PRODUCT_SPEC §4.1 | T-HOME-09, T-HOME-10, T-HOME-15^, T-GEST-10^ | M3 [spec Rel: v1] |
@@ -104,7 +104,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-WIDGET-01 | P1 | One widget area above or replacing the clock | Corroborated | APK-032, PUB-023, PUB-034 | :platform:widgets, :feature:widgets (area); not cited in ARCH | PRODUCT_SPEC §4.8 | T-WIDGET-01, T-GEST-02 | M7 [spec Rel: v1] |
+| FR-WIDGET-01 | P1 | One widget area above or replacing the clock | Corroborated | APK-032, PUB-023, PUB-034 | :platform:widgets, :feature:widgets (area); not cited in ARCH | PRODUCT_SPEC §4.8 | T-WIDGET-01, T-GEST-02, T-WIDGET-12 | M7 [spec Rel: v1] |
 | FR-WIDGET-02 | P1 | Widget picker, bind and configure; cancel frees the ID | Proposed | DOC-030, DOC-031, DOC-032, DOC-033, DOC-034 | :platform:widgets, :feature:widgets (area); not cited in ARCH | PRODUCT_SPEC §4.8 | T-WIDGET-02, T-WIDGET-03, T-WIDGET-04, T-WIDGET-05 | M7 [spec Rel: v1] |
 | FR-WIDGET-03 | P1 | Remove widget; resize height in four steps | Inferred | APK-027, APK-032 | :platform:widgets, :feature:widgets (area); not cited in ARCH | PRODUCT_SPEC §4.8 | T-WIDGET-06, T-WIDGET-07 | M7 [spec Rel: v1] |
 | FR-WIDGET-04 | P1 | Remap widget IDs on restore; unavailable placeholder | Corroborated | APK-015, APK-031, PUB-047, U-012, U-017 | :platform:widgets, :feature:widgets (area); cited ARCH §4, §12.3 | PRODUCT_SPEC §4.8 | T-WIDGET-08, T-WIDGET-09, T-WIDGET-10, T-WIDGET-11 | M7 [spec Rel: v1] |
@@ -171,13 +171,13 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-THEME-04 | — | Appearance modes system, light, dark, wallpaper | Inferred (APK-020) | APK-020 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §4.2 | THEME_SYSTEM §15.1 | T-THEME-05 | M4 |
 | FR-THEME-05 | — | Pure-black option for dark variant | Inferred (APK-020) | APK-020 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-06 | M4 |
 | FR-THEME-06 | — | Colour sources fixed, seed, wallpaper, dynamic with fallbacks | Inferred (APK-021) | APK-021 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-07, T-THEME-25 | M4 |
-| FR-THEME-07 | — | Wallpaper visibility, dim and background opacity | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-08 | M4 |
+| FR-THEME-07 | — | Wallpaper visibility, dim and background opacity | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-08, T-HOME-16 | M4 |
 | FR-THEME-08 | — | Typography: family, scale, weights, spacing, label case | Inferred (APK-022) | APK-022 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-09, T-A11Y-05 | M4 |
 | FR-THEME-09 | — | Option to render small text in system font | Inferred (APK-022) | APK-022 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-10 | M4 |
 | FR-THEME-10 | — | Icon visibility, size, shape, legacy plate and packs | Inferred (APK-023) | APK-023 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9 | THEME_SYSTEM §15.1 | T-THEME-11, T-APPS-10 | M4, M5 |
 | FR-THEME-11 | — | Monochrome or accent icon tinting | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9 | THEME_SYSTEM §15.1 | T-THEME-12, T-THEME-54 | M4, M5 |
-| FR-THEME-12 | — | Clock and date presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-13, T-HOME-04, T-I18N-05, T-THEME-56^ | M4 |
-| FR-THEME-13 | — | Favourites presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-14, T-HOME-04 | M4 |
+| FR-THEME-12 | — | Clock and date presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-13, T-HOME-04, T-I18N-05, T-THEME-56 | M4 |
+| FR-THEME-13 | — | Favourites presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-14, T-HOME-04, T-THEME-57 | M4 |
 | FR-THEME-14 | — | Search-bar presentation options | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-15, T-HOME-04 | M4 |
 | FR-THEME-15 | — | Alphabet-index appearance options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-16, T-A11Y-02, T-HOME-08 | M4 |
 | FR-THEME-16 | — | Animation scale honouring system animator setting | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-17, T-A11Y-12 | M4 |
@@ -283,15 +283,15 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 14, —: 47.
 - Requirements with at least one test: 147; without: 11.
 - Requirements with a roadmap milestone: 154; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 286; §22 rows: 146.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 289; §22 rows: 146.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
 - Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
-- §22-only pairs (~): none. Covers-only pairs (^): FR-A11Y-01/T-SEARCH-25, FR-APPS-05/T-HOME-14, FR-FAV-02/T-HOME-14, FR-GEST-01/T-GEST-10, FR-HOME-02/T-THEME-56, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-LIST-04/T-LIST-13, FR-LIST-04/T-LIST-14, FR-ONBOARD-01/T-HOME-14, FR-SEARCH-01/T-HOME-14, FR-SEARCH-02/T-SEARCH-17, FR-SEARCH-02/T-SEARCH-18, FR-SEARCH-02/T-SEARCH-19, FR-SEARCH-02/T-SEARCH-20, FR-SEARCH-02/T-SEARCH-21, FR-SEARCH-02/T-SEARCH-22, FR-THEME-12/T-THEME-56, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-03/T-SEARCH-22, NFR-PERF-06/T-LIST-13, NFR-PERF-06/T-LIST-14, NFR-PRIV-01/T-SET-09, NFR-PRIV-05/T-SEARCH-24.
-- §22/Covers disagreements in total: 0 §22-only pairs, 28 Covers-only pairs (suffixes in the matrix).
+- §22-only pairs (~): none. Covers-only pairs (^): FR-A11Y-01/T-SEARCH-25, FR-APPS-05/T-HOME-14, FR-FAV-02/T-HOME-14, FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-LIST-04/T-LIST-13, FR-LIST-04/T-LIST-14, FR-ONBOARD-01/T-HOME-14, FR-SEARCH-01/T-HOME-14, FR-SEARCH-02/T-SEARCH-17, FR-SEARCH-02/T-SEARCH-18, FR-SEARCH-02/T-SEARCH-19, FR-SEARCH-02/T-SEARCH-20, FR-SEARCH-02/T-SEARCH-21, FR-SEARCH-02/T-SEARCH-22, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-03/T-SEARCH-22, NFR-PERF-06/T-LIST-13, NFR-PERF-06/T-LIST-14, NFR-PRIV-01/T-SET-09, NFR-PRIV-05/T-SEARCH-24.
+- §22/Covers disagreements in total: 0 §22-only pairs, 26 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria

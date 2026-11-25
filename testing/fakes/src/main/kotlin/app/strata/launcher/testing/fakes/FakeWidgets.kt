@@ -147,6 +147,8 @@ class FakeWidgetHost(
 
     override suspend fun minHeightDp(id: Int): Int? = providerOf[id]?.let { model(it)?.minHeightDp } ?: 40
 
+    override suspend fun minWidthDp(id: Int): Int? = providerOf[id]?.let { model(it)?.minWidthDp }
+
     override fun consentRequest(
         id: Int,
         ref: WidgetProviderRef,
@@ -164,7 +166,10 @@ class FakeWidgetHost(
         return configureStartable
     }
 
-    override fun hostView(id: Int): WidgetViewHandle? = null
+    /** The native view for an ID (an `AppWidgetHostView` in `:app` tests); null shows the error tile. */
+    var hostViews: (Int) -> Any? = { null }
+
+    override fun hostView(id: Int): WidgetViewHandle? = hostViews(id)?.let { WidgetViewHandle(id, it) }
 
     override fun startListening() {
         listening = true

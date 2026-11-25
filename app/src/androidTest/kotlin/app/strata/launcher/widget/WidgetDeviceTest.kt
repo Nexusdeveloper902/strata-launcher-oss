@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -298,6 +299,25 @@ class WidgetDeviceTest {
         return tag
     }
 
+    /**
+     * Scrolls to [tag] and reads its row in the same check, like [pick]. Reading it after [scrollTo] had returned
+     * failed with "assertExists ... could not find any node" (fb-ui-batch-3 run 45479713204, API 26, tWidget02): the
+     * row moved between the check that saw it and the read.
+     */
+    private fun scrolledNode(tag: String): SemanticsNode {
+        var node: SemanticsNode? = null
+        compose.waitUntil(STALL_MS) {
+            node =
+                if (scrolledTo(tag)) {
+                    runCatching { compose.onNodeWithTag(tag).fetchSemanticsNode() }.getOrNull()
+                } else {
+                    null
+                }
+            node != null
+        }
+        return checkNotNull(node)
+    }
+
     private fun scrolledTo(tag: String): Boolean {
         runCatching { compose.onNodeWithTag(WidgetTestTags.PICKER_LIST).performScrollToNode(hasTestTag(tag)) }
         return count(tag) == 1
@@ -381,14 +401,8 @@ class WidgetDeviceTest {
         val group = WidgetTestTags.group(TEST_PACKAGE)
         scrollTo(group)
         listOf(list, backConfig, firstUserConfig, crashConfig).forEach { provider ->
-            val tag = scrollTo(WidgetTestTags.provider(provider.flattenToString()))
-            val description =
-                compose
-                    .onNodeWithTag(
-                        tag,
-                    ).fetchSemanticsNode()
-                    .config[SemanticsProperties.ContentDescription]
-            assertThat(description.single()).contains("widget from")
+            val node = scrolledNode(WidgetTestTags.provider(provider.flattenToString()))
+            assertThat(node.config[SemanticsProperties.ContentDescription].single()).contains("widget from")
         }
     }
 

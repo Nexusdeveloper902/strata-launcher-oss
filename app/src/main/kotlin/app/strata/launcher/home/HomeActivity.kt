@@ -16,6 +16,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -218,6 +219,8 @@ class HomeActivity : ComponentActivity() {
             // Battery: start with the wallpaper flag the theme needs, before the window is added (no wallpaper
             // composed and then dropped). The loaded theme on a recreate, else what the last run applied, if the
             // application's prefetch has it already; otherwise the manifest default stands.
+            // FB-017: the pixel format is fixed before the window is added, so the renderer always clears its buffers.
+            HomeWindow.keepTranslucent(window)
             initialWallpaperState()?.let { HomeWindow.applyInitial(window, it) }
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -239,7 +242,10 @@ class HomeActivity : ComponentActivity() {
                         // FR-LIFE-01 / T-PERF-01: fully drawn once the list (snapshot) is available.
                         ReportDrawnWhen { state.listReady }
                         WindowSettings(state.settings.hideStatusBar, state.settings.allowRotation)
-                        HomeWallpaperWindow(window, windowMemory)
+                        // Only the loaded flag is read here: other theme-state emissions do not recompose this scope.
+                        val themeState = appGraph.themeRepository.state.collectAsStateWithLifecycle()
+                        val themeLoaded by remember { derivedStateOf { themeState.value.loaded } }
+                        HomeWallpaperWindow(window, windowMemory, themeLoaded = themeLoaded)
                         HideStrayIme(state.imeAllowed)
                         val appActions = rememberAppActions(state.favoriteKeys, viewModel::onAction)
                         HomeRoute(
@@ -318,7 +324,7 @@ class HomeActivity : ComponentActivity() {
         val area by widgetArea.state.collectAsStateWithLifecycle()
         if (!area.shown) return null
         val graph = appGraph
-        return HomeWidgetSlot(replacesClock = area.replacesClock) { modifier ->
+        return HomeWidgetSlot(replacesClock = area.replacesClock, minWidthDp = area.minWidthDp) { modifier ->
             WidgetArea(
                 state = area,
                 onAction = widgetArea::onAction,

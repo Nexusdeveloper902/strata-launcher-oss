@@ -145,6 +145,9 @@ interface WidgetHostController {
     /** The provider's `minHeight` in dp for the bound [id], or null. */
     suspend fun minHeightDp(id: Int): Int?
 
+    /** The provider's `minWidth` in dp for the bound [id], or null (FB-016: the area is not laid out narrower). */
+    suspend fun minWidthDp(id: Int): Int? = null
+
     /**
      * The `ACTION_APPWIDGET_BIND` request (an `Intent`) for [id] and [ref]; `:app` starts it for a result. Null when
      * it cannot be built.

@@ -279,6 +279,8 @@ class AndroidWidgetHost(
 
     override suspend fun minHeightDp(id: Int): Int? = withContext(io) { boundInfo(id)?.let { toDp(it.minHeight) } }
 
+    override suspend fun minWidthDp(id: Int): Int? = withContext(io) { boundInfo(id)?.let { toDp(it.minWidth) } }
+
     override suspend fun updateSize(
         id: Int,
         widthDp: Float,

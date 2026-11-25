@@ -37,6 +37,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -54,7 +55,10 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.AppFlags
 import app.strata.launcher.core.model.AppKey
@@ -121,9 +125,29 @@ internal fun favoriteAlignment(): Alignment =
         ThemeAlignment.END -> Alignment.CenterEnd
     }
 
+/** The block's horizontal alignment (`favorites.alignment`), for content narrower than a row. */
+@Composable
+internal fun favoriteHorizontalAlignment(): Alignment.Horizontal =
+    when (Strata.theme.favorites.alignment) {
+        ThemeAlignment.START -> Alignment.Start
+        ThemeAlignment.CENTER -> Alignment.CenterHorizontally
+        ThemeAlignment.END -> Alignment.End
+    }
+
+/** Wrapped favourite labels follow `favorites.alignment` too (FB-014). */
+@Composable
+internal fun favoriteTextAlign(): TextAlign =
+    when (Strata.theme.favorites.alignment) {
+        ThemeAlignment.START -> TextAlign.Start
+        ThemeAlignment.CENTER -> TextAlign.Center
+        ThemeAlignment.END -> TextAlign.End
+    }
+
 /**
  * One favourite (VISUAL_SPEC §9.2): text-first, label in `type.favorite`, min 48 dp, optional icon at 1.25 × the
- * list icon size, badges after the label. One accessibility node with the sheet actions (FR-A11Y-01).
+ * list icon size, badges after the label. One accessibility node with the sheet actions (FR-A11Y-01). Centred
+ * (FB-014): icon and label are centred and the badges hang after them, so a badge never moves the label; end aligned,
+ * the badges sit on the label's inner side, so the label keeps the end edge.
  */
 @Composable
 fun FavoriteRow(
@@ -139,13 +163,7 @@ fun FavoriteRow(
     val view = LocalView.current
     val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val locale = LocalLocale.current.platformLocale
-    val arrangement =
-        when (favorites.alignment) {
-            ThemeAlignment.START -> Arrangement.spacedBy(12.dp, Alignment.Start)
-            ThemeAlignment.CENTER -> Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
-            ThemeAlignment.END -> Arrangement.spacedBy(12.dp, Alignment.End)
-        }
-    Row(
+    Box(
         modifier =
             modifier
                 .fillMaxWidth()
@@ -160,32 +178,103 @@ fun FavoriteRow(
                     contentDescription = app.displayLabel
                     if (actions.isNotEmpty()) customActions = actions
                 }.padding(horizontal = theme.list.horizontalPaddingDp.dp),
-        horizontalArrangement = arrangement,
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = favoriteAlignment(),
     ) {
-        var systemIcon = false
-        if (favorites.showIcons) {
-            val size = (theme.icons.sizeDp * FAVORITE_ICON_SCALE).roundToInt().dp
-            val iconState = rememberAppIconState(IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride), size)
-            AppIcon(
-                label = app.displayLabel,
-                state = iconState,
-                size = size,
-                shape = androidx.compose.foundation.shape.CircleShape,
-            )
-            systemIcon = iconState.isSystemIcon
+        val iconSize = (theme.icons.sizeDp * FAVORITE_ICON_SCALE).roundToInt().dp
+        val iconState =
+            if (favorites.showIcons) {
+                rememberAppIconState(IconRequestKey(app.key, app.lastUpdateTime, app.iconOverride), iconSize)
+            } else {
+                null
+            }
+        HangingRow(
+            centred = favorites.alignment == ThemeAlignment.CENTER,
+            trailingFirst = favorites.alignment == ThemeAlignment.END,
+            gap = FAVORITE_GAP,
+            core = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(FAVORITE_GAP),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (iconState != null) {
+                        AppIcon(
+                            label = app.displayLabel,
+                            state = iconState,
+                            size = iconSize,
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                        )
+                    }
+                    if (favorites.showLabels) {
+                        Text(
+                            text = theme.typography.labelCase.apply(app.displayLabel, locale),
+                            style = favoriteTextStyle(),
+                            color = Strata.colors.textPrimary,
+                            textAlign = favoriteTextAlign(),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag(HomeTestTags.favoriteLabel(app)),
+                        )
+                    }
+                }
+            },
+            trailing = {
+                val work = app.profileKind == ProfileKind.WORK && iconState?.isSystemIcon != true
+                if (work || app.badge > 0) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(FAVORITE_GAP),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (work) WorkBadge()
+                        if (app.badge > 0) NotificationBadge(count = app.badge, style = badgeStyle)
+                    }
+                }
+            },
+        )
+    }
+}
+
+private val FAVORITE_GAP = 12.dp
+
+/**
+ * [core] and the [trailing] badges, [gap] apart, so that [core] alone sits where the alignment puts it:
+ * - start: core, then the badges after it (VISUAL_SPEC §9.2);
+ * - centred: the badge width is reserved on both sides, so the box's centre is the centre of [core] (like the clock's
+ *   day period, FB-007). Whether both reserves fit is decided from the wrapped width ([core]'s longest unbreakable
+ *   part, `minIntrinsicWidth`), so a long label wraps between the reserves and stays centred. Only when even that does
+ *   not fit does it fall back to core + badges, which the parent then centres as a whole;
+ * - [trailingFirst] (end alignment): the badges go on [core]'s inner side, so [core] holds the end edge (FB-014).
+ * Never wider than the given width: [core] is measured with the reserved width deducted.
+ */
+@Composable
+private fun HangingRow(
+    centred: Boolean,
+    trailingFirst: Boolean,
+    gap: Dp,
+    core: @Composable () -> Unit,
+    trailing: @Composable () -> Unit,
+) {
+    Layout(contents = listOf(core, trailing)) { (coreMeasurables, trailingMeasurables), constraints ->
+        val maxWidth = constraints.maxWidth
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val t = trailingMeasurables.firstOrNull()?.measure(loose.copy(maxWidth = maxWidth / 2))
+        val gapPx = gap.roundToPx()
+        val hang = if (t == null) 0 else t.width + gapPx
+        val coreMeasurable = coreMeasurables.firstOrNull()
+        val narrowest = coreMeasurable?.minIntrinsicWidth(Constraints.Infinity) ?: 0
+        val both = centred && hang > 0 && (!constraints.hasBoundedWidth || narrowest <= maxWidth - 2 * hang)
+        val reserve = if (both) 2 * hang else hang
+        val coreMax = if (constraints.hasBoundedWidth) (maxWidth - reserve).coerceAtLeast(0) else Constraints.Infinity
+        val c = coreMeasurable?.measure(loose.copy(maxWidth = coreMax))
+        val cw = c?.width ?: 0
+        val width = (cw + reserve).coerceIn(constraints.minWidth, maxWidth)
+        val height = maxOf(c?.height ?: 0, t?.height ?: 0).coerceIn(constraints.minHeight, constraints.maxHeight)
+        layout(width, height) {
+            val first = trailingFirst && !both
+            val coreX = if (both || first) hang else 0
+            val trailingX = if (first) 0 else coreX + cw + gapPx
+            c?.placeRelative(coreX, (height - c.height) / 2)
+            t?.placeRelative(trailingX, (height - t.height) / 2)
         }
-        if (favorites.showLabels) {
-            Text(
-                text = theme.typography.labelCase.apply(app.displayLabel, locale),
-                style = favoriteTextStyle(),
-                color = Strata.colors.textPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (app.profileKind == ProfileKind.WORK && !systemIcon) WorkBadge()
-        if (app.badge > 0) NotificationBadge(count = app.badge, style = badgeStyle)
     }
 }
 
