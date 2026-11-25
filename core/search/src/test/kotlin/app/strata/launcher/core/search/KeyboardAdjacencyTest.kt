@@ -190,6 +190,34 @@ class KeyboardAdjacencyTest {
             .inOrder()
     }
 
+    /**
+     * T-SEARCH-30: a slip on a transliterated form drops one tier, to the substring tier (200), not to the package tier
+     * (150); the other tiers keep their 100-point step.
+     */
+    @Test
+    fun tSearch30_transliteratedSlip() {
+        assertThat(
+            MatchTier.entries.map { it.transliteratedBase },
+        ).containsExactly(500, 400, 300, 200, 200, 100, 100, 0)
+            .inOrder()
+        // "Фото" transliterates to "foto"; "fito" is a slip of it (i is next to o). "Fotobook" is a native slip,
+        // "Profitool" a native substring match.
+        val photo = visible("Фото", pkg = "com.example.foto")
+        val book = visible("Fotobook", pkg = "com.example.book")
+        val tool = visible("Profitool", pkg = "com.example.tool")
+        val hits = index(listOf(photo, book, tool)).rank("fito", includeHidden = true)
+        assertThat(hits.map { it.app.displayLabel to it.tier })
+            .containsExactly(
+                "Fotobook" to MatchTier.ADJACENT,
+                "Фото" to MatchTier.ADJACENT,
+                "Profitool" to MatchTier.SUBSTRING,
+            ).inOrder()
+        assertThat(hits[1].viaTransliteration).isTrue()
+        // Same base as the substring hit: usage decides between them (it could not lift a package-tier hit).
+        val boosted = index(listOf(photo, book, tool), counts = mapOf(tool.key to 10_000)).labels("fito")
+        assertThat(boosted).containsExactly("Fotobook", "Profitool", "Фото").inOrder()
+    }
+
     /** T-SEARCH-30: longer queries: up to 2 slips from 5 characters, 3 from 10; more is not a slip. */
     @Test
     fun tSearch30_longerQueries() {

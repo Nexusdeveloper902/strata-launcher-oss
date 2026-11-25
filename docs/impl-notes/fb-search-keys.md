@@ -36,9 +36,11 @@ ARCHITECTURE §8 gains a tier row, tests are T-SEARCH-28…31 plus a slip set in
 - **Package-only hits** stay eligible for the second pass, and the better match wins: a label slip (250) replaces a
   package hit (150). Fuzzy (100) never beats a package hit, so it is not tried for those entries. Before this change a
   package hit blocked a label slip. **Verified** by T-SEARCH-30.
-- **Transliterated forms** follow the existing rule: a slip on a transliterated form drops one tier (base 250 − 100 =
-  150, the package tier's base). The results are still sorted by base first. **Verified** in code (`better`), not
-  covered by a separate test.
+- **Transliterated forms** drop one tier, now defined as the next tier of the label ladder T1–T6 (600 … 100) instead of
+  a fixed −100 (`MatchTier.transliteratedBase`). T1–T5 and fuzzy are unchanged (each still loses exactly 100). A
+  transliterated slip gets 200 and sorts with native substring matches; with the fixed −100 it got 150, the package
+  tier. **Verified** by T-SEARCH-30 ("fito" → native slip "Fotobook", then the Cyrillic "Фото" and the substring hit
+  "Profitool", ordered by score within the same base).
 - **Ordering:** results are sorted by base first, so `score` (base + display bonus + start bonus + usage) is only
   compared within a tier. A heavily used substring hit (270) can outscore a slip on a later word of the system label
   (250) and still rank below it (T-SEARCH-30).

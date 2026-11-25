@@ -3,8 +3,16 @@ package app.strata.launcher.core.search
 import app.strata.launcher.core.model.AppKey
 import app.strata.launcher.core.model.VisibleApp
 
-/** Score tiers of ARCHITECTURE §8 (higher wins). Transliterated matches score one tier lower. */
-enum class MatchTier(val base: Int) {
+/**
+ * Score tiers of ARCHITECTURE §8 (higher wins). Transliterated matches score one tier lower: [transliteratedBase] is the
+ * next lower base on the label ladder T1–T6 ([ladder]), so T1–T5 and fuzzy keep their 100-point step and a
+ * transliterated slip sorts with native substring matches (200), not with package hits (150).
+ */
+enum class MatchTier(
+    val base: Int,
+    /** One of the six label tiers T1–T6 whose bases are 100 apart (not the slip or package tier). */
+    private val ladder: Boolean = true,
+) {
     EXACT(600),
     PREFIX(500),
     WORD_PREFIX(400),
@@ -14,12 +22,18 @@ enum class MatchTier(val base: Int) {
      * A word start typed with neighbouring keys ("pg" → "Phone", FB-015, D-016): below the intentional tiers T1–T4,
      * above substring, package and generic fuzzy matches.
      */
-    ADJACENT(250),
+    ADJACENT(250, ladder = false),
     SUBSTRING(200),
 
-    /** A package-name match (D-016): below every label match, above fuzzy. */
-    PACKAGE(150),
+    /** A package-name match (D-016): below every label match, above fuzzy. Never transliterated. */
+    PACKAGE(150, ladder = false),
     FUZZY(100),
+    ;
+
+    /** The base of a match on a transliterated form: the next ladder tier below this one (0 below fuzzy). */
+    val transliteratedBase: Int by lazy {
+        entries.filter { it.ladder && it.base < base }.maxOfOrNull { it.base } ?: 0
+    }
 }
 
 /** One ranked result. [tier] is the best tier over all label forms. */
@@ -154,7 +168,7 @@ class SearchIndex private constructor(
         tier: MatchTier,
         bonus: Int = 0,
     ): Match? {
-        val base = if (form.transliterated) tier.base - TIER_GAP else tier.base
+        val base = if (form.transliterated) tier.transliteratedBase else tier.base
         val score = base + bonus + (if (form.display) DISPLAY_BONUS else 0) + entry.boost
         val better = current == null || base > current.base || (base == current.base && score > current.score)
         return if (better) Match(entry, base, score, tier, form) else current
@@ -309,7 +323,7 @@ class SearchIndex private constructor(
     }
 
     companion object {
-        /** The 100-point gap between tiers; transliterated forms lose one tier. */
+        /** The 100-point gap between the label tiers T1–T6 (see [MatchTier.transliteratedBase]). */
         const val TIER_GAP: Int = 100
         const val DISPLAY_BONUS: Int = 20
         const val MAX_BOOST: Int = 50
