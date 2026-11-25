@@ -1,7 +1,11 @@
+// Maven Central's content is read from Google's mirror of it first: Central throttles CI runners with HTTP 429 for
+// longer than Gradle's retries last (nightly 45633298267, UTP jars for API 35). Same files (checked by checksum); an
+// artifact the mirror lacks answers 404, and Gradle then tries Maven Central itself. docs/ci/RELIABILITY.md.
 pluginManagement {
     includeBuild("build-logic")
     repositories {
         google()
+        maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "MavenCentralMirror" }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -11,6 +15,7 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
+        maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "MavenCentralMirror" }
         mavenCentral()
     }
 }
