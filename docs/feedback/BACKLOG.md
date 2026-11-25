@@ -13,7 +13,7 @@ Status values: `queued`, `in progress (<branch>)`, `in review (#PR)`, `done (#PR
 |---|---|---|---|---|
 | FB-010 | P3 | Use platform features up to Android 17 where useful (personal build) | Raise compileSdk/targetSdk to the newest available; minSdk stays unless a feature needs it (decision) | queued |
 | FB-011 | P3 | Glyph tweaks the owner may ask for later | The current set is approved | queued |
-| FB-015 | P2 | Search should forgive pressing a neighbouring key ("pg" for "ph" when looking for Phone) | Keyboard-adjacency-aware matching: a substitution with a neighbouring key costs less than any other typo, also for short queries | queued |
+| FB-015 | P2 | Search should forgive pressing a neighbouring key ("pg" for "ph" when looking for Phone) | Keyboard-adjacency-aware matching: a substitution with a neighbouring key costs less than any other typo, also for short queries | in review (fb-search-keys) |
 | FB-018 | P1 | The nightly CI run fails every night and sends failure notifications | Make the scheduled nightly on main green; see docs/ci/RELIABILITY.md | in progress (#43 merged; 12/13 nightly jobs green, one API 29 test left) |
 
 ## Found during review (not owner feedback)
@@ -23,7 +23,7 @@ Gaps and follow-ups found by reviewers or spec checks. Same status values; IDs R
 | ID | Pri | Item | Notes | Status |
 |---|---|---|---|---|
 | R-001 | P3 | Clock size is not capped at 40 % of the screen width per line (THEME_SYSTEM `sizeSp`) | Owner chose to keep the app as is; THEME_SYSTEM amended, no cap | done (#40) |
-| R-002 | P3 | Fuzzy search: scratch arrays sized to the whole query; surrogate pairs count as two edits | Codex findings on #38; skip fuzzy for queries longer than any indexed form; compute distance over code points | queued |
+| R-002 | P3 | Fuzzy search: scratch arrays sized to the whole query; surrogate pairs count as two edits | Codex findings on #38; skip fuzzy for queries longer than any indexed form; compute distance over code points | in review (fb-search-keys) |
 
 ## Done
 

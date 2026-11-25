@@ -44,7 +44,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
 | FR-SEARCH-01 | P0 | Search opens by swipe, pill, key or accessibility action | Corroborated | APK-028, PUB-013, PUB-054 | :core:search, :feature:search, :platform:system (area); not cited in ARCH | PRODUCT_SPEC §4.3 | T-SEARCH-01, T-SEARCH-02, T-SEARCH-03, T-HOME-14^ | M2 [spec Rel: v1] |
-| FR-SEARCH-02 | P0 | Normalised tiered app matching with initials and fuzzy | Proposed | U-007 | :core:search, :feature:search, :platform:system (area); cited ARCH §8 | PRODUCT_SPEC §4.3 | T-SEARCH-04, T-SEARCH-05, T-SEARCH-06, T-SEARCH-17^, T-SEARCH-18^, T-SEARCH-19^, T-SEARCH-20^, T-SEARCH-21^, T-SEARCH-22^ | M2 [spec Rel: v1] |
+| FR-SEARCH-02 | P0 | Normalised tiered app matching with initials and fuzzy | Proposed | U-007 | :core:search, :feature:search, :platform:system (area); cited ARCH §8 | PRODUCT_SPEC §4.3 | T-SEARCH-04, T-SEARCH-05, T-SEARCH-06, T-SEARCH-17^, T-SEARCH-18^, T-SEARCH-19^, T-SEARCH-20^, T-SEARCH-21^, T-SEARCH-22^, T-SEARCH-28^, T-SEARCH-29^, T-SEARCH-30^, T-SEARCH-31^ | M2 [spec Rel: v1] |
 | FR-SEARCH-03 | P0 | Hidden apps searchable by setting; locked private never | Corroborated (capability); Proposed (setting) | PUB-017, APK-027, DOC-014 | :core:search, :feature:search, :platform:system (area); cited ARCH §4.2, §8 | PRODUCT_SPEC §4.3 | T-SEARCH-07, T-SEARCH-08, T-LIFE-09 | M2, M6 [spec Rel: v1] |
 | FR-SEARCH-04 | P0 | Keyboard Go, arrow, Tab and Esc handling | Proposed | PUB-054 | :core:search, :feature:search, :platform:system (area); cited ARCH §8 | PRODUCT_SPEC §4.3 | T-SEARCH-09, T-SEARCH-10, T-COMPAT-09 | M2 [spec Rel: v1] |
 | FR-SEARCH-05 | P1 | Empty query shows recent apps; clearable and disableable | Corroborated | SEC-005, APK-028 | :core:search, :feature:search, :platform:system (area); cited ARCH §4.2, §8 | PRODUCT_SPEC §4.3 | T-SEARCH-11, T-SEARCH-16 | M2 [spec Rel: v1] |
@@ -207,7 +207,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 |---|---|---|---|---|---|---|---|---|
 | NFR-PERF-01 | P0 | Cold start within 700 ms median on RD-1 | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §7, §10, §15 | PRODUCT_SPEC §5 | T-PERF-01, T-PERF-02, T-PERF-12 | M1, M9 |
 | NFR-PERF-02 | P0 | Smooth list fling and index scrub | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-03, T-PERF-04, T-PERF-11 | M1, M9 |
-| NFR-PERF-03 | P0 | Search results recomputed within 8 ms median | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §8 | PRODUCT_SPEC §5 | T-PERF-05, T-PERF-06, T-SEARCH-22^ | M2, M7, M9 |
+| NFR-PERF-03 | P0 | Search results recomputed within 8 ms median | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §8 | PRODUCT_SPEC §5 | T-PERF-05, T-PERF-06, T-SEARCH-22^, T-SEARCH-31^ | M2, M7, M9 |
 | NFR-PERF-04 | P0 | Memory ceiling and bounded icon cache | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); cited ARCH §9 | PRODUCT_SPEC §5 | T-PERF-07, T-PERF-08 | M3, M9 |
 | NFR-PERF-05 | P0 | No periodic jobs, alarms or wakelocks | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-09, T-PERF-13, T-PERF-14 | M9 |
 | NFR-PERF-06 | P1 | Package changes within 1 s; theme apply within 300 ms | Proposed (blanket statement, PRODUCT_SPEC §5 intro) | — | :benchmark, :core:data, :core:ui (area); not cited in ARCH | PRODUCT_SPEC §5 | T-PERF-10, T-LIST-08, T-THEME-53, T-LIST-13^, T-LIST-14^ | M9 |
@@ -283,15 +283,15 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 14, —: 47.
 - Requirements with at least one test: 147; without: 11.
 - Requirements with a roadmap milestone: 154; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 289; §22 rows: 146.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 293; §22 rows: 146.
 
 ### P0/P1 requirements lacking tests
 - None.
 - THEME_SYSTEM requirements (priority not stated) without tests: None.
 - Requirements whose tests come **only** from §22 (no test’s Covers column names the requirement): None.
 - Requirements whose tests come **only** from Covers columns (absent from §22): FR-THEME-35
-- §22-only pairs (~): none. Covers-only pairs (^): FR-A11Y-01/T-SEARCH-25, FR-APPS-05/T-HOME-14, FR-FAV-02/T-HOME-14, FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-LIST-04/T-LIST-13, FR-LIST-04/T-LIST-14, FR-ONBOARD-01/T-HOME-14, FR-SEARCH-01/T-HOME-14, FR-SEARCH-02/T-SEARCH-17, FR-SEARCH-02/T-SEARCH-18, FR-SEARCH-02/T-SEARCH-19, FR-SEARCH-02/T-SEARCH-20, FR-SEARCH-02/T-SEARCH-21, FR-SEARCH-02/T-SEARCH-22, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-03/T-SEARCH-22, NFR-PERF-06/T-LIST-13, NFR-PERF-06/T-LIST-14, NFR-PRIV-01/T-SET-09, NFR-PRIV-05/T-SEARCH-24.
-- §22/Covers disagreements in total: 0 §22-only pairs, 26 Covers-only pairs (suffixes in the matrix).
+- §22-only pairs (~): none. Covers-only pairs (^): FR-A11Y-01/T-SEARCH-25, FR-APPS-05/T-HOME-14, FR-FAV-02/T-HOME-14, FR-GEST-01/T-GEST-10, FR-HOME-05/T-GEST-10, FR-HOME-05/T-HOME-15, FR-LIST-04/T-LIST-13, FR-LIST-04/T-LIST-14, FR-ONBOARD-01/T-HOME-14, FR-SEARCH-01/T-HOME-14, FR-SEARCH-02/T-SEARCH-17, FR-SEARCH-02/T-SEARCH-18, FR-SEARCH-02/T-SEARCH-19, FR-SEARCH-02/T-SEARCH-20, FR-SEARCH-02/T-SEARCH-21, FR-SEARCH-02/T-SEARCH-22, FR-SEARCH-02/T-SEARCH-28, FR-SEARCH-02/T-SEARCH-29, FR-SEARCH-02/T-SEARCH-30, FR-SEARCH-02/T-SEARCH-31, FR-THEME-35/T-SET-10, FR-THEME-35/T-THEME-54, FR-THEME-35/T-THEME-55, NFR-A11Y-01/T-FAV-06, NFR-A11Y-03/T-FAV-06, NFR-PERF-03/T-SEARCH-22, NFR-PERF-03/T-SEARCH-31, NFR-PERF-06/T-LIST-13, NFR-PERF-06/T-LIST-14, NFR-PRIV-01/T-SET-09, NFR-PRIV-05/T-SEARCH-24.
+- §22/Covers disagreements in total: 0 §22-only pairs, 31 Covers-only pairs (suffixes in the matrix).
 - P2 / unscheduled rows without tests (expected per TEST_PLAN §22): FR-HOME-06, FR-HOME-07, FR-SEARCH-08, FR-APPS-12, FR-FAV-04, FR-GEST-04, FR-NOTIF-04, FR-NOTIF-05, FR-WIDGET-05, FR-WIDGET-06, FR-ONBOARD-05.
 
 ### Requirements lacking acceptance criteria
