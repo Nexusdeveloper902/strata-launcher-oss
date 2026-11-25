@@ -20,9 +20,11 @@ import app.strata.launcher.core.model.IconImage
 import app.strata.launcher.core.platformapi.apps.LaunchError
 import app.strata.launcher.core.platformapi.apps.LaunchOrigin
 import app.strata.launcher.core.platformapi.apps.LaunchResult
+import app.strata.launcher.core.platformapi.system.CallMode
 import app.strata.launcher.core.platformapi.system.ContactHit
 import app.strata.launcher.core.platformapi.system.ContactsSource
 import app.strata.launcher.core.platformapi.system.PermissionState
+import app.strata.launcher.core.platformapi.system.PhoneNumber
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -43,10 +45,12 @@ class AndroidContactsSource(
 ) : ContactsSource {
     private val appContext = context.applicationContext
 
-    override fun permission(): PermissionState =
-        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CONTACTS) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
+    override fun permission(): PermissionState = granted(Manifest.permission.READ_CONTACTS)
+
+    override fun callPermission(): PermissionState = granted(Manifest.permission.CALL_PHONE)
+
+    private fun granted(permission: String): PermissionState =
+        if (ContextCompat.checkSelfPermission(appContext, permission) == PackageManager.PERMISSION_GRANTED) {
             PermissionState.GRANTED
         } else {
             PermissionState.DENIED
@@ -158,8 +162,114 @@ class AndroidContactsSource(
         }
     }
 
+    override suspend fun numbers(hit: ContactHit): List<PhoneNumber> {
+        val uri = hit.lookupUri.toUri()
+        if (!isLookupUri(uri) || permission() != PermissionState.GRANTED) return emptyList()
+        return coroutineScope {
+            val signal = CancellationSignal()
+            val work = async(io) { blockingNumbers(uri, signal) }
+            try {
+                work.await()
+            } catch (e: CancellationException) {
+                signal.cancel()
+                throw e
+            }
+        }
+    }
+
+    /** Runs on [io]; never throws. The numbers are never logged (ARCHITECTURE §11), not even on failure. */
+    private fun blockingNumbers(
+        lookupUri: android.net.Uri,
+        signal: CancellationSignal,
+    ): List<PhoneNumber> =
+        try {
+            val resolver = appContext.contentResolver
+            // The lookup URI survives contact joins and syncs; resolve it to the current contact id first.
+            val contact = ContactsContract.Contacts.lookupContact(resolver, lookupUri)
+            val id = contact?.lastPathSegment?.toLongOrNull()
+            if (id == null) emptyList() else phoneRows(id, signal)
+        } catch (e: OperationCanceledException) {
+            emptyList()
+        } catch (e: SecurityException) {
+            emptyList()
+        } catch (e: RuntimeException) {
+            logger.w(TAG, "number query failed: ${e.javaClass.simpleName}")
+            emptyList()
+        }
+
+    private fun phoneRows(
+        contactId: Long,
+        signal: CancellationSignal,
+    ): List<PhoneNumber> {
+        val out = ArrayList<PhoneNumber>()
+        val seen = HashSet<String>()
+        appContext.contentResolver
+            .query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                PHONE_PROJECTION,
+                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+                arrayOf(contactId.toString()),
+                "${ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY} DESC, " +
+                    "${ContactsContract.CommonDataKinds.Phone.IS_PRIMARY} DESC",
+                signal,
+            )?.use { c ->
+                val numberCol = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val typeCol = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.TYPE)
+                val labelCol = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.LABEL)
+                val superCol = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
+                val primaryCol = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.IS_PRIMARY)
+                while (c.moveToNext() && out.size < ContactsSource.MAX_NUMBERS) {
+                    val number = c.getString(numberCol)?.trim().orEmpty()
+                    if (!ContactsSource.isDialable(number)) continue
+                    // The same number stored twice (two accounts, two formats) is offered once.
+                    if (!seen.add(number.filter { it.isDigit() || it == '+' })) continue
+                    val label =
+                        ContactsContract.CommonDataKinds.Phone
+                            .getTypeLabel(appContext.resources, c.getInt(typeCol), c.getString(labelCol))
+                            ?.toString()
+                    val primary = c.getInt(superCol) != 0 || c.getInt(primaryCol) != 0
+                    out += PhoneNumber(number = number, label = label, primary = primary)
+                }
+            }
+        return out
+    }
+
+    override fun call(
+        number: String,
+        mode: CallMode,
+    ): LaunchResult {
+        if (!ContactsSource.isDialable(number)) return Outcome.Err(LaunchError.SECURITY)
+        // CALL only while CALL_PHONE is granted (ANDROID_PLATFORM §23); otherwise the dialer, never a SecurityException.
+        // MMI/USSD codes and pauses (`*`, `#`, `,`, `;`, p, w) never skip the dialer: the user sees them first.
+        val direct =
+            mode == CallMode.CALL && ContactsSource.isPlainNumber(number) && callPermission() == PermissionState.GRANTED
+        val intent =
+            Intent(if (direct) Intent.ACTION_CALL else Intent.ACTION_DIAL, callUri(number))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            appContext.startActivity(intent)
+            Outcome.Ok(Unit)
+        } catch (e: ActivityNotFoundException) {
+            Outcome.Err(LaunchError.NOT_FOUND)
+        } catch (e: SecurityException) {
+            Outcome.Err(LaunchError.SECURITY)
+        }
+    }
+
     companion object {
         private const val TAG = "Contacts"
+
+        /** `tel:` URI for [number] (FR-SEARCH-09); `#` and the like are encoded by `fromParts`. */
+        fun callUri(number: String): android.net.Uri = android.net.Uri.fromParts("tel", number, null)
+
+        private val PHONE_PROJECTION =
+            arrayOf(
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.TYPE,
+                ContactsContract.CommonDataKinds.Phone.LABEL,
+                ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY,
+                ContactsContract.CommonDataKinds.Phone.IS_PRIMARY,
+            )
 
         /** Only a contacts lookup URI (`content://com.android.contacts/contacts/lookup/…`) is ever opened from a result. */
         fun isLookupUri(uri: android.net.Uri): Boolean {

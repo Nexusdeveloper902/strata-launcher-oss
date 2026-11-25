@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageInstaller
 import android.os.StrictMode
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -106,5 +107,56 @@ class AndroidSystemIntentsTest {
     @Test
     fun queryIsEncoded() {
         assertThat(AndroidSystemIntents.storeIntent("a b&c").data.toString()).isEqualTo("market://search?q=a%20b%26c")
+    }
+
+    /**
+     * T-SET-12 (R, platform half): the lock row opens the accessibility settings with Strata's lock service named in the
+     * AOSP highlight extras, so the settings app can scroll to it (no public intent opens one service's switch).
+     */
+    @Test
+    fun tSet12_accessibilitySettingsNameTheLockService() {
+        assertThat(AndroidSystemIntents(app).accessibilitySettings()).isEqualTo(Outcome.Ok(Unit))
+        val started = shadowOf(app).nextStartedActivity
+        val ours = ComponentName(app, LockAccessibilityService::class.java).flattenToString()
+        assertThat(started.action).isEqualTo(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        assertThat(started.getStringExtra(AndroidSystemIntents.EXTRA_FRAGMENT_ARG_KEY)).isEqualTo(ours)
+        assertThat(
+            started
+                .getBundleExtra(AndroidSystemIntents.EXTRA_SHOW_FRAGMENT_ARGUMENTS)
+                ?.getString(AndroidSystemIntents.EXTRA_FRAGMENT_ARG_KEY),
+        ).isEqualTo(ours)
+        assertThat(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK).isNotEqualTo(0)
+    }
+
+    /** T-SET-13 (R, platform half): only an app-store install counts as "from a store"; below API 33 never. */
+    @Test
+    @Config(sdk = [34])
+    fun tSet13_installSourceStore() {
+        val pm = shadowOf(app.packageManager)
+        // (package, initiating, its signing info, originating, installing, update owner, package source)
+        pm.setInstallSourceInfo(app.packageName, STORE, null, null, STORE, null, PackageInstaller.PACKAGE_SOURCE_STORE)
+        assertThat(InstallSource.installedFromStore(app)).isTrue()
+        pm.setInstallSourceInfo(
+            app.packageName,
+            FILES,
+            null,
+            null,
+            FILES,
+            null,
+            PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE,
+        )
+        assertThat(InstallSource.installedFromStore(app)).isFalse()
+    }
+
+    @Test
+    @Config(sdk = [32])
+    fun tSet13_installSourceBelow33() {
+        assertThat(InstallSource.installedFromStore(app)).isFalse()
+    }
+
+    private companion object {
+        // Invented installer packages.
+        const val STORE = "com.example.store"
+        const val FILES = "com.example.files"
     }
 }

@@ -29,7 +29,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 ## 1. Build and static checks (CI)
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
 |---|---|---|---|---|---|---|
-| T-CI-01 | Merged-manifest permission diff | release variant built | Run `checkPermissions`: parse the merged manifest and diff `uses-permission` against `config/approved-permissions.txt` (REQUEST_DELETE_PACKAGES, ACCESS_HIDDEN_PROFILES, READ_CONTACTS) | Exact match. `INTERNET`, `QUERY_ALL_PACKAGES`, `BIND_APPWIDGET`, `EXPAND_STATUS_BAR`, `AD_ID`, storage perms, `POST_NOTIFICATIONS`, `PACKAGE_USAGE_STATS`, `SET_WALLPAPER` absent. Build fails otherwise | CI | NFR-PRIV-01, NFR-PRIV-03, FR-APPS-01, FR-THEME-34 |
+| T-CI-01 | Merged-manifest permission diff | release variant built | Run `checkPermissions`: parse the merged manifest and diff `uses-permission` against `config/approved-permissions.txt` (REQUEST_DELETE_PACKAGES, ACCESS_HIDDEN_PROFILES, READ_CONTACTS, CALL_PHONE; the list must equal the ANDROID_PLATFORM §23 Required + Optional rows, checked by a build-logic unit test) | Exact match. `INTERNET`, `QUERY_ALL_PACKAGES`, `BIND_APPWIDGET`, `EXPAND_STATUS_BAR`, `AD_ID`, storage perms, `POST_NOTIFICATIONS`, `PACKAGE_USAGE_STATS`, `SET_WALLPAPER` absent. Build fails otherwise | CI | NFR-PRIV-01, NFR-PRIV-03, FR-APPS-01, FR-THEME-34 |
 | T-CI-02 | Dependency allow-list | — | Run `checkDependencies` on `releaseRuntimeClasspath` against the allow-list and the forbidden list (ARCHITECTURE §15) | 0 forbidden artifacts (network, Firebase, Play services, billing, analytics, crash upload). Build fails on any new unlisted artifact | CI | NFR-PRIV-01, NFR-PRIV-02, FR-THEME-01, NFR-THEME-11 |
 | T-CI-03 | Module graph rules | — | Run `checkModuleGraph` | No edge violating ARCHITECTURE §2.1 (e.g. `:feature:*` → `:platform:*`, `:core:theme` → Android) | CI | ARCH §2.1 (supports NFR-THEME-09) |
 | T-CI-04 | Externalised strings | — | Lint with `HardcodedText`, `SetTextI18n`, a custom `StringConcatInUi` rule and `PluralsCandidate` as errors | 0 findings | CI | NFR-I18N-01 |
@@ -101,6 +101,11 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-SEARCH-20 | Typo tolerance (Proposed, D-016) | as above plus "Calculator" | Query "chattyap", "soundfy", "pixlgram", "playtbe", "chtatyapp", "kalkulator", "keybaord", "musci"; negatives "sndfy", "spx", "kxlkxlxtor" | Each positive finds its app (fuzzy tier where it is not a prefix): 1 edit at 4–7 chars, 2 from 8, transposition = 1 edit, later words included. Negatives: no result. Queries without letters are never fuzzy ("2048" does not find "2049 Planner"; one emoji off finds nothing) and lengths count code points ("ab" + an emoji is 3 characters) | U | FR-SEARCH-02 |
 | T-SEARCH-21 | Exact and prefix still first (Proposed, D-016) | labels "Music", "Music Player" plus the above; launch counts 10 000 on word-prefix, initials and fuzzy matches | Query "music", "gm", "musi" | "Music" (exact) then "Music Player" (prefix) before every other tier, with or without usage. Within a tier usage, then collation. Tiers never interleave | U | FR-SEARCH-02 |
 | T-SEARCH-22 | Fuzzy only when few results (Proposed, D-016) | 4 then 5 labels containing "note", plus "Nite Mode" | Query "note" | With 4 earlier-tier matches "Nite Mode" is added at the fuzzy tier; with 5 it is not | U | FR-SEARCH-02, NFR-PERF-03 |
+| T-SEARCH-23 | Swipe-to-call modes (Proposed, D-017) | `FakeContactsSource`, contact with one invented number; settings field 25 | Swipe the row (VM action) with `DIAL` (default), `CALL` + `CALL_PHONE` granted, `CALL` + denied, `CALL` granted then revoked, `OFF`. Export and restore field 25; restore an unknown value | `DIAL`: dialer started with the number. `CALL` + granted: direct call. `CALL` + denied or revoked: dialer instead. `OFF`: no swipe offered, nothing started. Search closes after each hand-off. Field 25 round-trips under `swipe_to_call`; an unknown value reads as `DIAL` | U + R | FR-SEARCH-09 |
+| T-SEARCH-24 | Number choice (Proposed) | contacts with 1 number; 3 numbers, one default; 2 numbers, no default; none; a slow provider | Swipe each. In the chooser pick the second, or cancel. Swipe the slow one, then close search | 1 → that number. Default → the default. 2 without default → a chooser listing both; pick → that number; Cancel/Back/a tap on the scrim → nothing started, search stays open; while the chooser shows, the rows behind it take no touch and are hidden from accessibility services. None → "<name> has no phone number". No phone app → "No phone app can make this call". Closing search cancels the pending lookup (nothing starts later). No number appears in any log line | R | FR-SEARCH-09, NFR-PRIV-05 |
+| T-SEARCH-25 | Swipe gesture (Proposed) | contact rows, field 25 `DIAL`; LTR and RTL | Drag toward the end edge 140 dp and 40 dp, toward the start edge, vertically, and 140 dp from inside the left `systemGestures` inset; under RTL toward the left; with `OFF`; the row's accessibility action | ≥ 96 dp toward the end calls once; 40 dp springs back with no call; toward the start, vertical drags and a drag from the system gesture edge call nothing (the row does not move); RTL is mirrored; `OFF` has no drag and no "Call" action; the action "Call <name>" calls | C | FR-SEARCH-09, FR-A11Y-01 |
+| T-SEARCH-26 | Call hand-off intents (Proposed) | `AndroidContactsSource` on Robolectric, fake contacts provider | `call` with `DIAL`; with `CALL` and `CALL_PHONE`; with `CALL` without it; a number with other characters; `numbers` for a contact with a default, a duplicate and a bad number | `ACTION_DIAL tel:<n>`; `ACTION_CALL tel:<n>`; `ACTION_DIAL` (never a `SecurityException`); refused (`SECURITY`), nothing started. With `CALL` and the permission, a number with `*`, `#`, `,`, `;`, `p` or `w` (MMI/USSD codes, pauses) opens `ACTION_DIAL`, never `ACTION_CALL`. Numbers: default first, duplicate and bad one dropped; empty without `READ_CONTACTS` | R | FR-SEARCH-09 |
+| T-SEARCH-27 | Swipe to call on device (Proposed) | gesture navigation; fixture contact with an invented number; field 25 `DIAL` | Search its name, swipe the row toward the end edge | The activity that resolves `ACTION_DIAL` for the number comes to the front (none: the "No phone app" message). No permission dialog, no call placed | I | FR-SEARCH-09 |
 
 ## 5. APPS
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -189,6 +194,10 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-SET-08 | About and licences | — | Open About → Licences | Version shown. Each bundled OFL font (VISUAL_SPEC §4.2) and each OSS dependency listed with its licence. Privacy statement present | C | FR-SET-06 |
 | T-SET-09 | Icon coverage list and export | fake coverage of 10 apps (2 override, 2 pack, 1 monochrome, 2 glyph, 3 desaturated), tint `monochrome`; then tint `none` | Open Settings -> Icons. Tap "Export list". Switch the tint | Rows show label and source, counts in precedence order (override, pack, monochrome, glyph, desaturated): 2/2/1/2/3. The 3 desaturated rows are highlighted. The export intent is `ACTION_SEND` `text/plain` with 3 lines "Label (package)" (all-apps toggle: 10). Tint `none`: note shown, no highlights; the 6 apps without override or pack icon show source "System icon (untinted)" (count 6, no glyph/monochrome/desaturated rows). No file written, no network call, manifest permissions unchanged | C + R | FR-SET-07, NFR-PRIV-01 |
 | T-SET-10 | Coverage on the real device | Galaxy A56 (API 36) with its installed apps; tint `monochrome` | Open Settings -> Icons. Compare 5 apps per source with the home list. Export to a notes app | Source shown matches the icon drawn on home for each sampled app. Counts sum to the launchable-app total. Export text lists label and package of the desaturated apps. Works in airplane mode | MAN | FR-SET-07, FR-THEME-35 |
+| T-SET-11 | Swipe-to-call setting (Proposed, D-017) | contacts source; `CALL_PHONE` not granted | Open settings. Pick "Call directly": grant; again: deny. Grant, then revoke in system settings and resume. Pick "Off", "Open the dialer" | Nothing is requested on opening. Grant → field 25 `CALL`, radio on "Call directly". Deny → field unchanged, "Permission needed" note with App info. Revoked → radio shows "Open the dialer" plus the note. Off/Dial are written at once without a request. A result the VM did not ask for is ignored | R | FR-SEARCH-09 |
+| T-SET-12 | Permission checklist (Proposed, D-017) | API 34; nothing given; home not default | Open Settings → Set up permissions. Tap each "Allow" (Continue in each disclosure). Then with everything given, tap each action | "Allowed: 0 of 5"; rows default home, notification access, contacts, phone calls, screen lock, each with state, purpose and "Allow". Notification: disclosure, then the listener detail page with Strata's component (the list below API 30). Lock: disclosure, then the accessibility settings with Strata's service in the highlight extras, and the "where to tap" note. Contacts: disclosure, then the runtime dialog. Phone: the runtime dialog. Home: the set-default flow. Given: each opens the page where it is withdrawn. No system screen opens without a tap | R | FR-SET-08, FR-SET-03 |
+| T-SET-13 | Restricted-settings guide (Proposed) | API 33+ file install; store install; API 32; listener and lock given | Open the checklist in each case. Tap "Open App info" | Guide (steps and button) only on API 33+ for a non-store install while notification access or the lock service is off. The button opens `ACTION_APPLICATION_DETAILS_SETTINGS` for Strata. The install-source read runs off main | R | FR-SET-08 |
+| T-SET-14 | Checklist on device (Proposed) | notification access not given | Open Set up permissions, tap notification "Allow", Continue | The system activity that resolves the listener detail intent (the list below API 30) comes to the front; on return the row still reads "Not allowed" and nothing was granted | I | FR-SET-08 |
 
 ## 11. BACKUP
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -349,7 +358,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-REL-01 | Monkey | `APPS500`, a widget, 5 themes, API 34 | `adb shell monkey -p app.strata.launcher --throttle 50 -v 70000` (~1 h) | 0 crashes, 0 ANRs | I | NFR-REL-01 |
 | T-REL-02 | StrictMode clean | debug, penalty-death | Full instrumented suite | 0 StrictMode violations on main | I | NFR-REL-01 |
 | T-REL-03 | Kill during write | — | 1 000 cycles: random kill during reorder/rename/settings/theme save | Each store old or new, never mixed. Room integrity check ok | I | NFR-REL-02 |
-| T-REL-04 | All optional access denied | contacts denied, NLS off, a11y off, no role on 1st run then role only | Run every P0 journey (INTERACTION_SPEC J-01…J-12 P0 parts) | All pass | I | NFR-REL-03 |
+| T-REL-04 | All optional access denied | contacts denied, `CALL_PHONE` denied, NLS off, a11y off, no role on 1st run then role only | Run every P0 journey (INTERACTION_SPEC J-01…J-12 P0 parts) | All pass | I | NFR-REL-03 |
 
 ## 19. COMPAT
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -411,6 +420,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-SEARCH-05 | T-SEARCH-11, T-SEARCH-16 |
 | FR-SEARCH-06 | T-SEARCH-12, T-SEARCH-13, T-SEARCH-14 |
 | FR-SEARCH-07 | T-SEARCH-15 |
+| FR-SEARCH-09 | T-SEARCH-23, T-SEARCH-24, T-SEARCH-25, T-SEARCH-26, T-SEARCH-27, T-SET-11 |
 | FR-APPS-01 | T-APPS-01, T-CI-01 |
 | FR-APPS-02 | T-APPS-02, T-APPS-03 |
 | FR-APPS-03 | T-APPS-04, T-APPS-05 |
@@ -439,11 +449,12 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-WIDGET-04 | T-WIDGET-08, T-WIDGET-09, T-WIDGET-10, T-WIDGET-11 |
 | FR-SET-01 | T-SET-01, T-SET-02, T-FAV-09 |
 | FR-SET-02 | T-SET-03 |
-| FR-SET-03 | T-SET-04, T-SEC-04 |
+| FR-SET-03 | T-SET-04, T-SEC-04, T-SET-12 |
 | FR-SET-04 | T-SET-05 |
 | FR-SET-05 | T-SET-06, T-SET-07, T-LIST-04, T-SEARCH-16 |
 | FR-SET-06 | T-SET-08, T-CI-05 |
 | FR-SET-07 | T-SET-09, T-SET-10 |
+| FR-SET-08 | T-SET-12, T-SET-13, T-SET-14 |
 | FR-BACKUP-01 | T-BACKUP-01, T-BACKUP-02, T-BACKUP-03, T-BACKUP-13 |
 | FR-BACKUP-02 | T-BACKUP-04 … T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-WIDGET-10 |
 | FR-BACKUP-03 | T-BACKUP-08 |

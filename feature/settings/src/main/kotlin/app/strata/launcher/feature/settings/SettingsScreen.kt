@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.model.BadgeStyle
+import app.strata.launcher.core.model.SwipeToCall
 import app.strata.launcher.core.model.VisibleApp
 import app.strata.launcher.core.ui.DialogText
 import app.strata.launcher.core.ui.RadioButton
@@ -75,6 +76,10 @@ object SettingsTestTags {
     const val CONTACTS_DISCLOSURE = "settings_contacts_disclosure"
     const val CONTACTS_CONTINUE = "settings_contacts_continue"
     const val APP_DETAILS = "settings_app_details"
+    const val SWIPE_TO_CALL_PERMISSION_NEEDED = "settings_swipe_to_call_permission_needed"
+
+    /** FR-SEARCH-09 radio rows (settings field 25). */
+    fun swipeToCall(mode: SwipeToCall) = "settings_swipe_to_call_${mode.name.lowercase()}"
 
     fun toggle(t: Toggle) = "settings_toggle_${t.name.lowercase()}"
 
@@ -145,6 +150,7 @@ fun SettingsRoute(
                     SettingsEffect.SetDefault,
                     is SettingsEffect.OpenHomeSettings,
                     SettingsEffect.RequestContacts,
+                    SettingsEffect.RequestCallPhone,
                     SettingsEffect.OpenThemes,
                     SettingsEffect.EditFavorites,
                     -> null
@@ -261,7 +267,10 @@ private fun SettingsRoot(
         group(R.string.settings_group_search) {
             toggle(Toggle.SHOW_HIDDEN_IN_SEARCH, R.string.settings_show_hidden, s, onAction)
             toggle(Toggle.RECENTS, R.string.settings_recents, s, onAction)
-            if (state.optional.contactsPermission != null) contactsRows(state, onAction)
+            if (state.optional.contactsPermission != null) {
+                contactsRows(state, onAction)
+                swipeToCallRows(state, onAction)
+            }
         }
         group(R.string.settings_group_gestures) {
             toggle(Toggle.HAPTICS, R.string.settings_haptics, s, onAction)
@@ -353,6 +362,20 @@ private fun SettingsRoot(
             }
         }
         group(R.string.settings_group_privacy) {
+            // FR-SET-08: one place to give every access, each with a one-tap action (the Privacy page's checklist).
+            item {
+                val items = state.accessItems
+                ActionRow(
+                    title = stringResource(R.string.settings_setup),
+                    summary =
+                        if (items.isEmpty()) {
+                            null
+                        } else {
+                            stringResource(R.string.privacy_setup_count, items.count { it.granted }, items.size)
+                        },
+                    tag = SettingsPageTags.SETUP_ROW,
+                ) { onPage(SettingsPage.PRIVACY) }
+            }
             item {
                 ActionRow(
                     title = stringResource(R.string.privacy_page),
@@ -448,7 +471,7 @@ private fun LockDisclosure(onAction: (SettingsAction) -> Unit) {
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.LOCK_DISCLOSURE),
+        modifier = Modifier.dialogTag(SettingsTestTags.LOCK_DISCLOSURE),
     )
 }
 
@@ -552,6 +575,49 @@ private fun LazyListScope.contactsRows(
     }
 }
 
+/**
+ * FR-SEARCH-09 "Swipe a contact to call" (settings field 25): Off, Open the dialer, Call directly. "Call directly" asks
+ * for `CALL_PHONE`; without it the dialer opens, and the T-SET-11 "Permission needed" note says so.
+ */
+private fun LazyListScope.swipeToCallRows(
+    state: SettingsUiState,
+    onAction: (SettingsAction) -> Unit,
+) {
+    item(key = "swipe_to_call_title") {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+            Text(text = stringResource(R.string.settings_swipe_to_call), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = stringResource(R.string.settings_swipe_to_call_summary),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Strata.colors.textSecondary,
+            )
+        }
+    }
+    val current = state.swipeToCall
+    listOf(
+        SwipeToCall.OFF to R.string.settings_swipe_off,
+        SwipeToCall.DIAL to R.string.settings_swipe_dial,
+        SwipeToCall.CALL to R.string.settings_swipe_call,
+    ).forEach { (mode, title) ->
+        item(key = "swipe_to_call_${mode.name}") {
+            RadioRow(
+                title = stringResource(title),
+                selected = current == mode,
+                tag = SettingsTestTags.swipeToCall(mode),
+            ) { onAction(SettingsAction.SetSwipeToCall(mode)) }
+        }
+    }
+    if (state.callPermissionNeeded) {
+        item(key = "swipe_to_call_app_details") {
+            ActionRow(
+                title = stringResource(R.string.settings_open_app_info),
+                summary = stringResource(R.string.settings_call_permission_needed),
+                tag = SettingsTestTags.SWIPE_TO_CALL_PERMISSION_NEEDED,
+            ) { onAction(SettingsAction.OpenAppDetails) }
+        }
+    }
+}
+
 /** J-09 S-DISC: what is read, that it stays in memory, and that nothing is stored or sent. */
 @Composable
 private fun BadgeDisclosure(
@@ -581,7 +647,7 @@ private fun BadgeDisclosure(
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.BADGE_DISCLOSURE),
+        modifier = Modifier.dialogTag(SettingsTestTags.BADGE_DISCLOSURE),
     )
 }
 
@@ -603,7 +669,7 @@ private fun ContactsDisclosure(onAction: (SettingsAction) -> Unit) {
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.CONTACTS_DISCLOSURE),
+        modifier = Modifier.dialogTag(SettingsTestTags.CONTACTS_DISCLOSURE),
     )
 }
 
@@ -625,9 +691,15 @@ private fun UninstallGuidance(onAction: (SettingsAction) -> Unit) {
                 Text(text = stringResource(R.string.settings_cancel))
             }
         },
-        modifier = Modifier.testTag(SettingsTestTags.UNINSTALL_GUIDANCE),
+        modifier = Modifier.dialogTag(SettingsTestTags.UNINSTALL_GUIDANCE),
     )
 }
+
+/**
+ * Test tag of a dialog pane, visible to UiAutomator too. A dialog is its own window with its own semantics root, so the
+ * `testTagsAsResourceId` set on the settings screen does not reach it; the dialog sets it for itself and its buttons.
+ */
+internal fun Modifier.dialogTag(tag: String): Modifier = semantics { testTagsAsResourceId = true }.testTag(tag)
 
 internal fun LazyListScope.group(
     title: Int,

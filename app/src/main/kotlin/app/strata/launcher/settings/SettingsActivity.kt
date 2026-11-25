@@ -43,6 +43,7 @@ import app.strata.launcher.feature.settings.SettingsViewModel
 import app.strata.launcher.home.HomeActivity
 import app.strata.launcher.home.HomeIntents
 import app.strata.launcher.onboarding.SystemScreenLauncher
+import app.strata.launcher.platform.system.InstallSource
 import app.strata.launcher.theme.ThemeHost
 import app.strata.launcher.theme.ThemesActivity
 import kotlinx.coroutines.flow.first
@@ -78,8 +79,10 @@ class SettingsActivity : ComponentActivity() {
                     privateSpaceSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM,
                     badges = graph.badges,
                     contacts = graph.contacts,
-                    // J-09: Android 13+ blocks listener access for sideloaded apps until "Allow restricted settings".
+                    // J-09 / FR-SET-08: Android 13+ blocks listener access and accessibility services for apps
+                    // installed from a file until "Allow restricted settings"; a store install is not blocked.
                     restrictedSettingsHint = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+                    installedFromStore = { InstallSource.installedFromStore(applicationContext) },
                     handle = createSavedStateHandle(),
                     versionName = BuildConfig.VERSION_NAME,
                     readAsset = { path -> assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) } },
@@ -171,6 +174,12 @@ class SettingsActivity : ComponentActivity() {
     private val contactsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             viewModel.onAction(SettingsAction.ContactsPermissionResult(granted))
+        }
+
+    /** FR-SEARCH-09: `CALL_PHONE`, requested only when the user picks "Call directly"; the VM holds the request in flight. */
+    private val callPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            viewModel.onAction(SettingsAction.CallPermissionResult(granted))
         }
 
     private val themeHost by lazy { ThemeHost(appGraph.themeRepository) }
@@ -338,6 +347,14 @@ class SettingsActivity : ComponentActivity() {
                     contactsPermission.launch(Manifest.permission.READ_CONTACTS)
                 } catch (e: android.content.ActivityNotFoundException) {
                     viewModel.onAction(SettingsAction.ContactsPermissionResult(false))
+                }
+            }
+
+            SettingsEffect.RequestCallPhone -> {
+                try {
+                    callPermission.launch(Manifest.permission.CALL_PHONE)
+                } catch (e: android.content.ActivityNotFoundException) {
+                    viewModel.onAction(SettingsAction.CallPermissionResult(false))
                 }
             }
 

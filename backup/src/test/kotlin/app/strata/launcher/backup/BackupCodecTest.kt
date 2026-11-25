@@ -1,10 +1,13 @@
 package app.strata.launcher.backup
 
 import app.strata.launcher.core.common.Outcome
+import app.strata.launcher.core.json.JsonObject
+import app.strata.launcher.core.json.JsonString
 import app.strata.launcher.core.model.AppearanceSetting
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.IconOverride
 import app.strata.launcher.core.model.Settings
+import app.strata.launcher.core.model.SwipeToCall
 import app.strata.launcher.core.platformapi.backup.BackupError
 import app.strata.launcher.testing.fixtures.BackupFixtures
 import com.google.common.truth.Truth.assertThat
@@ -136,7 +139,7 @@ class BackupCodecTest {
             "default_home_banner_dismissed_until",
             "private_space_container_hidden",
         )
-        assertThat(keys).hasSize(17)
+        assertThat(keys).hasSize(18) // catalogue rows with Export = yes (ARCHITECTURE §4.2), swipe_to_call included
     }
 
     @Test
@@ -153,5 +156,18 @@ class BackupCodecTest {
             )
         assertThat(err(bytes)).isEqualTo(BackupError.NotABackup)
         assertThat(RestoreStateCodec.decode(bytes)).isNotNull()
+    }
+
+    /** T-SEARCH-23 (U, backup half): field 25 is exported under its catalogue name and restored; unknown → default. */
+    @Test
+    fun tSearch23_swipeToCallIsExportedAndRestored() {
+        for (mode in SwipeToCall.entries) {
+            val obj = SettingsCodec.encode(Settings.DEFAULT.copy(swipeToCall = mode))
+            assertThat(obj["swipe_to_call"]).isEqualTo(JsonString("SWIPE_TO_CALL_${mode.name}"))
+            assertThat(SettingsCodec.decode(obj).settings.swipeToCall).isEqualTo(mode)
+        }
+        val bad = SettingsCodec.decode(JsonObject("swipe_to_call" to JsonString("SWIPE_TO_CALL_ALWAYS")))
+        assertThat(bad.settings.swipeToCall).isEqualTo(SwipeToCall.DIAL)
+        assertThat(bad.invalid).isEqualTo(1)
     }
 }

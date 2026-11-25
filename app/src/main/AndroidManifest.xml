@@ -12,6 +12,13 @@
 
     <!-- Optional runtime permission, requested only when contact search is enabled (FR-SEARCH-06) -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Optional runtime permission (dangerous), requested only when the user picks "Call directly" for swipe to call
+         (FR-SEARCH-09, ANDROID_PLATFORM §23). Without it the swipe opens the dialer (ACTION_DIAL needs no permission). -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- CALL_PHONE implies a required telephony feature; Strata works without one (the swipe then reports no phone app). -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
     <!-- Strip AD_ID if any transitive dependency merges it in (NFR-PRIV-02) -->
     <uses-permission
         android:name="com.google.android.gms.permission.AD_ID"
