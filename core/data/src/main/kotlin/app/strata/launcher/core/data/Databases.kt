@@ -18,6 +18,20 @@ object Databases {
         context: Context,
         logger: Logger,
         resetNotices: ResetNotices,
+    ): StrataDatabase =
+        openStrata(
+            context,
+            logger,
+            resetNotices,
+            EntryKeyCallback(context.applicationContext.packageName, EntryKeyCallback.STRATA_TABLES, logger),
+        )
+
+    /** [openStrata] with the FB-019 key move given (tests replace it with a failing one). */
+    internal fun openStrata(
+        context: Context,
+        logger: Logger,
+        resetNotices: ResetNotices,
+        entryKeys: EntryKeyCallback,
     ): StrataDatabase {
         val app = context.applicationContext
         return SafeRoomOpener(
@@ -30,7 +44,7 @@ object Databases {
                 .databaseBuilder(app, StrataDatabase::class.java, file.absolutePath)
                 .openHelperFactory(factory)
                 // FB-019: keys of Strata's old launcher entry move to the new one.
-                .addCallback(EntryKeyCallback(app.packageName, EntryKeyCallback.STRATA_TABLES))
+                .addCallback(entryKeys)
                 .build()
         }.open()
     }
@@ -50,7 +64,7 @@ object Databases {
             Room
                 .databaseBuilder(app, LaunchLogDatabase::class.java, file.absolutePath)
                 .openHelperFactory(factory)
-                .addCallback(EntryKeyCallback(app.packageName, EntryKeyCallback.LAUNCH_LOG_TABLES))
+                .addCallback(EntryKeyCallback(app.packageName, EntryKeyCallback.LAUNCH_LOG_TABLES, logger))
                 .build()
         }.open()
     }

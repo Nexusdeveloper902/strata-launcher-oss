@@ -216,7 +216,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-BACKUP-11 | Auto Backup / transfer | API 31 emulator; `bmgr` | Set favourites, launch apps → `bmgr backupnow` → list the backup set (`bmgr` transport dump) → clear data → `bmgr restore` → start | The backup set contains no `launch_log.db` and nothing from `no_backup/` or caches. Favourites, overrides, settings, themes restored; launch log empty. Restore detected (install marker differs from `install_id`), post-restore reconcile ran once (no banner) | I | FR-BACKUP-04, FR-THEME-33, NFR-PRIV-05 |
 | T-BACKUP-12 | Fuzz | 10 000 mutated backup files from the valid fixtures | Run the validator | 0 crashes. Each result is Rejected (typed error) or a Preview. Time ≤ 200 ms per file | U | FR-BACKUP-02, NFR-REL-01 |
 | T-BACKUP-13 | Cross-install round trip | export on emulator A (API 34), restore on clean emulator B (API 36) | Restore | Main-profile overrides map to B's main serial. Themes and settings equal | I | FR-BACKUP-01, FR-BACKUP-02 |
-| T-BACKUP-14 | Old backup with the old launcher entry (FB-019) | a backup exported while Strata's entry was `settings.SettingsActivity` (favourite + hidden/label override on it); the new version installed (entry `settings.EntryActivity`) | Preview, then restore | Strata is not listed as a missing app; the favourite (order kept) and the override land on the new entry; other apps unchanged. Control: without the mapping the old key would be restored as a missing app | U | FR-BACKUP-02 |
+| T-BACKUP-14 | Old backup with the old launcher entry (FB-019) | a backup exported while Strata's entry was `settings.SettingsActivity` (favourite + hidden/label override on it); one holding both the old and the new key; the new version installed (entry `settings.EntryActivity`) | Preview, then restore | Strata is not listed as a missing app; the favourite (order kept) and the override land on the new entry; other apps unchanged. With both keys, one entry per app and profile is kept, the one already on the new key, and the preview counts (renames, favourites) match what is restored. Control: without the mapping the old key would be restored as a missing app | U | FR-BACKUP-02 |
 
 ## 12. ONBOARD
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -249,7 +249,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-LIFE-13 | Crash-loop safe mode | test hook throws during the first frame twice | Start ×3 | The third start is in safe mode (default theme, no widgets) with the banner | I | FR-LIFE-04, FR-THEME-28 |
 | T-LIFE-14 | Room migrations | schema v1…vN exported | `MigrationTestHelper` for each step + full chain | Data preserved. Unknown version → rebuild path (not a destructive silent wipe) | R | NFR-REL-02, FR-LIFE-04 |
 | T-LIFE-15 | Locked user (direct boot) | API 34, reboot before unlock | Home is shown before the first unlock (if the system starts it) | No crash. Shortcuts and DB access deferred until unlock | I/MAN | FR-LIFE-01, NFR-REL-01 |
-| T-LIFE-16 | Old launcher-entry keys move (FB-019) | `strata.db` and `launch_log.db` holding rows keyed on `<pkg>/app.strata.launcher.settings.SettingsActivity` (favourite in the middle of the order, override with hidden + label + icon, catalog row, launch events), plus a row already keyed on the new entry and one in another profile | Open the databases (twice) | Every old row is keyed on `<pkg>/app.strata.launcher.settings.EntryActivity`; the favourite keeps its place; an existing new-key row wins; other profiles move with their own serial; other apps untouched; the second open changes nothing | R | FR-FAV-01, FR-APPS-05, FR-LIFE-03 |
+| T-LIFE-16 | Old launcher-entry keys move (FB-019) | `strata.db` and `launch_log.db` holding rows keyed on `<pkg>/app.strata.launcher.settings.SettingsActivity` (favourite in the middle of the order, override with hidden + label + icon, catalog row, launch events), plus a row already keyed on the new entry, an empty (marker) override on the new entry, one in another profile, and look-alike components of another package; separately a move that fails | Open the databases (twice); open once with a failing move, then normally | Every old row is keyed on `<pkg>/app.strata.launcher.settings.EntryActivity`; the favourite keeps its place; an existing new-key row wins, except an empty override, which gives way to the old data; other profiles move with their own serial; other apps and other packages untouched; the second open changes nothing. A failing move resets and quarantines nothing, keeps every row, logs a warning, and the next open moves the rows | R | FR-FAV-01, FR-APPS-05, FR-LIFE-03, FR-LIFE-04 |
 
 ## 14. A11Y
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -469,7 +469,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-LIFE-01 | T-LIFE-01, T-LIFE-02, T-LIFE-15, T-PERF-01 |
 | FR-LIFE-02 | T-LIFE-02, T-LIFE-03, T-COMPAT-07 |
 | FR-LIFE-03 | T-LIFE-04, T-LIFE-05, T-APPS-03, T-BACKUP-08, T-LIFE-16 |
-| FR-LIFE-04 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14 |
+| FR-LIFE-04 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14, T-LIFE-16 |
 | FR-A11Y-01 | T-A11Y-01, T-FAV-03 |
 | FR-A11Y-02 | T-A11Y-02, T-A11Y-03 |
 | FR-A11Y-03 | T-A11Y-04, T-A11Y-05, T-APPS-17, T-NOTIF-05 |

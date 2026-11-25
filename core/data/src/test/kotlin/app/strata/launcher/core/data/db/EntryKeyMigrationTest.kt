@@ -3,6 +3,7 @@ package app.strata.launcher.core.data.db
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.strata.launcher.core.common.log.LogLevel
 import app.strata.launcher.core.data.Databases
 import app.strata.launcher.core.data.launchlog.LaunchEventEntity
 import app.strata.launcher.core.data.launchlog.LaunchLogDatabase
@@ -21,7 +22,9 @@ import java.io.File
  * T-LIFE-16 (FB-019, Robolectric with real SQLite files): rows keyed on Strata's old launcher entry
  * (`settings.SettingsActivity`) move to the new one (`settings.EntryActivity`) when the databases open: the favourite
  * keeps its place, the override (hidden, label, icon) survives, the catalog cache and launch events follow. A row that
- * already exists for the new key wins; other apps are untouched; a second open changes nothing.
+ * already exists for the new key wins (an empty override row does not: the old data moves in); other apps and
+ * look-alike components of other packages are untouched; a second open changes nothing. A failing move never resets or
+ * quarantines the database: it is logged, rolled back and retried on the next open.
  */
 @RunWith(AndroidJUnit4::class)
 class EntryKeyMigrationTest {
@@ -40,6 +43,7 @@ class EntryKeyMigrationTest {
             ?.listFiles()
             ?.forEach { it.delete() }
         File(context.noBackupFilesDir, LaunchLogDatabase.FILE_NAME).delete()
+        File(context.filesDir, "quarantine").deleteRecursively()
     }
 
     @Before
@@ -117,5 +121,91 @@ class EntryKeyMigrationTest {
         rows.close()
         db.close()
         assertThat(components).containsExactly(new, notes).inOrder()
+    }
+
+    @Test
+    fun anEmptyNewOverrideGivesWayToTheOldData() {
+        strata().apply {
+            runBlocking {
+                // A reconcile marker for the new entry (all defaults) next to the owner's data on the old one.
+                overrideDao().upsert(AppOverrideEntity(new, 0, missingSince = 5L))
+                overrideDao().upsert(AppOverrideEntity(old, 0, hidden = true, customLabel = "Launcher setup"))
+            }
+            close()
+        }
+        val db = strata()
+        runBlocking {
+            val rows = db.overrideDao().all()
+            assertThat(rows.map { it.component }).containsExactly(new)
+            assertThat(rows.single().customLabel).isEqualTo("Launcher setup")
+            assertThat(rows.single().hidden).isTrue()
+        }
+        db.close()
+    }
+
+    @Test
+    fun lookAlikeComponentsOfOtherPackagesAreUntouched() {
+        val lookAlike = "com.example.copy/${EntryKeyMigration.OLD_CLASS}"
+        val lookAlikeShort = "com.example.copy/.settings.SettingsActivity"
+        strata().apply {
+            runBlocking {
+                favoriteDao().replaceAll(listOf(lookAlike to 0L, lookAlikeShort to 0L))
+                overrideDao().upsert(AppOverrideEntity(lookAlike, 0, customLabel = "Copy"))
+            }
+            close()
+        }
+        val db = strata()
+        runBlocking {
+            assertThat(db.favoriteDao().all().map { it.component }).containsExactly(lookAlike, lookAlikeShort).inOrder()
+            assertThat(db.overrideDao().all().map { it.component }).containsExactly(lookAlike)
+        }
+        db.close()
+    }
+
+    @Test
+    fun aFailingMoveNeverResetsTheDatabase_andIsRetried() {
+        strata().apply {
+            runBlocking {
+                favoriteDao().replaceAll(listOf(notes to 0L, old to 0L))
+                overrideDao().upsert(AppOverrideEntity(old, 0, customLabel = "Launcher setup"))
+            }
+            close()
+        }
+        val notices = FakeResetNotices()
+        val logger = RecordingLogger()
+        val failing =
+            EntryKeyCallback(pkg, EntryKeyCallback.STRATA_TABLES, logger) { _, sql, _ ->
+                if (sql.startsWith("UPDATE")) throw android.database.sqlite.SQLiteDatabaseLockedException("busy")
+            }
+        val db = Databases.openStrata(context, logger, notices, failing)
+        runBlocking {
+            // Nothing reset, nothing set aside, nothing moved (rolled back): the data is all there.
+            assertThat(db.favoriteDao().all().map { it.component }).containsExactly(notes, old).inOrder()
+            assertThat(
+                db
+                    .overrideDao()
+                    .all()
+                    .single()
+                    .customLabel,
+            ).isEqualTo("Launcher setup")
+        }
+        db.close()
+        assertThat(notices.causes.value).isEmpty()
+        assertThat(File(context.filesDir, "quarantine").listFiles().orEmpty()).isEmpty()
+        assertThat(logger.entries.any { it.level == LogLevel.WARN && it.message.contains("entry key") }).isTrue()
+
+        // The next (working) open moves it.
+        val retried = strata()
+        runBlocking {
+            assertThat(retried.favoriteDao().all().map { it.component }).containsExactly(notes, new).inOrder()
+            assertThat(
+                retried
+                    .overrideDao()
+                    .all()
+                    .single()
+                    .component,
+            ).isEqualTo(new)
+        }
+        retried.close()
     }
 }

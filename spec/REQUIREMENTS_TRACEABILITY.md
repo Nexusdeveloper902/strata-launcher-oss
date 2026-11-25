@@ -150,7 +150,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-LIFE-01 | P0 | Cold start from snapshot, background reconcile | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §4, §10 | PRODUCT_SPEC §4.12 | T-LIFE-01, T-LIFE-02, T-LIFE-15, T-PERF-01 | M1 [spec Rel: v1] |
 | FR-LIFE-02 | P0 | Configuration changes keep widgets, query and sheet | Proposed | DOC-059, DOC-060 | :core:data, :platform:apps, :app (area); cited ARCH §10, §14.2 | PRODUCT_SPEC §4.12 | T-LIFE-02, T-LIFE-03, T-COMPAT-07 | M3 [spec Rel: v1] |
 | FR-LIFE-03 | P0 | Reconcile on events; purge removed-app records after 30 days | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §4, §12.3 | PRODUCT_SPEC §4.12 | T-LIFE-04, T-LIFE-05, T-APPS-03, T-BACKUP-08, T-LIFE-16 | M1 [spec Rel: v1] |
-| FR-LIFE-04 | P0 | Corrupt storage rebuilt with banner, no crash loop | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §1, §4.1, §10 | PRODUCT_SPEC §4.12 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14 | M1 [spec Rel: v1] |
+| FR-LIFE-04 | P0 | Corrupt storage rebuilt with banner, no crash loop | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §1, §4.1, §10 | PRODUCT_SPEC §4.12 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14, T-LIFE-16 | M1 [spec Rel: v1] |
 
 ## FR-A11Y (PRODUCT_SPEC §4)
 

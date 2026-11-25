@@ -343,13 +343,48 @@ class DefaultBackupService(
             }
         }
 
-    /** [migrateComponent] applied to every per-app component of [doc] (apps, favourites, launch-log days). */
-    private fun migrated(doc: BackupDocument): BackupDocument =
-        doc.copy(
-            apps = doc.apps.map { it.copy(component = migrateComponent(it.component)) },
+    /**
+     * [migrateComponent] applied to every per-app component of [doc] (apps, favourites, launch-log days). A file that
+     * holds both the old and the new key for one app keeps one entry, preferring the one that was already new (the
+     * database rule of FB-019); the preview counts are taken from the result, so they match what is restored.
+     */
+    private fun migrated(doc: BackupDocument): BackupDocument {
+        fun <T, K> preferUnchanged(
+            items: List<T>,
+            component: (T) -> String,
+            rewrite: (T, String) -> T,
+            key: (T) -> K,
+        ): List<T> {
+            val keep = LinkedHashMap<K, Pair<T, Boolean>>()
+            for (original in items) {
+                val before = component(original)
+                val after = migrateComponent(before)
+                val item = rewrite(original, after)
+                val moved = after != before
+                val k = key(item)
+                val held = keep[k]
+                if (held == null || (held.second && !moved)) keep[k] = item to moved
+            }
+            return keep.values.map { it.first }
+        }
+        return doc.copy(
+            apps =
+                preferUnchanged(
+                    doc.apps,
+                    { it.component },
+                    { a, c -> a.copy(component = c) },
+                    { it.component to it.profile },
+                ),
             favorites = doc.favorites.map { it.copy(component = migrateComponent(it.component)) }.distinct(),
-            launchLog = doc.launchLog.map { it.copy(component = migrateComponent(it.component)) },
+            launchLog =
+                preferUnchanged(
+                    doc.launchLog,
+                    { it.component },
+                    { d, c -> d.copy(component = c) },
+                    { Triple(it.component, it.profile, it.day) },
+                ),
         )
+    }
 
     private fun previewOf(
         token: String,

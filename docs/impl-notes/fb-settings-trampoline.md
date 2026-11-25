@@ -44,10 +44,21 @@ seen on a device yet), `Proposed` (design choice).
   - `DefaultBackupService` maps every component of a backup document (apps, favourites, launch-log days) right after
     decoding, so the preview does not list Strata as missing and the restore lands on the new entry.
   - The device tests that used Strata's own entry as an installed-app key now use `EntryActivity`.
+- Review fixes (`Proposed`, all `Verified` by the tests below):
+  - The move never fails an open. `SafeRoomOpener` treats any exception during open as corruption and sets the file
+    aside (the owner would lose favourites, overrides and widgets), so the callback catches every exception, the
+    transaction rolls back, a warning is logged, and the next open retries (the move is idempotent). With the catch
+    removed, the failing-move test fails.
+  - `app_override`: an empty new-key row (no hidden flag, label or icon, e.g. a reconcile marker) gives way to the old
+    row's data instead of winning.
+  - Backups holding both keys keep one entry per (component, profile) (launch-log days per day too), preferring the one
+    already on the new key; the preview counts are taken from that result.
 - Tests: `core:data` `db/EntryKeyMigrationTest` (T-LIFE-16, real SQLite files: favourite in the middle of the order,
   override with hidden + label + icon, catalog row, launch events, existing new-key row wins, another profile, second
-  open idempotent); `backup` `EntryKeyRestoreTest` (T-BACKUP-14: an old export restores onto the new entry, with a
-  control showing the old key would otherwise be restored as a missing app).
+  open idempotent; empty new override gives way; look-alike components of another package untouched; a failing move
+  keeps every row, resets and quarantines nothing, logs, and is retried); `backup` `EntryKeyRestoreTest` (T-BACKUP-14:
+  an old export restores onto the new entry; a file with both keys keeps the new one and its counts match; a control
+  showing the old key would otherwise be restored as a missing app).
 
 ## Tests (T-HOME-17)
 - `app` `settings/EntryActivityTest` (Robolectric, `Verified`): the manifest declares the entry with `Theme.NoDisplay`
