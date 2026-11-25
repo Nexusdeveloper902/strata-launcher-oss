@@ -66,7 +66,7 @@ class DiagnosticLogDeviceTest {
                 }
             val key =
                 AppKey(
-                    "${context.packageName}/${SettingsActivity::class.java.name}",
+                    "${context.packageName}/${EntryActivity::class.java.name}",
                     main
                         .first {
                             it.kind ==

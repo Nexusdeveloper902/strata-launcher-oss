@@ -13,8 +13,8 @@ Status values: `queued`, `in progress (<branch>)`, `in review (#PR)`, `done (#PR
 |---|---|---|---|---|
 | FB-002 | P1 | Keyboard closes by itself in text fields (seen in Edit favourites > Add apps; maybe elsewhere) | Check every text field | in review (#38) |
 | FB-004 | P2 | Smarter search: typing the exact name is annoying | Word prefixes, initials, substrings, typo tolerance; exact and prefix matches still first | in review (#38) |
-| FB-005 | P2 | Swipe a contact search result sideways to call it | CALL_PHONE opt-in; falls back to the dialer | queued (after #38) |
-| FB-006 | P2 | One-tap permission setup: no digging through Accessibility and other menus | Deep links to the exact switch; Android 13+ "Allow restricted settings" guide | queued (after #38) |
+| FB-005 | P2 | Swipe a contact search result sideways to call it | CALL_PHONE opt-in; falls back to the dialer | in review (fb-call-permissions) |
+| FB-006 | P2 | One-tap permission setup: no digging through Accessibility and other menus | Deep links to the exact switch; Android 13+ "Allow restricted settings" guide | in review (fb-call-permissions) |
 | FB-010 | P3 | Use platform features up to Android 17 where useful (personal build) | Raise compileSdk/targetSdk to the newest available; minSdk stays unless a feature needs it (decision) | queued |
 | FB-011 | P3 | Glyph tweaks the owner may ask for later | The current set is approved | queued |
 | FB-014 | P2 | Now that the clock is centred, the app list looks off-centre | Check the list's horizontal alignment and padding against the centred header in every theme | queued |
