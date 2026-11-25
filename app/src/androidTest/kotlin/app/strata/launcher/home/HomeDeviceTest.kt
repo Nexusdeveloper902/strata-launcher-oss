@@ -346,6 +346,22 @@ class HomeDeviceTest {
             } catch (e: ComposeTimeoutException) {
                 throw AssertionError("The system still excludes the right edge at y=${h / 2}: ${systemExclusion()}", e)
             }
+            // On API 29 the gesture is decided by System UI's EdgeBackGestureHandler against its own copy of the
+            // exclusion, which WindowManager's listener updates through System UI's main thread. With System UI busy
+            // (nightly 45603394240, API 29 AOSP image, 16 MB heap: a blocking GC across the swipe) that copy still
+            // held home's index exclusion after WindowManager had cleared it; the swipe was refused and no Back came.
+            // Wait for the copy that decides as well: back gesture enabled, start point not excluded.
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                if (systemUiEdgeBack() == null) Log.w(TAG, "System UI printed no EdgeBackGestureHandler state")
+                try {
+                    compose.waitUntil(DEVICE_TIMEOUT_MS) {
+                        val back = systemUiEdgeBack() ?: return@waitUntil true
+                        back.enabled && back.exclusion.none { it.contains(w - 1, h / 2) }
+                    }
+                } catch (e: ComposeTimeoutException) {
+                    throw AssertionError("System UI refuses a back gesture at the right edge: ${systemUiEdgeBack()}", e)
+                }
+            }
             // From the very edge inward, at the index's height: the system back gesture.
             device.swipe(w - 1, h / 2, w * 2 / 3, h / 2, EDGE_SWIPE_STEPS)
             compose.waitUntil(DEVICE_TIMEOUT_MS) { compose.count(SearchTestTags.LAYER) == 0 }
@@ -665,7 +681,12 @@ class HomeDeviceTest {
                 .map(String::trim)
                 .firstOrNull { it.startsWith("mSystemGestureExclusion=") }
                 ?: throw AssertionError("no mSystemGestureExclusion line in `dumpsys window displays`")
-        return Regex("""\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)""")
+        return rects(line)
+    }
+
+    /** The `(l,t,r,b)` rectangles of a dumped region. */
+    private fun rects(line: String): List<Rect> =
+        Regex("""\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)""")
             .findAll(line)
             .map { m ->
                 m.groupValues
@@ -673,6 +694,24 @@ class HomeDeviceTest {
                     .map(String::toInt)
                     .let { (l, t, r, b) -> Rect(l, t, r, b) }
             }.toList()
+
+    /** What System UI's EdgeBackGestureHandler decides with (its `dump`), or null when System UI does not print it. */
+    private data class EdgeBack(
+        val enabled: Boolean,
+        val exclusion: List<Rect>,
+    )
+
+    private fun systemUiEdgeBack(): EdgeBack? {
+        val section =
+            shell("dumpsys activity service com.android.systemui")
+                .substringAfter("EdgeBackGestureHandler:", missingDelimiterValue = "")
+                .lineSequence()
+                .take(EDGE_BACK_DUMP_LINES)
+                .map(String::trim)
+                .toList()
+        val enabled = section.firstOrNull { it.startsWith("mIsEnabled=") } ?: return null
+        val region = section.firstOrNull { it.startsWith("mExcludeRegion=") } ?: return null
+        return EdgeBack(enabled.removePrefix("mIsEnabled=") == "true", rects(region))
     }
 
     private fun exclusionRects(): List<Rect> {
@@ -707,6 +746,9 @@ class HomeDeviceTest {
         /** T-SEARCH-01's swipe: 64 dp up from 45 % of the height opens search on resting home. */
         const val SEARCH_SWIPE_DP = 64
         const val EDGE_SWIPE_STEPS = 10
+
+        /** EdgeBackGestureHandler.dump prints its fields in the lines right after its header (Android 10: 6). */
+        const val EDGE_BACK_DUMP_LINES = 8
 
         /** `settings get secure navigation_mode`: 0 three-button, 1 two-button, 2 gestural. */
         const val GESTURAL_NAV_MODE = "2"
