@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
+import android.content.ContentProviderClient;
 import android.content.ContentProviderOperation;
 import android.content.Context;
 import android.content.Intent;
@@ -11,6 +12,7 @@ import android.content.OperationApplicationException;
 import android.net.Uri;
 import android.os.Build;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.provider.ContactsContract;
 import android.util.Log;
 import java.util.ArrayList;
@@ -53,6 +55,9 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
 
     private static final String SENDER = "app.strata.launcher";
     private static final String TAG = "AccessFixture";
+    /** How long a contacts step waits for the provider to be published again (bounded by the sender's wait). */
+    private static final long PROVIDER_WAIT_MS = 8_000L;
+    private static final long PROVIDER_POLL_MS = 100L;
     private static final String CHANNEL_ALERTING = "fixture_alerting";
     private static final String CHANNEL_SILENT = "fixture_silent";
 
@@ -144,15 +149,38 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
                         .build());
             }
         }
-        context.getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
+        try (ContentProviderClient provider = contactsProvider(context)) {
+            provider.applyBatch(ops);
+        }
     }
 
-    private static void clear(Context context) {
+    private static void clear(Context context) throws RemoteException {
         Uri uri = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
                 .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
                 .appendQueryParameter(ContactsContract.RawContacts.ACCOUNT_TYPE, ACCOUNT_TYPE)
                 .appendQueryParameter(ContactsContract.RawContacts.ACCOUNT_NAME, ACCOUNT_NAME)
                 .build();
-        context.getContentResolver().delete(uri, null, null);
+        try (ContentProviderClient provider = contactsProvider(context)) {
+            provider.delete(uri, null, null);
+        }
+    }
+
+    /**
+     * The contacts provider, waiting while it is not published. On API 26 the contacts provider process is replaced
+     * shortly after boot; a ContentResolver call that lands in that gap throws "Unknown URL" before reaching any provider
+     * (CI run 45512812674: CLEAR_CONTACTS, pid 5270 gone, 5351 publishing 0.4 s later). Waiting here keeps the step a
+     * single attempt: an operation that reached the provider and failed still reports RESULT_FAILED, never re-sent.
+     */
+    private static ContentProviderClient contactsProvider(Context context) {
+        long end = SystemClock.uptimeMillis() + PROVIDER_WAIT_MS;
+        while (true) {
+            ContentProviderClient client =
+                    context.getContentResolver().acquireContentProviderClient(ContactsContract.AUTHORITY);
+            if (client != null) return client;
+            if (SystemClock.uptimeMillis() >= end) {
+                throw new IllegalStateException("contacts provider not published after " + PROVIDER_WAIT_MS + " ms");
+            }
+            SystemClock.sleep(PROVIDER_POLL_MS);
+        }
     }
 }
