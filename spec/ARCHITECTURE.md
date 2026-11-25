@@ -43,8 +43,8 @@ no account, no analytics, no billing (D-004, D-007, NFR-PRIV-01/02). The theme f
 ## 2. Module layout
 
 ```
-:app                         Application, HomeActivity, SettingsActivity (also the D-008 entry
-                             router), ThemeImportActivity, PermissionUsageActivity, PinRequestActivity,
+:app                         Application, HomeActivity, EntryActivity (window-less D-008 entry),
+                             SettingsActivity (also the D-008 router), ThemeImportActivity, PermissionUsageActivity, PinRequestActivity,
                              receivers, manifest, AppGraph (manual DI), nav host
 :core:common                 dispatchers, Clock, Logger, Outcome<T,E>, IDs, Flow utils (pure Kotlin)
 :core:model                  AppKey, AppEntry, ProfileKind, AppOverride, Favorite, Settings,
@@ -657,7 +657,10 @@ snackbar shows the counts.
 | Surface | Control |
 |---|---|
 | `HomeActivity` (exported, MAIN/HOME) | Reads only action and category. Extras are ignored. `onNewIntent` → HomePressed only for `ACTION_MAIN`+`CATEGORY_HOME`. |
-| `SettingsActivity` (exported, LAUNCHER + `APPLICATION_PREFERENCES`) | No extras honoured, except an internal deep-link enum from our own `PendingIntent`s (none in v1). Entry routing (D-008) looks only at action and category: `MAIN`+`LAUNCHER` → onboarding if `onboarding_done` is false, else an explicit intent to `HomeActivity` and `finish()`; `APPLICATION_PREFERENCES` → settings root. |
+| `EntryActivity` (exported, LAUNCHER; window-less, FB-019) | No extras read. In `onCreate`, no window and no store read: an explicit intent to `HomeActivity` with action `app.strata.launcher.action.ENTRY` (new task), then `finish()`. Home routes: onboarding as its first layer on a first run (Back on Welcome returns to the launcher), else home. |
+| `HomeActivity` action `ENTRY` | Only the action is read: "opened as an app". Cleared by a Home press. |
+| Stored keys of the old entry (FB-019) | Per-app rows keyed on `<pkg>/app.strata.launcher.settings.SettingsActivity` (favourites, overrides, catalog cache in `strata.db`; launch events in `launch_log.db`) are rewritten to `…settings.EntryActivity` whenever a database opens (idempotent; an existing new-key row wins), and every restored backup is mapped the same way before it is matched. |
+| `SettingsActivity` (exported, `APPLICATION_PREFERENCES`) | No extras honoured, except an internal deep-link enum from our own `PendingIntent`s (none in v1). Entry routing (D-008) looks only at action and category: an explicit `MAIN`+`LAUNCHER` start → onboarding if `onboarding_done` is false, else an explicit intent to `HomeActivity` and `finish()`; `APPLICATION_PREFERENCES` → settings root. |
 | `PermissionUsageActivity` (FR-SET-03) | A dedicated exported activity for `android.intent.action.VIEW_PERMISSION_USAGE`, guarded by `android:permission="android.permission.START_VIEW_PERMISSION_USAGE"` (only the system can start it); ANDROID_PLATFORM §22. |
 | `ThemeImportActivity` (exported, `VIEW`/`SEND`; MIME types per THEME_SYSTEM §3.1) | The VIEW filter matches `scheme="content"` only; for SEND, the code rejects any `EXTRA_STREAM` that is not `content:` (`file:`, `http:` refused). Takes one URI. Reads through `DocumentIO.openRead` with the size cap, and copies into `cacheDir/import/<random>/` before parsing. Nothing is applied without confirmation (FR-THEME-21). `excludeFromRecents`, its own task. |
 | `PinRequestActivity` (exported, CONFIRM_PIN_*) | Proceeds only if `LauncherApps.getPinItemRequest(intent)` is non-null and `isValid`. Otherwise it finishes. v1 shows "not supported yet" for shortcut pins (v1.x feature) and declines. |

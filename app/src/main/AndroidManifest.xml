@@ -85,16 +85,27 @@
             </intent-filter>
         </activity>
 
-        <!-- Entry activity (D-008): the app icon in other launchers. MAIN/LAUNCHER → onboarding if
-             not done, else explicit intent to HomeActivity; APPLICATION_PREFERENCES → settings. -->
+        <!-- Entry activity (D-008, FB-019): the app icon in other launchers. Window-less (Theme.NoDisplay): in onCreate
+             it starts HomeActivity (explicit, action app.strata.launcher.action.ENTRY, home's own task) and finishes,
+             reading nothing. Home shows onboarding as its first layer on a first run. -->
         <activity
-            android:name=".settings.SettingsActivity"
+            android:name=".settings.EntryActivity"
             android:exported="true"
-            android:taskAffinity="app.strata.launcher.settings">
+            android:noHistory="true"
+            android:taskAffinity="app.strata.launcher.settings"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Settings (APPLICATION_PREFERENCES → settings root). An explicit MAIN/LAUNCHER start still routes (D-008
+             router: onboarding, or home once onboarded); the app icon no longer comes here. -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="true"
+            android:taskAffinity="app.strata.launcher.settings">
             <intent-filter>
                 <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -30,7 +30,7 @@ we use it instead of a constant.
 
 ### 1.1 Navigation graph
 ```
-  Strata icon in another launcher ──► ENTRY (SettingsActivity) ──onboarding not done──► S-ONB ──► S-HOME
+  Strata icon in another launcher ──► ENTRY (window-less) ──► HomeActivity ──onboarding not done──► S-ONB as first layer ──► S-HOME
                                          └──onboarding done──► S-HOME (explicit intent; APP_MODE if not default)
   Home key / system starts home ──► HomeActivity ──onboarding not done──► S-ONB as first layer ──► S-HOME
   APPLICATION_PREFERENCES (system App info gear) ──► S-SET directly (no routing)
@@ -156,7 +156,7 @@ disappears on callback. Cancel → no change. Uninstall Strata itself → FR-SET
 | SEARCH(origin) | §4 triggers | origin (back, Esc, empty-field back), app launch → origin reset | query saved across config change |
 | SHEET / HMENU | long-press | previous state | only one modal |
 | FAVEDIT | sheet/menu | HOME_REST | Home key = Done (saves) |
-| ONBOARDING | first start of the home activity while `onboarding_done` is false (D-008) | HOME_REST | full-screen first layer; Back leaves it only after the flow ends |
+| ONBOARDING | first start of the home activity while `onboarding_done` is false (D-008) | HOME_REST | full-screen first layer; Back leaves it only after the flow ends. Opened from the app icon (FB-019, no Home press since): Back on Welcome returns to the launcher that opened it |
 | APP_MODE (not default) | role not held (reached from the launcher icon via the entry activity, D-008) | — | same UI + banner; Home key is the system's |
 Home key from any state → HOME_REST (modal closed, IME hidden, query cleared). Locking the
 screen while in SEARCH → HOME_REST on next resume (Proposed). Returning from an app

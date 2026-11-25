@@ -54,6 +54,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-HOME-10 | Home press opens search | setting "Home press opens search" on, home at rest | Press Home | Search opens with focus and IME. With the setting off, nothing happens | I | FR-HOME-05 |
 | T-HOME-11 | Phone rotation lock | phone (< 600 dp), "Allow rotation" off then on | Rotate the device | Off: stays portrait. On: layout rotates. The search query survives | I | FR-HOME-08 |
 | T-HOME-13 | Launcher-icon routing | fresh install, another launcher default; then `onboarding_done` = true; then Strata default | Tap the Strata icon in the other launcher in each state. Separately, start `SettingsActivity` with `APPLICATION_PREFERENCES` | Not onboarded: onboarding opens. Onboarded, not default: HomeActivity in APP_MODE (explicit intent, the entry activity finishes). Default: HomeActivity. `APPLICATION_PREFERENCES`: settings root, no routing. Strata's own icon is absent from its app list | I | FR-HOME-01, FR-ONBOARD-01 |
+| T-HOME-17 | Window-less launcher entry (FB-019) | Strata installed; `onboarding_done` true, then false | Robolectric: start the entry (`MAIN`+`LAUNCHER`) through `resume()`; start home with the entry's intent and press Back on Welcome; also as the home screen. Device (warm process): `am start --user <numeric> -a MAIN -c LAUNCHER -n …/.settings.EntryActivity` | The entry is the only `MAIN`+`LAUNCHER` activity, declared `Theme.NoDisplay`; it reads nothing, is finishing before `onResume` completes (no "did not call finish()" error) and starts `HomeActivity` explicitly (action `ENTRY`, new task). Home: first run → onboarding as its first layer, and Back on Welcome moves the task back (to the launcher) only when opened from the entry; onboarded → home. Device: home's window is focused within `DEVICE_TIMEOUT_MS` / 4 after `am start` returns, the entry never holds focus, its destruction is logged, and no `am_anr` line for Strata appears since the start | R + I | FR-HOME-01, FR-ONBOARD-01 |
 | T-HOME-12 | Tablet always rotates | API 36 tablet, sw ≥ 600 dp, setting off | Rotate | Layout re-flows to two-column per VISUAL_SPEC §8. No letterboxing | I | FR-HOME-08, NFR-COMPAT-03 |
 | T-HOME-14 | Focused text field keeps the keyboard (Proposed; owner report on the Galaxy A56) | home window; each field type: Edit favourites → "Add apps" search, onboarding favourites search shown as home's first layer, search field, rename field | Focus the field. The window reports the IME visible (IME insets). Settle a few frames. Then close search and report the IME visible again | The field keeps focus and the stray-keyboard guard hides nothing while a field is focused. With no field (home at rest, search closed) a visible keyboard is still hidden (T-HOME-09 fix kept) | C + R + I | FR-FAV-02, FR-ONBOARD-01, FR-SEARCH-01, FR-APPS-05, ANDROID_PLATFORM §14 |
 | T-HOME-15 | Arrival is not a Home press (FB-008) | setting "Home press opens search" on; another app in front | Return to home with the Home gesture or button. Then press Home again on resting home | The arrival resets home to rest and search stays closed. The second press, made while home is in front, opens search | C + I | FR-HOME-05 |
@@ -221,6 +222,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-BACKUP-11 | Auto Backup / transfer | API 31 emulator; `bmgr` | Set favourites, launch apps → `bmgr backupnow` → list the backup set (`bmgr` transport dump) → clear data → `bmgr restore` → start | The backup set contains no `launch_log.db` and nothing from `no_backup/` or caches. Favourites, overrides, settings, themes restored; launch log empty. Restore detected (install marker differs from `install_id`), post-restore reconcile ran once (no banner) | I | FR-BACKUP-04, FR-THEME-33, NFR-PRIV-05 |
 | T-BACKUP-12 | Fuzz | 10 000 mutated backup files from the valid fixtures | Run the validator | 0 crashes. Each result is Rejected (typed error) or a Preview. Time ≤ 200 ms per file | U | FR-BACKUP-02, NFR-REL-01 |
 | T-BACKUP-13 | Cross-install round trip | export on emulator A (API 34), restore on clean emulator B (API 36) | Restore | Main-profile overrides map to B's main serial. Themes and settings equal | I | FR-BACKUP-01, FR-BACKUP-02 |
+| T-BACKUP-14 | Old backup with the old launcher entry (FB-019) | a backup exported while Strata's entry was `settings.SettingsActivity` (favourite + hidden/label override on it); one holding both the old and the new key; the new version installed (entry `settings.EntryActivity`) | Preview, then restore | Strata is not listed as a missing app; the favourite (order kept) and the override land on the new entry; other apps unchanged. With both keys, one entry per app and profile is kept, the one already on the new key, and the preview counts (renames, favourites) match what is restored. Control: without the mapping the old key would be restored as a missing app | U | FR-BACKUP-02 |
 
 ## 12. ONBOARD
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -253,6 +255,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-LIFE-13 | Crash-loop safe mode | test hook throws during the first frame twice | Start ×3 | The third start is in safe mode (default theme, no widgets) with the banner | I | FR-LIFE-04, FR-THEME-28 |
 | T-LIFE-14 | Room migrations | schema v1…vN exported | `MigrationTestHelper` for each step + full chain | Data preserved. Unknown version → rebuild path (not a destructive silent wipe) | R | NFR-REL-02, FR-LIFE-04 |
 | T-LIFE-15 | Locked user (direct boot) | API 34, reboot before unlock | Home is shown before the first unlock (if the system starts it) | No crash. Shortcuts and DB access deferred until unlock | I/MAN | FR-LIFE-01, NFR-REL-01 |
+| T-LIFE-16 | Old launcher-entry keys move (FB-019) | `strata.db` and `launch_log.db` holding rows keyed on `<pkg>/app.strata.launcher.settings.SettingsActivity` (favourite in the middle of the order, override with hidden + label + icon, catalog row, launch events), plus a row already keyed on the new entry, an empty (marker) override on the new entry, one in another profile, and look-alike components of another package; separately a move that fails | Open the databases (twice); open once with a failing move, then normally | Every old row is keyed on `<pkg>/app.strata.launcher.settings.EntryActivity`; the favourite keeps its place; an existing new-key row wins, except an empty override, which gives way to the old data; other profiles move with their own serial; other apps and other packages untouched; the second open changes nothing. A failing move resets and quarantines nothing, keeps every row, logs a warning, and the next open moves the rows | R | FR-FAV-01, FR-APPS-05, FR-LIFE-03, FR-LIFE-04 |
 
 ## 14. A11Y
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -406,7 +409,7 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 Every P0/P1 requirement maps to at least one test. P2 items are not covered until scheduled.
 | Requirement | Tests |
 |---|---|
-| FR-HOME-01 | T-HOME-01, T-HOME-02, T-HOME-13, T-ONBOARD-09, T-SEC-03 |
+| FR-HOME-01 | T-HOME-01, T-HOME-02, T-HOME-13, T-HOME-17, T-ONBOARD-09, T-SEC-03 |
 | FR-HOME-02 | T-HOME-03, T-HOME-04, T-THEME-56, T-THEME-57 |
 | FR-HOME-03 | T-HOME-05, T-HOME-06 |
 | FR-HOME-04 | T-HOME-07, T-HOME-08 |
@@ -432,14 +435,14 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-APPS-02 | T-APPS-02, T-APPS-03 |
 | FR-APPS-03 | T-APPS-04, T-APPS-05 |
 | FR-APPS-04 | T-APPS-06, T-APPS-07 |
-| FR-APPS-05 | T-APPS-08, T-APPS-09, T-SEARCH-06, T-LIFE-06 |
+| FR-APPS-05 | T-APPS-08, T-APPS-09, T-SEARCH-06, T-LIFE-06, T-LIFE-16 |
 | FR-APPS-06 | T-APPS-10 |
 | FR-APPS-07 | T-APPS-11 |
 | FR-APPS-08 | T-APPS-12, T-APPS-13 (v1.x), T-LIFE-10, T-SEC-02 |
 | FR-APPS-09 | T-APPS-14, T-APPS-07, T-LIFE-08 |
 | FR-APPS-10 | T-APPS-15, T-APPS-16, T-SEARCH-08, T-LIFE-09 |
 | FR-APPS-11 | T-APPS-17 |
-| FR-FAV-01 | T-FAV-01, T-FAV-07, T-FAV-08, T-ONBOARD-02 |
+| FR-FAV-01 | T-FAV-01, T-FAV-07, T-FAV-08, T-ONBOARD-02, T-LIFE-16 |
 | FR-FAV-02 | T-FAV-02, T-FAV-03, T-FAV-06, T-FAV-07, T-FAV-09 |
 | FR-FAV-03 | T-FAV-04, T-FAV-05 |
 | FR-GEST-01 | T-GEST-01, T-GEST-02, T-SEARCH-01, T-FAV-05 |
@@ -463,17 +466,17 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-SET-07 | T-SET-09, T-SET-10 |
 | FR-SET-08 | T-SET-12, T-SET-13, T-SET-14 |
 | FR-BACKUP-01 | T-BACKUP-01, T-BACKUP-02, T-BACKUP-03, T-BACKUP-13 |
-| FR-BACKUP-02 | T-BACKUP-04 … T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-WIDGET-10 |
+| FR-BACKUP-02 | T-BACKUP-04 … T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-BACKUP-14, T-WIDGET-10 |
 | FR-BACKUP-03 | T-BACKUP-08 |
 | FR-BACKUP-04 | T-BACKUP-11, T-WIDGET-11 |
-| FR-ONBOARD-01 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-NOTIF-01 |
+| FR-ONBOARD-01 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-HOME-17, T-NOTIF-01 |
 | FR-ONBOARD-02 | T-ONBOARD-03, T-ONBOARD-04, T-ONBOARD-05, T-ONBOARD-06, T-HOME-02 |
 | FR-ONBOARD-03 | T-ONBOARD-07, T-COMPAT-04 |
 | FR-ONBOARD-04 | T-ONBOARD-08, T-LIFE-10 |
 | FR-LIFE-01 | T-LIFE-01, T-LIFE-02, T-LIFE-15, T-PERF-01 |
 | FR-LIFE-02 | T-LIFE-02, T-LIFE-03, T-COMPAT-07 |
-| FR-LIFE-03 | T-LIFE-04, T-LIFE-05, T-APPS-03, T-BACKUP-08 |
-| FR-LIFE-04 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14 |
+| FR-LIFE-03 | T-LIFE-04, T-LIFE-05, T-APPS-03, T-BACKUP-08, T-LIFE-16 |
+| FR-LIFE-04 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14, T-LIFE-16 |
 | FR-A11Y-01 | T-A11Y-01, T-FAV-03 |
 | FR-A11Y-02 | T-A11Y-02, T-A11Y-03 |
 | FR-A11Y-03 | T-A11Y-04, T-A11Y-05, T-APPS-17, T-NOTIF-05 |

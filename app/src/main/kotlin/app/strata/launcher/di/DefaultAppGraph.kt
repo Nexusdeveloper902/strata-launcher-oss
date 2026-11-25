@@ -31,6 +31,7 @@ import app.strata.launcher.core.data.theme.BootAttempts
 import app.strata.launcher.core.data.theme.DataStoreThemeIndexStore
 import app.strata.launcher.core.data.theme.DefaultThemeRepository
 import app.strata.launcher.core.data.widgets.RoomWidgetRepository
+import app.strata.launcher.core.model.EntryKeyMigration
 import app.strata.launcher.core.platformapi.apps.AppCatalog
 import app.strata.launcher.core.platformapi.apps.AppLauncher
 import app.strata.launcher.core.platformapi.apps.AppListSource
@@ -369,6 +370,7 @@ class DefaultAppGraph(context: Context) : AppGraph {
             io = dispatchers.io,
             logger = logger,
             appVersion = BuildConfig.VERSION_NAME,
+            migrateComponent = { EntryKeyMigration.component(it, appContext.packageName) },
         )
     }
 
