@@ -33,6 +33,15 @@ ARCHITECTURE §8 gains a tier row, tests are T-SEARCH-28…31 plus a slip set in
 - **Precomputed at build:** each label and camel form keeps its code points and code-point word starts, and the index
   keeps the longest form length. Per keystroke the query is converted to code points once. The pass makes no other
   allocation except the fuzzy scratch, which is now bounded by the longest label.
+- **Package-only hits** stay eligible for the second pass, and the better match wins: a label slip (250) replaces a
+  package hit (150). Fuzzy (100) never beats a package hit, so it is not tried for those entries. Before this change a
+  package hit blocked a label slip. **Verified** by T-SEARCH-30.
+- **Transliterated forms** follow the existing rule: a slip on a transliterated form drops one tier (base 250 − 100 =
+  150, the package tier's base). The results are still sorted by base first. **Verified** in code (`better`), not
+  covered by a separate test.
+- **Ordering:** results are sorted by base first, so `score` (base + display bonus + start bonus + usage) is only
+  compared within a tier. A heavily used substring hit (270) can outscore a slip on a later word of the system label
+  (250) and still rank below it (T-SEARCH-30).
 - **R-002:** the OSA distance runs over code-point arrays, so an emoji left out is one edit. The slip and fuzzy passes
   are skipped when the query is longer than the longest label form plus the edit budget. The scratch is sized
   `min(query, longest label) + edits + 1`. **Verified** by T-SEARCH-31.
@@ -68,8 +77,8 @@ Examples on the invented 41-label list in `KeyboardAdjacencyTest`:
 | Index build (500, cached translit) | 6.5–8.0 | 6.5–7.4 |
 
 **Verified** that the change stays within noise on this host. The earlier figure (0.18 / 0.67 ms) came from another
-host. Noise and recall over all 702 one- and two-letter queries (**Verified**, printed by T-SEARCH-30): 239 queries get
-slips, adding 1.6 apps on average and 7 at worst ("fa"). 336 of the 338 one-slip variants of each label's first two
+host. Noise and recall over all 702 one- and two-letter queries (**Verified**, printed by T-SEARCH-30): 232 queries get
+slips, adding 1.7 apps on average and 7 at worst ("fa"). 336 of the 338 one-slip variants of each label's first two
 letters find their app; the other 2 are held back by the 5-match gate.
 
 ## Inferred / Unknown

@@ -58,15 +58,23 @@ class SearchFoldTest {
         assertThat(SearchFold.needsTransliteration("2048")).isFalse()
     }
 
+    private fun withinOneEdit(
+        q: String,
+        f: String,
+    ): Boolean {
+        val qc = q.codePoints().toArray()
+        return Fuzzy.withinEditsOfPrefix(qc, f.codePoints().toArray(), 0, 1, Fuzzy.Scratch(qc.size + 2))
+    }
+
     @Test
     fun fuzzyWithinOneEdit() {
-        assertThat(Fuzzy.withinOneEditOfPrefix("mpas", "maps")).isTrue() // transposition
-        assertThat(Fuzzy.withinOneEditOfPrefix("mapz", "maps")).isTrue() // substitution
-        assertThat(Fuzzy.withinOneEditOfPrefix("mapps", "maps")).isTrue() // extra char in query
-        assertThat(Fuzzy.withinOneEditOfPrefix("mas", "maps")).isTrue() // missing char
-        assertThat(Fuzzy.withinOneEditOfPrefix("clendar", "calendar")).isTrue()
-        assertThat(Fuzzy.withinOneEditOfPrefix("mzpz", "maps")).isFalse()
-        assertThat(Fuzzy.withinOneEditOfPrefix("pmas", "maps")).isFalse()
+        assertThat(withinOneEdit("mpas", "maps")).isTrue() // transposition
+        assertThat(withinOneEdit("mapz", "maps")).isTrue() // substitution
+        assertThat(withinOneEdit("mapps", "maps")).isTrue() // extra char in query
+        assertThat(withinOneEdit("mas", "maps")).isTrue() // missing char
+        assertThat(withinOneEdit("clendar", "calendar")).isTrue()
+        assertThat(withinOneEdit("mzpz", "maps")).isFalse()
+        assertThat(withinOneEdit("pmas", "maps")).isFalse()
     }
 }
 

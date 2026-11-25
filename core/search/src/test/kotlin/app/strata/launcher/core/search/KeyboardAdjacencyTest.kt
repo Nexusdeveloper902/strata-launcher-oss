@@ -42,8 +42,8 @@ class KeyboardAdjacencyTest {
             "ChattyApp",
             "Soundify",
             "Grand Maps",
-            "Tidepool Bank",
-            "Hopscotch",
+            "Grubbleton Bank",
+            "Tumblevane",
             "Ledgerly",
             "Quillnote",
             "Voltride",
@@ -151,16 +151,24 @@ class KeyboardAdjacencyTest {
                 "Upgrade Center" to MatchTier.SUBSTRING,
             )
         assertThat(index(apps).tiers("pg")).containsExactlyElementsIn(expected).inOrder()
-        // Heavy usage of Phone moves it ahead of Photos, never above the initials match.
-        val boosted = index(apps, counts = mapOf(app("Phone").key to 10_000, upgrade.key to 10_000))
+        // Usage reorders two slips: Photos, heavily used, now comes before Phone; never above the initials match.
+        val boosted = index(apps, counts = mapOf(app("Photos").key to 10_000, upgrade.key to 10_000))
         assertThat(boosted.labels("pg"))
             .containsExactly(
                 "Pgn Reader",
                 "Pocket Guide",
-                "Phone",
                 "Photos",
+                "Phone",
                 "Upgrade Center",
             ).inOrder()
+        // Across tiers the base decides, not the raw score: a heavily used substring hit on the display label
+        // (200 + 20 + 50 = 270) outscores a slip on a later word of the system label (250), yet ranks below it.
+        val calls = visible("Quiet Phone", custom = "Kestrel Calls", pkg = "com.example.calls")
+        val crossTier = index(listOf(calls, upgrade), counts = mapOf(upgrade.key to 10_000)).rank("pg", true)
+        assertThat(crossTier.map { it.app.displayLabel to it.tier })
+            .containsExactly("Kestrel Calls" to MatchTier.ADJACENT, "Upgrade Center" to MatchTier.SUBSTRING)
+            .inOrder()
+        assertThat(crossTier[1].score).isGreaterThan(crossTier[0].score)
         // A slip ranks above a generic fuzzy match: "nores" is Notes with r for t; "Norges Atlas" needs an insertion.
         val atlas = visible("Norges Atlas", pkg = "com.example.atlas")
         val notes = index(listOf(app("Notes"), atlas), counts = mapOf(atlas.key to 10_000))
@@ -172,6 +180,14 @@ class KeyboardAdjacencyTest {
         assertThat(starts.labels("mew")).containsExactly("Newt Diary", "Bright News").inOrder()
         // Package names are never matched by slips.
         assertThat(index(listOf(visible("Zeta Tool", pkg = "com.example.phone"))).labels("phonw")).isEmpty()
+        // A package-only hit stays eligible for a label slip, and the better one wins: "pgo" begins the package
+        // segment "pgotool" (package tier) and is a slip of "pho" in "Phone" (slip tier). Without a slip, the package
+        // hit stays.
+        val both = visible("Phone", pkg = "com.example.pgotool")
+        val pkgOnly = visible("Zeta Tool", pkg = "com.example.pgoviewer")
+        assertThat(index(listOf(both, pkgOnly)).tiers("pgo"))
+            .containsExactly("Phone" to MatchTier.ADJACENT, "Zeta Tool" to MatchTier.PACKAGE)
+            .inOrder()
     }
 
     /** T-SEARCH-30: longer queries: up to 2 slips from 5 characters, 3 from 10; more is not a slip. */

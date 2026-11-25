@@ -71,6 +71,8 @@ class SearchIndex private constructor(
         val matches = ArrayList<Match>()
         var labelMatches = 0
         var unmatched: BooleanArray? = null
+        // Package-only hits stay eligible for the second pass: a label slip (250) beats them (150).
+        var packageOnly: Array<Match?>? = null
         for (index in entries.indices) {
             val entry = entries[index]
             if (entry.app.hidden && !includeHidden) continue
@@ -79,27 +81,38 @@ class SearchIndex private constructor(
                 val tier = form.match(q) ?: continue
                 best = better(best, entry, form, tier)
             }
-            if (best != null) {
+            if (best != null && best.tier != MatchTier.PACKAGE) {
                 matches += best
-                if (best.tier != MatchTier.PACKAGE) labelMatches++
+                labelMatches++
             } else {
                 if (unmatched == null) unmatched = BooleanArray(entries.size)
                 unmatched[index] = true
+                if (best != null) {
+                    if (packageOnly == null) packageOnly = arrayOfNulls(entries.size)
+                    packageOnly[index] = best
+                }
             }
         }
-        if (unmatched != null) forgiving(q, labelMatches, unmatched, matches)
+        if (unmatched != null) {
+            val pending = packageOnly ?: arrayOfNulls(entries.size)
+            forgiving(q, labelMatches, unmatched, pending)
+            for (m in pending) if (m != null) matches += m
+        }
         matches.sortWith(ORDER)
         return matches.map {
             SearchHit(it.entry.app, it.score, it.tier, it.form.display, it.form.transliterated)
         }
     }
 
-    /** The second pass: [MatchTier.ADJACENT], then [MatchTier.FUZZY], over the [unmatched] entries. */
+    /**
+     * The second pass: [MatchTier.ADJACENT], then [MatchTier.FUZZY], over the [unmatched] entries. [pending] holds each
+     * entry's package-only hit (or null) on entry and the better of it and a forgiving label match on return.
+     */
     private fun forgiving(
         q: String,
         labelMatches: Int,
         unmatched: BooleanArray,
-        out: MutableList<Match>,
+        pending: Array<Match?>,
     ) {
         if (labelMatches >= FUZZY_WHEN_FEWER_THAN || !Fuzzy.hasLetter(q)) return
         // Lengths in code points: an emoji or another supplementary character is one character, not two.
@@ -115,7 +128,7 @@ class SearchIndex private constructor(
         for (index in entries.indices) {
             if (!unmatched[index]) continue
             val entry = entries[index]
-            var best: Match? = null
+            var best: Match? = pending[index]
             if (adjacent) {
                 for (form in entry.forms) {
                     val at = form.adjacent(cps, slips, keyboard)
@@ -128,7 +141,7 @@ class SearchIndex private constructor(
                     if (at != Form.NO_FUZZY) best = better(best, entry, form, MatchTier.FUZZY, startBonus(at))
                 }
             }
-            if (best != null) out += best
+            pending[index] = best
         }
     }
 
@@ -302,8 +315,10 @@ class SearchIndex private constructor(
         const val MAX_BOOST: Int = 50
 
         /**
-         * A fuzzy match at the start of the label ranks above one on a later word ("mpas": Maps before Amazing Maps).
-         * 20 + 50 + 10 stays below the 100-point tier gap.
+         * A slip or fuzzy match at the start of the label ranks above one on a later word ("mpas": Maps before Amazing
+         * Maps). Results sort by tier base first ([ORDER]), so `score` (base + bonuses + usage) is only compared within a
+         * tier; bonuses and usage never move a result across tiers, whatever the gap between their bases (50 around
+         * [MatchTier.ADJACENT]).
          */
         const val START_BONUS: Int = 10
         const val FUZZY_MIN: Int = 4
@@ -497,15 +512,6 @@ internal object Fuzzy {
             prev = IntArray(size)
             cur = IntArray(size)
         }
-    }
-
-    /** True when [q] is within one edit of `f[0, L)` for some L in `q.length - 1 .. q.length + 1` (code points). */
-    fun withinOneEditOfPrefix(
-        q: String,
-        f: String,
-    ): Boolean {
-        val qc = q.codePoints().toArray()
-        return withinEditsOfPrefix(qc, f.codePoints().toArray(), 0, 1, Scratch(qc.size + 2))
     }
 
     /**
