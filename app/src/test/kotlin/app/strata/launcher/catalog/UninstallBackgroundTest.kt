@@ -197,6 +197,10 @@ class UninstallBackgroundTest {
         val burst = (1..20).toList()
         remove(burst)
         pumpUntil { context.appGraph.appCatalog.catalog.value.entries.size == APPS - 21 }
+        // The list is assembled from the catalog on the default dispatcher (AssembledAppListSource), which
+        // compose.waitForIdle() does not wait for: under CI load the committed catalog could still be on its way to the
+        // screen (CI run 44410898949). Wait for the list itself, with the same bound, then check it.
+        pumpUntil { burst.none(::shown) }
         compose.waitForIdle()
         assertThat(burst.filter(::shown)).isEmpty()
         assertThat(WatchedLauncherApps.mainThreadCalls).isEmpty()

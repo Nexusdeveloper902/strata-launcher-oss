@@ -1,3 +1,8 @@
+# T-CI-01 / T-PRIV-03: the merged release manifest's uses-permission set must equal this list exactly
+# (= spec/ANDROID_PLATFORM.md §23 "Required" + "Optional"). Each entry names its row there.
 android.permission.ACCESS_HIDDEN_PROFILES
+# CALL_PHONE (Optional, dangerous runtime): swipe a contact to call (FR-SEARCH-09, D-017). Requested only when the user
+# picks "Call directly"; denied or not asked, the swipe opens the dialer (ACTION_DIAL, no permission).
+android.permission.CALL_PHONE
 android.permission.READ_CONTACTS
 android.permission.REQUEST_DELETE_PACKAGES

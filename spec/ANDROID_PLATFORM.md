@@ -187,7 +187,7 @@ are cited only to show which capability areas exist (feature inventory).
 | Min API | 28. Hide the feature on 26–27. |
 | Manifest | `<service android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="false">` with an `android.accessibilityservice.AccessibilityService` intent filter and `<meta-data android:name="android.accessibilityservice" android:resource="@xml/lock_service"/>`. The XML config requests **no event types and no window content** (`canRetrieveWindowContent="false"`, `accessibilityEventTypes` none), so the service can do nothing except perform the global action. `android:isAccessibilityTool="false"`. |
 | Play policy | `isAccessibilityTool` is reserved for services "designed to help people with disabilities". **Launchers are explicitly listed as not qualifying.** Non-tools must show an **in-app prominent disclosure** with affirmative consent. It must be separate from other disclosures and cannot live only in the privacy policy or the store listing. Non-tools must also complete the Play Console accessibility declaration (with a video of the disclosure) and resubmit if the use changes. Autonomous behaviour is prohibited; a deterministic user-triggered action is allowed. |
-| Implementation | Off by default. Settings toggle → disclosure screen → `Settings.ACTION_ACCESSIBILITY_SETTINGS`. The trigger is a user gesture on home (double-tap; APK-007/APK-029 inventory). Detect enablement via `AccessibilityManager.getEnabledAccessibilityServiceList`. |
+| Implementation | Off by default. Settings toggle → disclosure screen → `Settings.ACTION_ACCESSIBILITY_SETTINGS`. The public SDK has no intent for one service's switch: `android.settings.ACCESSIBILITY_DETAILS_SETTINGS` is not a public constant (Inferred: guarded by a system permission). So the list opens with the AOSP Settings highlight extras `:settings:fragment_args_key` (and the `:settings:show_fragment_args` bundle) set to our flattened component, which settings apps that do not know them ignore (Inferred, undocumented), and Strata says where to tap (FR-SET-08). Android 13+: for an app installed from a file the switch stays greyed out until App info → menu → "Allow restricted settings"; the same applies to notification-listener access (§8). `InstallSourceInfo.getPackageSource()` (33) tells a store install (`PACKAGE_SOURCE_STORE`) from a file (Verified API; the restriction rule Inferred from platform behaviour). The trigger is a user gesture on home (double-tap; APK-007/APK-029 inventory). Detect enablement via `AccessibilityManager.getEnabledAccessibilityServiceList`. |
 | Alternatives | `DevicePolicyManager.lockNow()` via device admin: **rejected**. It makes uninstalling harder and device-admin use for this purpose is discouraged (Proposed; no DOC fetched). `GLOBAL_ACTION_NOTIFICATIONS` (16) from the same service is a public way to open the notification shade for a swipe-down gesture. `EXPAND_STATUS_BAR` needs the non-SDK `StatusBarManager.expandNotificationsPanel` and is **rejected** (DOC-068). |
 | Failure | Service disabled by the user or the system: show a "turn on in Settings" hint. OEM battery managers may kill the service process (Unknown frequency). |
 | Confidence | Verified (API, policy); Proposed (config) |
@@ -338,6 +338,9 @@ Compose does provide insets, IME control, `systemGestureExclusion`, predictive-b
 
     <!-- Optional runtime permission, requested only when contact search is enabled (FR-SEARCH, P1) -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Optional runtime permission, requested only when the user picks "Call directly" for swipe to call (FR-SEARCH-09) -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" /> <!-- CALL_PHONE implies it -->
     <!-- Strip AD_ID if any transitive dependency merges it in (NFR-PRIV-02) -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
     <!-- PACKAGE_USAGE_STATS: not declared in v1 (no v1 requirement uses it; ARCHITECTURE §17) -->
@@ -542,6 +545,7 @@ Notes: no `INTERNET`, no `QUERY_ALL_PACKAGES`, no `BIND_APPWIDGET`, no `EXPAND_S
 | `POST_NOTIFICATIONS` | **Rejected (v1)** | runtime | Launcher posts no notifications | Proposed |
 | `INTERNET`, AD_ID, billing, FCM | **Rejected** | — | D-004, D-007 | — |
 | `READ_CONTACTS` | **Optional** (P1, runtime) | runtime, requested only when the user enables contact search | Contact results in search (PRODUCT_SPEC FR-SEARCH, U-022) | Proposed |
+| `CALL_PHONE` | **Optional** (P2, runtime; D-017) | dangerous (runtime), requested only when the user picks "Call directly" for swipe to call (Settings → Search, or the FR-SET-08 checklist) | FR-SEARCH-09 direct calls (`ACTION_CALL`). Without it the swipe opens the dialer (`ACTION_DIAL`, which needs no permission), so a denial costs one tap. Declaring it implies `android.hardware.telephony`, declared `required="false"`. Not restored from a backup | Proposed |
 | `READ_CALENDAR`, `ACCESS_COARSE_LOCATION` | **Deferred** (not v1) | runtime | Agenda and weather are out of v1 scope (U-022 resolved) | Proposed |
 | `VIBRATE` | Not needed | normal | `View.performHapticFeedback` needs no permission | Inferred |
 

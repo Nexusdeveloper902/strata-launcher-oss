@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
+import android.content.ContentProviderClient;
 import android.content.ContentProviderOperation;
 import android.content.Context;
 import android.content.Intent;
@@ -11,6 +12,7 @@ import android.content.OperationApplicationException;
 import android.net.Uri;
 import android.os.Build;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.provider.ContactsContract;
 import android.util.Log;
 import java.util.ArrayList;
@@ -43,6 +45,8 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
     public static final String EXTRA_TITLE = "title";
     public static final String EXTRA_TEXT = "text";
     public static final String EXTRA_NAMES = "names";
+    /** Optional, parallel to {@link #EXTRA_NAMES}: one invented phone number per contact ("" = none). FR-SEARCH-09. */
+    public static final String EXTRA_PHONES = "phones";
     public static final String KIND_ALERTING = "alerting";
     public static final String KIND_SILENT = "silent";
     public static final String KIND_ONGOING = "ongoing";
@@ -51,6 +55,9 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
 
     private static final String SENDER = "app.strata.launcher";
     private static final String TAG = "AccessFixture";
+    /** How long a contacts step waits for the provider to be published again (bounded by the sender's wait). */
+    private static final long PROVIDER_WAIT_MS = 8_000L;
+    private static final long PROVIDER_POLL_MS = 100L;
     private static final String CHANNEL_ALERTING = "fixture_alerting";
     private static final String CHANNEL_SILENT = "fixture_silent";
 
@@ -85,7 +92,8 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
             context.getSystemService(NotificationManager.class).cancelAll();
         } else if (ACTION_SEED_CONTACTS.equals(action)) {
             String[] names = intent.getStringArrayExtra(EXTRA_NAMES);
-            seed(context, names == null ? new String[0] : names);
+            String[] phones = intent.getStringArrayExtra(EXTRA_PHONES);
+            seed(context, names == null ? new String[0] : names, phones == null ? new String[0] : phones);
         } else if (ACTION_CLEAR_CONTACTS.equals(action)) {
             clear(context);
         } else {
@@ -114,9 +122,11 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
         nm.notify(intent.getIntExtra(EXTRA_ID, 1), notification);
     }
 
-    private static void seed(Context context, String[] names) throws OperationApplicationException, RemoteException {
+    private static void seed(Context context, String[] names, String[] phones)
+            throws OperationApplicationException, RemoteException {
         ArrayList<ContentProviderOperation> ops = new ArrayList<>();
-        for (String name : names) {
+        for (int i = 0; i < names.length; i++) {
+            String name = names[i];
             int back = ops.size();
             ops.add(ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
                     .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, ACCOUNT_TYPE)
@@ -128,16 +138,49 @@ public class AccessFixtureReceiver extends BroadcastReceiver {
                             ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
                     .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
                     .build());
+            if (i < phones.length && !phones[i].isEmpty()) {
+                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, back)
+                        .withValue(ContactsContract.Data.MIMETYPE,
+                                ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+                        .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phones[i])
+                        .withValue(ContactsContract.CommonDataKinds.Phone.TYPE,
+                                ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+                        .build());
+            }
         }
-        context.getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
+        try (ContentProviderClient provider = contactsProvider(context)) {
+            provider.applyBatch(ops);
+        }
     }
 
-    private static void clear(Context context) {
+    private static void clear(Context context) throws RemoteException {
         Uri uri = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
                 .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
                 .appendQueryParameter(ContactsContract.RawContacts.ACCOUNT_TYPE, ACCOUNT_TYPE)
                 .appendQueryParameter(ContactsContract.RawContacts.ACCOUNT_NAME, ACCOUNT_NAME)
                 .build();
-        context.getContentResolver().delete(uri, null, null);
+        try (ContentProviderClient provider = contactsProvider(context)) {
+            provider.delete(uri, null, null);
+        }
+    }
+
+    /**
+     * The contacts provider, waiting while it is not published. On API 26 the contacts provider process is replaced
+     * shortly after boot; a ContentResolver call that lands in that gap throws "Unknown URL" before reaching any provider
+     * (CI run 45512812674: CLEAR_CONTACTS, pid 5270 gone, 5351 publishing 0.4 s later). Waiting here keeps the step a
+     * single attempt: an operation that reached the provider and failed still reports RESULT_FAILED, never re-sent.
+     */
+    private static ContentProviderClient contactsProvider(Context context) {
+        long end = SystemClock.uptimeMillis() + PROVIDER_WAIT_MS;
+        while (true) {
+            ContentProviderClient client =
+                    context.getContentResolver().acquireContentProviderClient(ContactsContract.AUTHORITY);
+            if (client != null) return client;
+            if (SystemClock.uptimeMillis() >= end) {
+                throw new IllegalStateException("contacts provider not published after " + PROVIDER_WAIT_MS + " ms");
+            }
+            SystemClock.sleep(PROVIDER_POLL_MS);
+        }
     }
 }

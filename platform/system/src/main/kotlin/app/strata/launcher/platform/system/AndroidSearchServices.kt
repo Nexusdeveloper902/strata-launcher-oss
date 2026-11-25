@@ -3,6 +3,7 @@ package app.strata.launcher.platform.system
 import android.app.WallpaperManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
@@ -10,6 +11,7 @@ import android.content.pm.PackageManager
 import android.icu.text.Transliterator
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.Settings
@@ -86,7 +88,7 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
     // Not a chooser: Intent.createChooser never throws ActivityNotFoundException, so "no handler" could not be reported.
     override fun wallpaperPicker(): LaunchResult = start(Intent(Intent.ACTION_SET_WALLPAPER))
 
-    override fun accessibilitySettings(): LaunchResult = start(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    override fun accessibilitySettings(): LaunchResult = start(accessibilityIntent(appContext))
 
     override fun uninstallStrata(): LaunchResult =
         start(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", appContext.packageName, null)))
@@ -162,6 +164,23 @@ class AndroidSystemIntents(context: Context) : SystemIntents {
 
     companion object {
         private const val IMAGE_TYPE = "image/*"
+
+        /** AOSP Settings' "highlight this preference" extras (not public API; a settings app without them ignores them). */
+        const val EXTRA_FRAGMENT_ARG_KEY = ":settings:fragment_args_key"
+        const val EXTRA_SHOW_FRAGMENT_ARGUMENTS = ":settings:show_fragment_args"
+
+        /**
+         * FR-GEST-03 / FR-SET-08: the accessibility settings with our lock service named for highlighting. The public
+         * SDK has no intent for one service's own switch (`ACTION_ACCESSIBILITY_DETAILS_SETTINGS` is not public and is
+         * guarded by a system permission), so the list opens and the settings app may scroll to and highlight the
+         * service; the Privacy page says where to tap (ANDROID_PLATFORM §10).
+         */
+        fun accessibilityIntent(context: Context): Intent {
+            val key = ComponentName(context, LockAccessibilityService::class.java).flattenToString()
+            return Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                .putExtra(EXTRA_FRAGMENT_ARG_KEY, key)
+                .putExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS, Bundle().apply { putString(EXTRA_FRAGMENT_ARG_KEY, key) })
+        }
 
         /** `market://search?q=<query>` (FR-SEARCH-07). */
         fun storeIntent(query: String): Intent =

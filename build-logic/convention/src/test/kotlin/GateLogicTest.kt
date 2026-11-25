@@ -11,6 +11,7 @@ class GateLogicTest {
     private val approved =
         setOf(
             "android.permission.ACCESS_HIDDEN_PROFILES",
+            "android.permission.CALL_PHONE",
             "android.permission.READ_CONTACTS",
             "android.permission.REQUEST_DELETE_PACKAGES",
         )
@@ -46,6 +47,29 @@ class GateLogicTest {
         val problems = GateLogic.permissionViolations(GateLogic.readManifestPermissions(m), approved, emptySet())
         assertThat(problems.single()).contains("Forbidden permission")
         assertThat(problems.single()).contains("android.permission.INTERNET")
+    }
+
+    /**
+     * T-PRIV-03 (static half): the committed allow-list (comments allowed) is exactly the `uses-permission` set of
+     * ANDROID_PLATFORM §23's "Required" and "Optional" rows whose name is a permission, so the gate and the spec move
+     * together (FR-SEARCH-09 added CALL_PHONE to both).
+     */
+    @Test
+    fun `repository allow-list equals the spec permission table`() {
+        val root =
+            generateSequence(java.io.File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+                .first { java.io.File(it, "config/approved-permissions.txt").isFile }
+        val listed = GateLogic.parseList(java.io.File(root, "config/approved-permissions.txt").readText())
+        val table =
+            java.io
+                .File(root, "spec/ANDROID_PLATFORM.md")
+                .readText()
+                .substringAfter("## 23. Permission table")
+                .substringBefore("\n## ")
+        val rows = Regex("""^\| `([A-Z_]+)` \| \*\*(Required|Optional)\*\*""", RegexOption.MULTILINE)
+        val spec = rows.findAll(table).map { "android.permission." + it.groupValues[1] }.toSet()
+        assertThat(listed).isEqualTo(spec)
+        assertThat(listed).contains("android.permission.CALL_PHONE")
     }
 
     @Test

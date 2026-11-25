@@ -4,6 +4,7 @@ import app.strata.launcher.core.model.AppearanceSetting
 import app.strata.launcher.core.model.BadgeStyle
 import app.strata.launcher.core.model.OnboardingProgress
 import app.strata.launcher.core.model.Settings
+import app.strata.launcher.core.model.SwipeToCall
 import app.strata.launcher.core.platformapi.settings.ResetCause
 import app.strata.launcher.testing.fakes.FakeResetNotices
 import com.google.common.truth.Truth.assertThat
@@ -54,6 +55,8 @@ class SettingsRepositoryTest {
 
     @Test
     fun freshInstall_catalogueDefaults_andInstallIdV4() {
+        // Field 25 (FR-SEARCH-09): the swipe opens the dialer by default; no permission is needed for that.
+        assertThat(Settings.DEFAULT.swipeToCall).isEqualTo(SwipeToCall.DIAL)
         val s = withRepo { it.settings.first() }
         assertThat(s.copy(installId = "")).isEqualTo(Settings.DEFAULT)
         assertThat(SettingsMapper.isUuidV4(s.installId)).isTrue()
@@ -108,6 +111,7 @@ class SettingsRepositoryTest {
                 listSortByUsage = true,
                 lockGestureEnabled = true,
                 onboardingProgress = OnboardingProgress.ROLE_REQUESTED,
+                swipeToCall = SwipeToCall.CALL,
             )
         val id =
             withRepo { repo ->
@@ -127,6 +131,7 @@ class SettingsRepositoryTest {
                 .setDefaultHomeBannerDismissedUntil(-1)
                 .setInstallId("not-a-uuid")
                 .setBadgeStyleValue(42)
+                .setSwipeToCallValue(42)
                 .build()
                 .writeTo(it)
         }
@@ -134,6 +139,8 @@ class SettingsRepositoryTest {
         assertThat(s.catalogueVersion).isEqualTo(1)
         assertThat(s.defaultHomeBannerDismissedUntil).isEqualTo(0L)
         assertThat(s.badgeStyle).isEqualTo(BadgeStyle.DOT)
+        // FR-SEARCH-09 / field 25: an unknown value (a newer catalogue) reads as the default, DIAL.
+        assertThat(s.swipeToCall).isEqualTo(SwipeToCall.DIAL)
         assertThat(SettingsMapper.isUuidV4(s.installId)).isTrue() // replaced by the migration
     }
 
