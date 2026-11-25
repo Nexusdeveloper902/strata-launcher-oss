@@ -4,49 +4,43 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.view.ViewGroup
+import android.os.Looper
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.strata.launcher.TestAppGraph
+import app.strata.launcher.feature.home.HomeTestTags
+import app.strata.launcher.feature.onboarding.OnboardingTestTags
 import app.strata.launcher.home.HomeActivity
+import app.strata.launcher.home.HomeIntents
 import com.google.common.truth.Truth.assertThat
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.shadow.api.Shadow
-import org.robolectric.shadows.ShadowWindowManagerImpl
 
 /**
- * T-HOME-17 (FB-019, Robolectric half): the app icon's entry is window-less. It is declared with `Theme.NoDisplay` and
- * the `MAIN` + `LAUNCHER` filter (and `SettingsActivity` no longer has it); in `onCreate` it sets no content, adds no
- * window, starts the D-008 target and finishes before `onResume`.
+ * T-HOME-17 (FB-019, Robolectric half): the app icon's entry is window-less and reads nothing.
+ * - Declared with `Theme.NoDisplay`, the only `MAIN` + `LAUNCHER` activity of the package.
+ * - Driven through `resume()`: the framework's own check (`Activity.performResume` throws "did not call finish() prior
+ *   to onResume() completing" for a no-display activity that is still running) does not fire, and it is finishing.
+ *   `EntryActivity` does not touch the app graph or any store (no slow or failing read can delay or crash the tap).
+ * - It starts [HomeActivity] explicitly with [HomeIntents.ACTION_ENTRY] in a new task. Home then routes: a first run
+ *   shows onboarding as its first layer and Back on Welcome moves the task back (to the launcher); onboarded, home.
  */
 @RunWith(AndroidJUnit4::class)
 class EntryActivityTest {
+    @get:Rule
+    val compose = createEmptyComposeRule()
+
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     private fun launcherIntent() =
         Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LAUNCHER)
             .setComponent(ComponentName(context, EntryActivity::class.java))
-
-    private fun created(): EntryActivity =
-        Robolectric.buildActivity(EntryActivity::class.java, launcherIntent()).create().get()
-
-    /**
-     * Finished in `onCreate`, no content set, and nothing added to the window manager: the decor view (which the
-     * framework may create lazily) has no view root and is not attached, and the window manager holds no view of ours.
-     * The platform only adds an activity's window after `onResume` of an activity that is not finishing.
-     */
-    private fun assertWindowLess(activity: EntryActivity) {
-        assertThat(activity.isFinishing).isTrue()
-        val content = activity.window.peekDecorView()?.findViewById<ViewGroup>(android.R.id.content)
-        assertThat(content?.childCount ?: 0).isEqualTo(0)
-        assertThat(activity.window.peekDecorView()?.parent).isNull()
-        assertThat(activity.window.peekDecorView()?.isAttachedToWindow ?: false).isFalse()
-        assertThat(Shadow.extract<ShadowWindowManagerImpl>(activity.windowManager).views).isEmpty()
-    }
 
     @Test
     fun tHome17_declaredWindowLessWithTheLauncherFilter() {
@@ -60,34 +54,54 @@ class EntryActivityTest {
     }
 
     @Test
-    fun tHome17_onboarded_startsHomeInItsTaskWithoutAWindow() {
-        TestAppGraph(onboarded = true).install()
-        val activity = created()
+    fun tHome17_finishesBeforeResumeAndStartsHome() {
+        TestAppGraph(onboarded = false).install()
+        // Through resume: a no-display activity that had not finished would throw here.
+        val activity = Robolectric.buildActivity(EntryActivity::class.java, launcherIntent()).setup().get()
+        assertThat(activity.isFinishing).isTrue()
         val started = shadowOf(activity).nextStartedActivity
         assertThat(started.component).isEqualTo(ComponentName(context, HomeActivity::class.java))
+        assertThat(started.action).isEqualTo(HomeIntents.ACTION_ENTRY)
         assertThat(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK).isNotEqualTo(0)
         assertThat(started.categories).isNull()
-        assertWindowLess(activity)
+        assertThat(started.extras).isNull()
+    }
+
+    private fun home(intent: Intent): HomeActivity {
+        val activity = Robolectric.buildActivity(HomeActivity::class.java, intent).setup().get()
+        shadowOf(Looper.getMainLooper()).idle()
+        compose.waitForIdle()
+        return activity
     }
 
     @Test
-    fun tHome17_notOnboarded_handsTheLauncherIntentToSettingsInThisTask() {
+    fun tHome17_firstRunFromTheIcon_onboardingInHome_backOnWelcomeReturnsToTheLauncher() {
         TestAppGraph(onboarded = false).install()
-        val activity = created()
-        val started = shadowOf(activity).nextStartedActivity
-        assertThat(started.component).isEqualTo(ComponentName(context, SettingsActivity::class.java))
-        assertThat(started.action).isEqualTo(Intent.ACTION_MAIN)
-        assertThat(started.categories).containsExactly(Intent.CATEGORY_LAUNCHER)
-        assertThat(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK).isEqualTo(0)
-        // SettingsActivity classifies the hand-over as the launcher icon: it routes (onboarding), not settings root.
-        assertThat(EntryRouter.classify(started.action, started.categories)).isEqualTo(EntryKind.LAUNCHER_ICON)
-        assertWindowLess(activity)
+        val activity = home(EntryActivity.homeIntent(context))
+        compose.onNodeWithTag(OnboardingTestTags.WELCOME).assertExists()
+        compose.runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
+        assertThat(shadowOf(activity).isTaskMovedToBack).isTrue()
     }
 
     @Test
-    fun tHome17_unknownFlagLeavesTheDecisionToTheRouter() {
-        assertThat(EntryRouter.entryTarget(null)).isEqualTo(EntryTarget.ROUTER)
-        assertThat(EntryRouter.entryTarget(false)).isEqualTo(EntryTarget.ROUTER)
-        assertThat(EntryRouter.entryTarget(true)).isEqualTo(EntryTarget.HOME)
+    fun tHome17_firstRunAsTheHomeScreen_backOnWelcomeStays() {
+        TestAppGraph(onboarded = false).install()
+        val intent =
+            Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .setComponent(ComponentName(context, HomeActivity::class.java))
+        val activity = home(intent)
+        compose.onNodeWithTag(OnboardingTestTags.WELCOME).assertExists()
+        compose.runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
+        assertThat(shadowOf(activity).isTaskMovedToBack).isFalse()
+        compose.onNodeWithTag(OnboardingTestTags.WELCOME).assertExists()
+    }
+
+    @Test
+    fun tHome17_onboardedFromTheIcon_showsHome() {
+        TestAppGraph(onboarded = true).install()
+        home(EntryActivity.homeIntent(context))
+        compose.onNodeWithTag(HomeTestTags.ROOT).assertExists()
+        compose.onNodeWithTag(OnboardingTestTags.ROOT).assertDoesNotExist()
     }
 }
