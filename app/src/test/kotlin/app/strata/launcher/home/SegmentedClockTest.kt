@@ -22,7 +22,7 @@ import java.util.Locale
 /**
  * T-THEME-59 (FR-THEME-37, VISUAL_SPEC §9.4): the `segmented` and `countdownBoard` clock styles on home, over a light
  * and a dark sample preset, in 12 h and 24 h, LTR and RTL. The clock speaks the fixed time (the "T−" label is not
- * spoken), its digits are drawn in `textPrimary`, only the board draws `accent` (label and status lamp), the board's date
+ * spoken), its digits are drawn in `textPrimary`, only the board draws `accent` (its status lamp; the "T−" label is `textSecondary`), the board's date
  * is upper case, and with `clock.alignment: center` the clock and the date are centred within ±1 dp (as T-THEME-56).
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -67,7 +67,7 @@ class SegmentedClockTest(
             screen.countColour(view, clock.boundsInRoot, colors.accent) +
                 screen.countColour(view, date.boundsInRoot, colors.accent)
         if (style == ClockStyle.COUNTDOWN_BOARD) {
-            assertWithMessage("$where: board label and lamp in accent").that(accentPx).isGreaterThan(MIN_ACCENT_PIXELS)
+            assertWithMessage("$where: board lamp in accent").that(accentPx).isGreaterThan(MIN_ACCENT_PIXELS)
             val text =
                 compose
                     .onNodeWithTag(HomeTestTags.DATE)

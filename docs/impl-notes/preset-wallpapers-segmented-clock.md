@@ -16,7 +16,7 @@ Owner request 2026-11-25. Both are generic engine features (Proposed); the publi
 ## Clock styles `segmented` and `countdownBoard` (FR-THEME-37, VISUAL_SPEC §9.4)
 - `:core:ui` `SevenSegment` / `SegmentedDigits`: own geometry, unlit bars at 10 %, locale digits mapped by value,
   scaled to fit, never mirrored (T-THEME-58).
-- Home: `countdownBoard` adds a "T−" label in `accent` and turns the date into an upper-case status line with an
+- Home: `countdownBoard` adds a "T−" label in `textSecondary` (small text keeps a text role) and turns the date into an upper-case status line with an
   `accent` lamp. The time is spoken as before. Centring follows T-THEME-56 (T-THEME-59). The editor preview and labels
   (en, de) know both values. Added to schema 1.0 before the v1 release; `schemaMinor` stays 0.
 

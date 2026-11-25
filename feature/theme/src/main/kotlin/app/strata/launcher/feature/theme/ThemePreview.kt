@@ -166,8 +166,8 @@ private fun PreviewHeader(theme: ResolvedTheme) {
                     ) {
                         if (c.style == ClockStyle.COUNTDOWN_BOARD) {
                             Text(
-                                "T\u2212",
-                                color = colors.accent,
+                                SevenSegment.BOARD_PREFIX,
+                                color = colors.textSecondary,
                                 fontSize = size * 0.3f,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.align(Alignment.Top).padding(end = 6.dp),

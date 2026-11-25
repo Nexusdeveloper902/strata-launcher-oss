@@ -436,7 +436,7 @@ internal fun segmentText(text: ClockText): String =
 /**
  * `segmented` / `countdownBoard` (VISUAL_SPEC §9.4): seven-segment digits 0.72 × `clock.sizeSp` tall in `textPrimary`,
  * unlit bars in `textPrimary` at 10 %; the 12 h day period beside them at 30 % size. The board adds a "T−" label in
- * `accent` before the digits. Laid out left to right in every direction (digits are never mirrored); the parent still
+ * `textSecondary` before the digits. Laid out left to right in every direction (digits are never mirrored); the parent still
  * places the whole block per `clock.alignment`.
  */
 @Composable
@@ -456,9 +456,10 @@ private fun SegmentedClock(
         Row(modifier = modifier, verticalAlignment = Alignment.Bottom) {
             if (board) {
                 Text(
-                    text = BOARD_PREFIX,
+                    text = SevenSegment.BOARD_PREFIX,
                     style = small.copy(letterSpacing = PREFIX_TRACKING.em),
-                    color = colors.accent,
+                    // Small text: a text role (4.5:1, THEME_SYSTEM §7.1), not `accent` (only 3:1).
+                    color = colors.textSecondary,
                     maxLines = 1,
                     modifier =
                         Modifier
@@ -800,7 +801,6 @@ private const val DEG_PER_MINUTE = 6f
 private const val DEFAULT_DATE_PATTERN = "EEEE d MMMM"
 private const val SEGMENT_HEIGHT = 0.72f
 private const val GHOST_ALPHA = 0.1f
-private const val BOARD_PREFIX = "T\u2212"
 private const val PREFIX_TRACKING = 0.06f
 private const val PREFIX_GAP = 0.16f
 private const val STATUS_TRACKING = 0.12f

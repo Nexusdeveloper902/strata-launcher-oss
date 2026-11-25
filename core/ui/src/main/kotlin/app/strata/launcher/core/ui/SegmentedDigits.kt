@@ -166,6 +166,9 @@ object SevenSegment {
             close()
         }
 
+    /** The `countdownBoard` label before the digits ("T" and a minus sign); not spoken. */
+    const val BOARD_PREFIX = "T\u2212"
+
     const val BLANK = -1
     const val COLON = -2
     private const val RADIX = 10
