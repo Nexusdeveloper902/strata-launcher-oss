@@ -1,6 +1,8 @@
+// Maven Central via Google's mirror first, as in the root settings.gradle.kts.
 pluginManagement {
     repositories {
         google()
+        maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "MavenCentralMirror" }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -9,6 +11,7 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories {
         google()
+        maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "MavenCentralMirror" }
         mavenCentral()
         gradlePluginPortal()
     }
