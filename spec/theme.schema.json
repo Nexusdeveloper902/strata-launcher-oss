@@ -200,7 +200,7 @@
       "type": "object",
       "properties": {
         "visible": { "type": "boolean", "default": true },
-        "style": { "enum": ["numeric", "numericStacked", "words", "analogMinimal"], "default": "numeric" },
+        "style": { "enum": ["numeric", "numericStacked", "words", "analogMinimal", "segmented", "countdownBoard"], "default": "numeric" },
         "hourFormat": { "enum": ["system", "h12", "h24"], "default": "system" },
         "showSeconds": { "type": "boolean", "default": false },
         "sizeSp": { "type": "integer", "minimum": 24, "maximum": 128, "default": 56 },

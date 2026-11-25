@@ -53,6 +53,50 @@ interface BuiltInThemeSource {
     fun names(): List<String>
 
     fun read(name: String): ByteArray?
+
+    /**
+     * The wallpaper set the built-in preset [name] ships with (THEME_SYSTEM §14.2), in order; empty when it has none.
+     * The theme's own `wallpaper.image` comes first.
+     */
+    fun wallpapers(name: String): List<PresetWallpaper> = emptyList()
+
+    /** A preset wallpaper image by its SHA-256 (`assets/themes/images/<sha256>.webp`), or null. */
+    fun image(sha256: String): ByteArray? = null
+
+    /** SHA-256 names of every preset wallpaper image. */
+    fun imageNames(): Set<String> = emptySet()
+}
+
+/** One image of a built-in preset's wallpaper set: its content hash and a short label (picker text, TalkBack). */
+data class PresetWallpaper(
+    val sha256: String,
+    val label: String,
+)
+
+/**
+ * The `<preset>.wallpapers.txt` list next to a built-in preset (THEME_SYSTEM §14.2): one `<sha256> <label>` per line,
+ * `#` comments and blank lines ignored. Lines that do not match (the build already rejects them) and repeated hashes
+ * are skipped, so a bad line never hides the rest.
+ */
+object PresetWallpaperList {
+    const val SUFFIX = ".wallpapers.txt"
+    const val MAX_LABEL = 64
+    private val LINE = Regex("^([0-9a-f]{64})[ \\t]+(\\S.{0,${MAX_LABEL - 1}})$")
+
+    /** The list file of the preset file [presetName] (`x.strata-theme.json` → `x.wallpapers.txt`). */
+    fun fileFor(presetName: String): String = presetName.removeSuffix(".strata-theme.json") + SUFFIX
+
+    fun parse(text: String): List<PresetWallpaper> {
+        val seen = HashSet<String>()
+        return text
+            .lineSequence()
+            .map { it.trimEnd('\r') }
+            .filterNot { it.isBlank() || it.trimStart().startsWith("#") }
+            .mapNotNull { LINE.matchEntire(it.trimEnd()) }
+            .map { PresetWallpaper(it.groupValues[1], it.groupValues[2].trim()) }
+            .filter { seen.add(it.sha256) }
+            .toList()
+    }
 }
 
 enum class ThemeOrigin { BUILTIN, USER, IMPORTED }

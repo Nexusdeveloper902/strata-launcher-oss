@@ -2,9 +2,10 @@
 # Mirrors branches of this private repository to the public repository
 # Nexusdeveloper902/strata-launcher-oss, with the research files that describe
 # the original app removed from every commit (see research/UNRESOLVED.md U-001,
-# U-003, U-004), and the private glyph overlay (platform/icons/glyphs-private/:
-# per-app glyphs and index lines for the owner's apps, CONTRIBUTING.md) removed
-# from every commit too.
+# U-003, U-004), and the private overlays removed from every commit too: the glyph
+# overlay (platform/icons/glyphs-private/: per-app glyphs and index lines for the
+# owner's apps) and the theme overlay (themes-private/: private built-in presets with
+# their wallpapers and credits), see CONTRIBUTING.md.
 #
 # Usage: tools/mirror/sync-public.sh [--dry-run DIR] [branch ...]    (default: main)
 #
@@ -19,14 +20,17 @@
 # - no stripped file and no path under a stripped directory remains in any commit;
 # - canaries never appear in any file of any filtered commit (binary files included),
 #   in any path, in any commit message, author or committer name or e-mail, or in
-#   any ref name. Canaries are, merged over every synced branch (from the latest
-#   commit of its history that has the overlay):
+#   any ref name. Canaries are, merged over every synced branch and every overlay
+#   (from the latest commit of the branch's history that has that overlay):
 #     * every package of the overlay's index.txt (matched as whole words), minus the
 #       reviewed allowlist ALLOW below;
 #     * the extra fixed strings of the overlay's canaries.txt (matched anywhere);
 #     * the fixed strings of the file named by STRATA_MIRROR_CANARIES, if set.
-# - If any synced branch has (or had) the overlay, the canary list must not be
-#   empty; otherwise the sync refuses to run.
+# - no image file (.webp, .png, .jpg) that was ever in an overlay may remain in any
+#   filtered commit under any path or name (its blob is matched, not its name);
+# - A synced branch that has (or had) an overlay must carry a usable canary list for
+#   that overlay (index.txt or canaries.txt), and the merged list must not be empty;
+#   otherwise the sync refuses to run.
 #
 # The private repository stays the source of truth. Pull requests are opened on
 # the public repository only to run CI there (Actions minutes are free for public
@@ -35,9 +39,9 @@ set -eu
 
 PUBLIC_URL="${STRATA_PUBLIC_URL:-https://github.com/Nexusdeveloper902/strata-launcher-oss}"
 STRIP="research/APK_ANALYSIS.md research/PUBLIC_BEHAVIOR.md research/EVIDENCE.md"
-# Directories removed from every commit (every path below them).
-OVERLAY="platform/icons/glyphs-private"
-STRIP_DIRS="$OVERLAY"
+# Directories removed from every commit (every path below them): the private overlays.
+OVERLAYS="platform/icons/glyphs-private themes-private"
+STRIP_DIRS="$OVERLAYS"
 # Reviewed allowlist: overlay index packages that legitimately appear in public files
 # (a platform app the device tests and gates refer to, and a build-tool group id).
 ALLOW="com.android.settings com.pinterest"
@@ -113,21 +117,23 @@ done
 # Canaries, from the branches themselves (before filtering).
 overlay_seen=""
 for b in "$@"; do
-  last="$(git log -1 --format=%H "refs/heads/$b" -- "$OVERLAY")"
-  [ -n "$last" ] || continue
-  overlay_seen=1
-  # The latest commit that has the overlay: the last one touching it, or its parent if that one deleted it.
-  at="$last"
-  git cat-file -e "$at:$OVERLAY" 2>/dev/null || at="$last^"
-  n_before=$(cat "$pkgs" "$extra" | wc -l)
-  if git cat-file -e "$at:$OVERLAY/index.txt" 2>/dev/null; then
-    git show "$at:$OVERLAY/index.txt" | clean | awk '{ print $1 }' >>"$pkgs"
-  fi
-  if git cat-file -e "$at:$OVERLAY/canaries.txt" 2>/dev/null; then
-    git show "$at:$OVERLAY/canaries.txt" | clean >>"$extra"
-  fi
-  n_after=$(cat "$pkgs" "$extra" | wc -l)
-  [ "$n_after" -gt "$n_before" ] || die "branch $b has $OVERLAY but no usable canary list (index.txt or canaries.txt)"
+  for o in $OVERLAYS; do
+    last="$(git log -1 --format=%H "refs/heads/$b" -- "$o")"
+    [ -n "$last" ] || continue
+    overlay_seen=1
+    # The latest commit that has the overlay: the last one touching it, or its parent if that one deleted it.
+    at="$last"
+    git cat-file -e "$at:$o" 2>/dev/null || at="$last^"
+    n_before=$(cat "$pkgs" "$extra" | wc -l)
+    if git cat-file -e "$at:$o/index.txt" 2>/dev/null; then
+      git show "$at:$o/index.txt" | clean | awk '{ print $1 }' >>"$pkgs"
+    fi
+    if git cat-file -e "$at:$o/canaries.txt" 2>/dev/null; then
+      git show "$at:$o/canaries.txt" | clean >>"$extra"
+    fi
+    n_after=$(cat "$pkgs" "$extra" | wc -l)
+    [ "$n_after" -gt "$n_before" ] || die "branch $b has $o but no usable canary list (index.txt or canaries.txt)"
+  done
 done
 if [ -n "${STRATA_MIRROR_CANARIES:-}" ]; then
   clean <"$STRATA_MIRROR_CANARIES" >>"$extra"
@@ -142,8 +148,14 @@ n_pkgs=$(wc -l <"$pkgs")
 n_extra=$(wc -l <"$extra")
 n=$((n_pkgs + n_extra))
 if [ -n "$overlay_seen" ] && [ "$n" -eq 0 ]; then
-  die "the synced branches have $OVERLAY but the canary list is empty"
+  die "the synced branches have a private overlay but the canary list is empty"
 fi
+
+# Every image blob that was ever in an overlay on the synced branches (post-images of their changes).
+media="$work/overlay-media"
+# shellcheck disable=SC2086
+git log --format= --raw --no-abbrev --no-renames "$@" -- $OVERLAYS |
+  awk '{ print $4, $6 }' | grep -iE '[.](webp|png|jpe?g)$' | awk '$1 !~ /^0+$/ { print $1 }' | sort -u >"$media"
 
 args=""
 for p in $STRIP; do args="$args --path $p"; done
@@ -175,6 +187,13 @@ for d in $STRIP_DIRS; do
 done
 scan_file "$paths" || die "a canary string is present in a file path"
 
+if [ -s "$media" ]; then
+  git rev-list --objects "$@" | awk '{ print $1 }' | sort -u >"$work/objects"
+  if [ -n "$(comm -12 "$media" "$work/objects")" ]; then
+    die "a private overlay image is still present in a filtered commit"
+  fi
+fi
+
 meta="$work/meta"
 git log --format='%B%n%an%n%ae%n%cn%n%ce' "$@" -- >"$meta"
 git for-each-ref --format='%(refname)' >>"$meta"
@@ -196,8 +215,8 @@ for list in "$pkgs" "$extra"; do
   if [ -s "$hits" ]; then die "a canary string is still present in a filtered commit"; fi
 done
 
-echo "sync-public: verified: no stripped path and none of $n canaries ($n_pkgs packages, $n_extra strings)" \
-  "in paths, file contents (binary included), messages, identities or ref names" >&2
+echo "sync-public: verified: no stripped path, none of $(wc -l <"$media") overlay images, and none of $n canaries" \
+  "($n_pkgs packages, $n_extra strings) in paths, file contents (binary included), messages, identities or ref names" >&2
 
 if [ -n "$dry_run" ]; then
   git clone -q "$work/repo" "$dry_run"

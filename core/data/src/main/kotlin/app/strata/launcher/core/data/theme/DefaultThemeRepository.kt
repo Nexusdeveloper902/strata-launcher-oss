@@ -46,6 +46,7 @@ import app.strata.launcher.core.theme.store.ImageSeedResult
 import app.strata.launcher.core.theme.store.ImportCommit
 import app.strata.launcher.core.theme.store.ImportPreview
 import app.strata.launcher.core.theme.store.PackNotice
+import app.strata.launcher.core.theme.store.PresetWallpaper
 import app.strata.launcher.core.theme.store.PreviewEnvironment
 import app.strata.launcher.core.theme.store.ThemeBackupData
 import app.strata.launcher.core.theme.store.ThemeBackupStore
@@ -250,7 +251,7 @@ class DefaultThemeRepository(
                 safeMode = result.source == BootSource.SAFE_MODE,
                 fallback = result.showBanner,
                 userFonts = names(store, FONTS_DIR),
-                images = names(store, IMAGES_DIR),
+                images = imageNames(store),
             )
     }
 
@@ -288,7 +289,7 @@ class DefaultThemeRepository(
                 safeMode = false,
                 fallback = false,
                 userFonts = names(store, FONTS_DIR),
-                images = names(store, IMAGES_DIR),
+                images = imageNames(store),
             )
         }
     }
@@ -438,7 +439,7 @@ class DefaultThemeRepository(
         val doc = c.parsed.document
         val store = files()
         val fonts = names(store, FONTS_DIR) + c.fonts.map { it.sha256 }
-        val images = names(store, IMAGES_DIR) + listOfNotNull(c.image?.sha256)
+        val images = imageNames(store) + listOfNotNull(c.image?.sha256)
         val base = (latestInputs ?: PlatformInputs(apiLevel = 0)).copy(userFonts = fonts, images = images)
         val onError: (Throwable) -> Unit = { logger.e(TAG, "preview resolution failed", it) }
         val g = latestGlobals
@@ -619,6 +620,13 @@ class DefaultThemeRepository(
         }
 
     override suspend fun wallpaperImage(id: String): ThemeImage? = withLibrary { it.wallpaperImage(id) }
+
+    override suspend fun wallpaperChoices(id: String): List<PresetWallpaper> = withLibrary { it.wallpaperChoices(id) }
+
+    override suspend fun wallpaperImage(
+        id: String,
+        sha256: String,
+    ): ThemeImage? = withLibrary { it.wallpaperImage(id, sha256) }
 
     // ---- ThemeEditorStore (THEME_SYSTEM §13) ------------------------------------------------------
 
@@ -809,6 +817,10 @@ class DefaultThemeRepository(
         val dark = ThemeResolver.resolveSafely(a.document, inputs.copy(systemDark = true), g, onError)
         return ThemePair(light.theme, dark.theme) to (light.fellBack || dark.fellBack)
     }
+
+    /** The image store's names plus the built-in preset images (THEME_SYSTEM §14.2), which every theme may use. */
+    private fun imageNames(store: ThemeFileStore): Set<String> =
+        names(store, IMAGES_DIR) + (library?.builtInImageNames() ?: emptySet())
 
     private fun names(
         store: ThemeFileStore,

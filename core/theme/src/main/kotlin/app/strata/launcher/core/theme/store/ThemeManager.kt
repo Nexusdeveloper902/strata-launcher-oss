@@ -143,4 +143,13 @@ interface ThemeManager {
 
     /** The stored wallpaper image of a theme (FR-THEME-34 hand-off), or null. */
     suspend fun wallpaperImage(id: String): ThemeImage?
+
+    /** The wallpapers a theme offers (FR-THEME-36): a preset's set (§14.2), or its own image; empty when none. */
+    suspend fun wallpaperChoices(id: String): List<PresetWallpaper>
+
+    /** One of [wallpaperChoices] by hash, or null. */
+    suspend fun wallpaperImage(
+        id: String,
+        sha256: String,
+    ): ThemeImage?
 }

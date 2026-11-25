@@ -207,6 +207,8 @@ The "All apps ›" row ends the block.
 | `numericStacked` | Hours above minutes, each line `type.clock`, line height 0.9 ×, minutes in `textSecondary`. Our layering motif. |
 | `words` | Time spelled out in the locale (e.g. "twenty past nine"), up to 3 lines at 0.5 × `clock.sizeSp`, the last word in `accent`. Falls back to `numeric` where there is no words formatter. |
 | `analogMinimal` | Circle of diameter 2 × `clock.sizeSp` dp. No numerals, no ticks except one 12 o'clock dot (`accent`). Hour hand 4 dp, minute hand 2 dp, `textPrimary`, round caps. Seconds hand only if `showSeconds`. |
+| `segmented` | Seven-segment digits (Proposed, FR-THEME-37): our own geometry, digit height 0.72 × `clock.sizeSp` (so it matches the numeric cap height), upright cells 0.56 × the height with 0.16 × gaps, bars 0.12 × the height with pointed ends; lit bars `textPrimary`, unlit bars `textPrimary` at 10 % (a switched-on display). Fields `HH:MM(:SS)` with square colon dots; locale digits map by value, other text falls back to `numeric`. In 12 h the period follows at 30 % size. Never mirrored; scaled down to fit the width. |
+| `countdownBoard` | `segmented` with a launch-board frame (Proposed, FR-THEME-37): a "T−" label in `accent` at 30 % size, top-aligned before the digits; the date line becomes a status line, a small `accent` lamp (½ the date size) then the date in upper case (the locale's case mapping) with 0.12 em tracking, medium weight, `textSecondary`. It shows the current time, not a countdown. Nothing blinks (§10). |
 The date sits below the clock, aligned with it, 4 dp gap, in `type.date`. The clock carries a
 content description with the spoken time, and updates on `ACTION_TIME_TICK` (seconds:
 1 Hz only while visible and resumed).
@@ -250,10 +252,10 @@ but differ in every specific:
 | Notifications | **Dot / count badges** by default; text preview only as an opt-in. |
 | Per-app actions | Long-press sheet only; no horizontal row gestures or floating panels. |
 | Alphabet index | One visible index on a chosen side; an active track with a **rounded-square bubble offset inward**; only the touched letter grows (no neighbour magnification); dot glyph option; no invisible opposite strip. |
-| Clock | Our four styles (§9.4), including the stacked hours/minutes "strata" style. No copied clock designs. |
+| Clock | Our six styles (§9.4), including the stacked hours/minutes "strata" style. No copied clock designs. |
 | Section headers | Explicit letter headings in the list, with an optional hairline. |
 | Floating button | None. |
-| Themes, palettes, fonts, wallpapers | Only our own presets (THEME_SYSTEM §14) and the OFL catalogue in §4.2; no bundled wallpapers in v1. |
+| Themes, palettes, fonts, wallpapers | Only our own presets (THEME_SYSTEM §14) and the OFL catalogue in §4.2; the public build bundles no wallpapers (preset wallpaper sets, THEME_SYSTEM §14.2, exist only in private builds). |
 | Copy and terminology | Our own wording ("All apps", "Hidden apps", "Home menu"); no reuse of the original's feature names. |
 | File types | `.strata-theme.json`, `.strata-theme.zip`, `.strata-backup.json` (D-006). |
 T-07 should check screenshots of the built app against this table before release.

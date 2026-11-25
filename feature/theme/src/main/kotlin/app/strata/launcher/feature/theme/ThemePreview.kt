@@ -43,6 +43,8 @@ import app.strata.launcher.core.theme.model.VerticalPosition
 import app.strata.launcher.core.theme.resolve.ResolvedTheme
 import app.strata.launcher.core.ui.AppRow
 import app.strata.launcher.core.ui.SearchPillFrame
+import app.strata.launcher.core.ui.SegmentedDigits
+import app.strata.launcher.core.ui.SevenSegment
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.StrataTheme
 import app.strata.launcher.core.ui.apply
@@ -156,6 +158,31 @@ private fun PreviewHeader(theme: ResolvedTheme) {
                 }
             }
 
+            ClockStyle.SEGMENTED, ClockStyle.COUNTDOWN_BOARD -> {
+                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    Row(
+                        modifier = Modifier.align(alignmentOf(c.alignment)),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        if (c.style == ClockStyle.COUNTDOWN_BOARD) {
+                            Text(
+                                "T\u2212",
+                                color = colors.accent,
+                                fontSize = size * 0.3f,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.align(Alignment.Top).padding(end = 6.dp),
+                            )
+                        }
+                        SegmentedDigits(
+                            cells = SevenSegment.cells(h).orEmpty(),
+                            height = (c.sizeSp * theme.typography.scale * 0.72f).dp,
+                            lit = colors.textPrimary,
+                            ghost = colors.textPrimary.copy(alpha = 0.1f),
+                        )
+                    }
+                }
+            }
+
             else -> {
                 Text(
                     h,
@@ -169,8 +196,9 @@ private fun PreviewHeader(theme: ResolvedTheme) {
         }
     }
     if (c.dateVisible) {
+        val board = c.visible && c.style == ClockStyle.COUNTDOWN_BOARD
         Text(
-            "Monday 4 November",
+            if (board) "MON 4 NOV" else "Monday 4 November",
             color = colors.textSecondary,
             fontSize = (c.dateSizeSp * theme.typography.scale).sp,
             textAlign = textAlign(c.alignment),

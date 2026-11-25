@@ -333,6 +333,10 @@ All thresholds come from the requirement they cite. Everything else is `Proposed
 | T-THEME-55 | Glyph index and bundle | test `glyph_index.txt` plus the production index | Parse; look up present, absent and malformed lines; check drawables | Present package returns its id, absent returns null. Malformed lines are skipped and reported. Production index: no duplicate packages, every id has a single-colour vector drawable. A fixture glyph added by data only appears in `resolve` with no code change. Bundle version: changing only one glyph drawable's bytes (index unchanged) changes the build-time bundle version and makes the old cached bitmap a cache miss; an identical bundle keeps the same version | U + R | FR-THEME-35 |
 | T-THEME-56 | Centred clock is centred (FB-007) | each built-in preset forced to `clock.alignment: center`; 12 h and 24 h; seconds off and on; LTR and RTL; plus a one-sided display cutout | Render home (native graphics) and measure the inked pixels of the clock time (the day period hangs beside it) and of the date | The ink's centre is within ±1 dp of the window's centre in every case, also with the alphabet index shown on one side (when the period cannot be reserved on both sides, time and period together are centred). On a 360 dp screen at `sizeSp` 128, 12 h with seconds, the clock's ink stays inside the header span and the period never reaches the index. The clock shows a fixed time | C | FR-THEME-12, FR-HOME-02 |
 | T-THEME-57 | Favourites align with the header (FB-014) | each built-in preset with `favorites.alignment` and `clock.alignment` both `start`, `center` or `end`; LTR and RTL; one favourite with a notification badge; plus centred favourites with a one-sided display cutout | Render home; read the bounds of each favourite label, the "All apps" label, the clock and the date | Centred: every label's centre is within ±1 dp of the window's centre (the badge hangs beside its label), also with the alphabet index on one side or a cutout. Start or end: the labels share the clock's and the date's start (or end) edge within ±1 dp. No label overlaps the index | R | FR-THEME-13, FR-HOME-02 |
+| T-THEME-58 | Seven-segment digits | — | Map digits 0–9 to bars; map display strings with Latin, Arabic-Indic and Devanagari digits; measure widths; parse a theme with each new style value | Classic masks (bar counts 6 2 5 5 4 5 6 3 7 6), all distinct; locale digits map by value, other text yields "fall back"; width = cells + gaps; `segmented` and `countdownBoard` parse without issues | U | FR-THEME-37 |
+| T-THEME-59 | Segmented and countdown-board clocks on home | a light and a dark sample preset with `clock.style` `segmented` or `countdownBoard`, `alignment: center`; 12 h and 24 h; LTR and RTL; fixed time | Render home (native graphics); read the clock's spoken text, its pixels and the date's text | Spoken text is the fixed time. Digits drawn in `textPrimary`. `accent` pixels only with `countdownBoard` (label and lamp). Board date is upper case. Clock and date ink centred within ±1 dp (as T-THEME-56) | R | FR-THEME-37, FR-THEME-12 |
+| T-THEME-60 | Preset wallpaper assets | build-logic fixtures; the packaged `assets/themes/` | Run the asset checks on good and broken sets; read every packaged list and image | Bad lines, duplicates, long labels, missing, non-WebP or renamed images, a preset image not first, unlisted images and a list without preset each fail the build. Packaged: every listed image exists and hashes to its name, the preset's own image is first, the public samples have no set | U + R | FR-THEME-36 |
+| T-THEME-61 | Preset wallpaper picker and hand-off | a fixture preset with 3 images; `FakeSystemIntents` | Library: choices, image reads, a copy, export, a stored theme. UI: apply, pick; "Not now"; menu "Set wallpaper…" | Choices are the set in order; a copy keeps it and exports the image; a stored theme offers its own image named after it; unlisted hashes and mismatching bytes yield nothing. Picking the 2nd image hands off exactly its bytes once; "Not now" hands off nothing; the menu opens the picker without applying; Paper has no menu item | U + R | FR-THEME-36, FR-THEME-34 |
 
 ## 16. PERF (RD-1, `APPS500`, release-like `benchmark` build with Baseline Profile)
 | ID | Test | Preconditions | Steps | Expected | Level | Covers |
@@ -492,7 +496,7 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-THEME-09 | T-THEME-10 |
 | FR-THEME-10 | T-THEME-11, T-APPS-10 |
 | FR-THEME-11 | T-THEME-12, T-THEME-54 |
-| FR-THEME-12 | T-THEME-13, T-HOME-04, T-I18N-05, T-THEME-56 |
+| FR-THEME-12 | T-THEME-13, T-HOME-04, T-I18N-05, T-THEME-56, T-THEME-59 |
 | FR-THEME-13 | T-THEME-14, T-HOME-04, T-THEME-57 |
 | FR-THEME-14 | T-THEME-15, T-HOME-04 |
 | FR-THEME-15 | T-THEME-16, T-A11Y-02, T-HOME-08 |
@@ -514,7 +518,9 @@ Every P0/P1 requirement maps to at least one test. P2 items are not covered unti
 | FR-THEME-31 | T-THEME-39, T-THEME-14, T-APPS-10 |
 | FR-THEME-32 | T-THEME-40 |
 | FR-THEME-33 | T-THEME-41, T-BACKUP-09, T-BACKUP-11 |
-| FR-THEME-34 | T-THEME-42, T-CI-01 |
+| FR-THEME-34 | T-THEME-42, T-CI-01, T-THEME-61 |
+| FR-THEME-36 | T-THEME-60, T-THEME-61 |
+| FR-THEME-37 | T-THEME-58, T-THEME-59 |
 | NFR-THEME-01 | T-THEME-19, T-THEME-36 |
 | NFR-THEME-02 | T-THEME-44 |
 | NFR-THEME-03 | T-THEME-45 |

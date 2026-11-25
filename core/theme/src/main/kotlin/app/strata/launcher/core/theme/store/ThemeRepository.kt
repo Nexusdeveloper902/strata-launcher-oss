@@ -58,6 +58,8 @@ data class ThemeSummary(
     val causedProblem: Boolean = false,
     /** Stored static contrast status (§7.3), null when unknown. */
     val contrast: app.strata.launcher.core.theme.contrast.ContrastStatus? = null,
+    /** Built-ins only: the preset ships a wallpaper set (§14.2), offered by "Set wallpaper" (FR-THEME-36). */
+    val hasWallpapers: Boolean = false,
 )
 
 /**

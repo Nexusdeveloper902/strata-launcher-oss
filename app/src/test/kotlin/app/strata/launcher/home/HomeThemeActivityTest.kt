@@ -108,11 +108,12 @@ class HomeThemeActivityTest {
                 .orEmpty()
                 .filter { it.endsWith(".strata-theme.json") }
                 .sorted()
-        assertThat(names).containsExactlyElementsIn(ThemeFixtures.SAMPLE_NAMES).inOrder()
+        // The samples, plus the private overlay's presets where it exists (CONTRIBUTING "Public mirror and CI").
+        assertThat(names).containsExactlyElementsIn(ThemeFixtures.BUILT_IN_NAMES).inOrder()
         val documents =
             names.map { name ->
                 val bytes = context.assets.open("themes/$name").use { it.readBytes() }
-                assertThat(bytes).isEqualTo(ThemeFixtures.sample(name)) // one source: spec/sample-themes
+                assertThat(bytes).isEqualTo(ThemeFixtures.builtIn(name)) // one source: spec/sample-themes (+ overlay)
                 val parsed = ThemeParser().parse(bytes)
                 assertWithMessage(name).that(parsed).isInstanceOf(Outcome.Ok::class.java)
                 val theme = (parsed as Outcome.Ok).value

@@ -2,12 +2,14 @@ package app.strata.launcher.core.data.theme
 
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.strata.launcher.core.common.Outcome
 import app.strata.launcher.core.json.JsonObject
 import app.strata.launcher.core.json.JsonParser
 import app.strata.launcher.core.model.AppearanceSetting
 import app.strata.launcher.core.model.Settings
 import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.model.Variant
+import app.strata.launcher.core.theme.parse.ThemeParser
 import app.strata.launcher.core.theme.resolve.PlatformInputs
 import app.strata.launcher.core.theme.resolve.WallpaperColorsInput
 import app.strata.launcher.core.theme.store.ThemeBannerKind
@@ -18,6 +20,7 @@ import app.strata.launcher.testing.fakes.FakeSettingsRepository
 import app.strata.launcher.testing.fakes.RecordingLogger
 import app.strata.launcher.testing.fixtures.ThemeFixtures
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -158,12 +161,42 @@ class ThemeRepositoryTest {
         File(themesDir, "user/$id.strata-theme.json").writeText("{ not json")
     }
 
+    /** The spec samples byte for byte, plus the private overlay's presets where the overlay exists (none on the mirror). */
     @Test
     fun builtInsAreTheSpecSamples_singleSource() {
         val assets = AssetBuiltInThemeSource(context.assets)
-        assertThat(assets.names()).containsExactlyElementsIn(ThemeFixtures.SAMPLE_NAMES).inOrder()
+        assertThat(assets.names()).containsExactlyElementsIn(ThemeFixtures.BUILT_IN_NAMES).inOrder()
+        for (name in ThemeFixtures.BUILT_IN_NAMES) assertThat(assets.read(name)).isEqualTo(ThemeFixtures.builtIn(name))
         for (name in ThemeFixtures.SAMPLE_NAMES) assertThat(assets.read(name)).isEqualTo(ThemeFixtures.sample(name))
     }
+
+    /**
+     * T-THEME-60: every packaged preset wallpaper list names images that are packaged and hash to their names, and a
+     * preset's own `wallpaper.image` comes first. The public samples ship no wallpapers.
+     */
+    @Test
+    fun presetWallpaperSets_packagedAndVerified() {
+        val assets = AssetBuiltInThemeSource(context.assets)
+        for (name in ThemeFixtures.SAMPLE_NAMES) assertThat(assets.wallpapers(name)).isEmpty()
+        for (name in assets.names()) {
+            val set = assets.wallpapers(name)
+            if (set.isEmpty()) continue
+            for (w in set) {
+                val bytes = assets.image(w.sha256)
+                assertWithMessage("$name ${w.label}").that(bytes).isNotNull()
+                assertThat(sha256(bytes!!)).isEqualTo(w.sha256)
+            }
+            val doc = (ThemeParser().parse(assets.read(name)!!) as Outcome.Ok).value.document
+            doc.wallpaper.image?.let { assertThat(set.first().sha256).isEqualTo(it.sha256) }
+            assertThat(assets.imageNames()).containsAtLeastElementsIn(set.map { it.sha256 })
+        }
+    }
+
+    private fun sha256(b: ByteArray): String =
+        java.security.MessageDigest
+            .getInstance("SHA-256")
+            .digest(b)
+            .joinToString("") { "%02x".format(it) }
 
     @Test
     fun freshInstall_strataDefault_noBanner() {
@@ -198,7 +231,15 @@ class ThemeRepositoryTest {
     @Test
     fun library_listsDefaultThenBuiltInsThenStored() {
         seedAActiveBActive()
-        val names = process { boot().let { runBlocking { repo.library() } } }.map { it.name }
+        // A private overlay's presets (absent on the mirror) are built-ins too; they are not part of this check.
+        val overlay =
+            ThemeFixtures.OVERLAY_NAMES
+                .map { (ThemeParser().parse(ThemeFixtures.overlay(it)) as Outcome.Ok).value.document.name }
+                .toSet()
+        val names =
+            process {
+                boot().let { runBlocking { repo.library() } }
+            }.map { it.name }.filterNot { it in overlay }
         assertThat(names)
             .containsExactly("Strata Default", "Dusk", "Graphite", "Harbor", "Midnight OLED", "Paper", "Alpha", "Beta")
             .inOrder()

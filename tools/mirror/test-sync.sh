@@ -15,6 +15,9 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset STRATA_MIRROR_CANARIES 2>/dev/null || true
 
 overlay=platform/icons/glyphs-private
+themes=themes-private
+# An invented preset image: its content hash is a canary of the theme overlay.
+img_sha=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 fails=0
 n=0
 
@@ -34,6 +37,13 @@ printf '# private index\ncom.example.hiddenalpha alpha\ncom.example.hiddenbeta b
 printf '# extra strings\nsecretuser_\n' >"$overlay/canaries.txt"
 echo "<vector/>" >"$overlay/res/glyph_alpha.xml"
 git add -A && git commit -q -m "add overlay"
+# The theme overlay: a private preset, its wallpaper and credits; canaries only (no index).
+mkdir -p "$themes/presets" "$themes/images"
+printf '{"name":"Secretpreset"}\n' >"$themes/presets/x.strata-theme.json"
+printf '%s Picture\n' "$img_sha" >"$themes/presets/x.wallpapers.txt"
+printf 'RIFF\000\000\000\000WEBPsecretpixels' >"$themes/images/$img_sha.webp"
+printf '# theme canaries\nSecretpreset\n%s\n' "$img_sha" >"$themes/canaries.txt"
+git add -A && git commit -q -m "add theme overlay"
 git checkout -q main
 
 # Branches derived from the overlay branch, one leak each.
@@ -49,10 +59,25 @@ leak leak-text "public note" sh -c 'echo "see com.example.hiddenalpha" >docs/not
 leak leak-binary "add blob" sh -c 'printf "\000\001bin secretuser_x \000" >app/blob.bin'
 leak leak-path "add doc" sh -c 'echo x >docs/com.example.hiddenbeta.txt'
 leak leak-message "mention com.example.hiddenalpha in the message" sh -c 'echo y >app/other.txt'
+leak leak-theme-text "public doc" sh -c 'echo "the Secretpreset look" >docs/theme.txt'
+leak leak-theme-image "copy a picture" sh -c 'mkdir -p app/assets && cp "$0"/images/*.webp app/assets/' "$themes"
+leak leak-theme-renamed "add a picture" sh -c 'mkdir -p app/assets && cp "$0"/images/*.webp app/assets/pic.webp' "$themes"
 git checkout -q -b comments-only main
 mkdir -p "$overlay"
 printf '# only comments\n\n   # still nothing\n' >"$overlay/canaries.txt"
 git add -A && git commit -q -m "overlay without a usable canary list"
+git checkout -q main
+git checkout -q -b theme-comments-only main
+mkdir -p "$themes/presets"
+echo '{}' >"$themes/presets/y.strata-theme.json"
+printf '# nothing usable\n' >"$themes/canaries.txt"
+git add -A && git commit -q -m "theme overlay without a usable canary list"
+git checkout -q main
+git checkout -q -b theme-removed overlay
+git rm -q -r "$themes"
+git commit -q -m "drop the theme overlay"
+echo "Secretpreset" >docs/late.txt
+git add -A && git commit -q -m "late leak"
 git checkout -q main
 
 expect() { # pass|refuse description branch... (run from the current directory)
@@ -72,16 +97,27 @@ expect() { # pass|refuse description branch... (run from the current directory)
   fi
 }
 
-expect pass "clean history with the overlay stripped" main overlay
-if [ -e "$tmp/dry1/$overlay" ]; then
-  echo "FAIL overlay present in the filtered tree"
-  fails=$((fails + 1))
-fi
+expect pass "clean history with both overlays stripped" main overlay
+for o in "$overlay" "$themes"; do
+  if [ -e "$tmp/dry1/$o" ]; then
+    echo "FAIL $o present in the filtered tree"
+    fails=$((fails + 1))
+  fi
+  if [ -n "$(git -C "$tmp/dry1" log --all --format= --name-only -- "$o")" ]; then
+    echo "FAIL $o present in the filtered history"
+    fails=$((fails + 1))
+  fi
+done
 expect refuse "index package in a public file" leak-text
 expect refuse "canary inside a binary file" leak-binary
 expect refuse "canary in a file name" leak-path
 expect refuse "canary in a commit message" leak-message
 expect refuse "canary file with only comments" comments-only
+expect refuse "theme canary in a public file" leak-theme-text
+expect refuse "preset image copied outside the overlay" leak-theme-image
+expect refuse "preset image copied under another name" leak-theme-renamed
+expect refuse "theme overlay without a usable canary list" theme-comments-only
+expect refuse "theme canary after the overlay was removed" theme-removed
 
 # Run from a worktree that does not have the overlay: canaries still come from the synced branch.
 git worktree add -q --detach "$tmp/wt" main

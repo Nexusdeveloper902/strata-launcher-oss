@@ -166,11 +166,12 @@ class FakeLockService(
 }
 
 /**
- * Always the monogram (pure JVM: no bitmaps); counts requests. [iconPacks] and [drawables] are set by tests; the icon
- * chooser and the pack inputs of the theme read them.
+ * The monogram by default (pure JVM: no bitmaps); counts requests. [iconPacks] and [drawables] are set by tests; the icon
+ * chooser and the pack inputs of the theme read them. [render] lets a test that draws real bitmaps supply its own icons.
  */
 class FakeIconProvider(
     packs: IconPacks = IconPacks(discovered = true),
+    private val render: (IconRequest) -> IconResult = { IconResult.Monogram },
 ) : IconProvider {
     val requests = mutableListOf<IconRequest>()
 
@@ -188,7 +189,7 @@ class FakeIconProvider(
 
     override suspend fun icon(req: IconRequest): IconResult {
         requests += req
-        return IconResult.Monogram
+        return render(req)
     }
 
     override fun trim(critical: Boolean) = Unit

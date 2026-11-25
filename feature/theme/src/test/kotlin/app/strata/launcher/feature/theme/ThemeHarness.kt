@@ -33,6 +33,8 @@ class ThemeHarness(
     /** Pass another harness's stores to simulate a new process over the same storage. */
     val files: InMemoryThemeFileStore = InMemoryThemeFileStore(),
     val index: InMemoryThemeIndexStore = InMemoryThemeIndexStore(),
+    /** The built-in presets: the samples by default; tests of preset wallpaper sets add their own. */
+    builtIns: MapBuiltInThemeSource = MapBuiltInThemeSource(ThemeFixtures.samples()),
 ) {
     val clock = FakeClock(1_800_000_000_000)
     val documents = FakeDocumentIO()
@@ -45,7 +47,7 @@ class ThemeHarness(
 
     val repo =
         DefaultThemeRepository(
-            createLibrary = { ThemeLibrary(files, index, MapBuiltInThemeSource(ThemeFixtures.samples()), clock) },
+            createLibrary = { ThemeLibrary(files, index, builtIns, clock) },
             files = { files },
             bootAttempts = BootAttempts({ File(tmp, "boot.state") }, clock),
             platformInputs = inputs,

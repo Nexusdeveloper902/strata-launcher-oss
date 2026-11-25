@@ -40,7 +40,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.io.File
 
 /**
  * NFR-A11Y-04 / NFR-THEME-05 on screen (T-THEME-47, level C): every text of every screen of [AccessibilityScenarios]
@@ -242,17 +241,13 @@ class ContrastTest(
                 "theme editor json" to setOf(EditorTestTags.JSON_VIEW),
             )
 
-        /** `spec/sample-themes/`, from the module directory Gradle runs the tests in. */
-        private fun presetDir(): File =
-            listOf(File("../spec/sample-themes"), File("spec/sample-themes")).first { it.isDirectory }
-
         /** The resolved light and dark variants of [preset], as the theme repository would hold them. */
         fun presetState(preset: String): ThemeState {
             val doc =
                 if (preset == DEFAULT) {
                     null
                 } else {
-                    val bytes = File(presetDir(), "$preset.strata-theme.json").readBytes()
+                    val bytes = BuiltInPresetFiles.bytes(preset)
                     (ThemeParser().parse(bytes) as Outcome.Ok).value.document
                 }
 
@@ -270,10 +265,7 @@ class ContrastTest(
         fun parameters(): List<Array<Any>> {
             val presets =
                 listOf(DEFAULT) +
-                    presetDir()
-                        .listFiles { f -> f.name.endsWith(".strata-theme.json") }!!
-                        .map { it.name.removeSuffix(".strata-theme.json") }
-                        .sorted()
+                    BuiltInPresetFiles.names()
             return presets.flatMap { p -> listOf(arrayOf<Any>(p, "light"), arrayOf<Any>(p, DARK)) }
         }
     }

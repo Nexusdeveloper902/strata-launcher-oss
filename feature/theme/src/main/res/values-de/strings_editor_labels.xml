@@ -103,6 +103,8 @@
     <string name="editor_opt_numeric_stacked">Gestapelte Ziffern</string>
     <string name="editor_opt_words">Wörter</string>
     <string name="editor_opt_analog_minimal">Zwei Zeiger</string>
+    <string name="editor_opt_segmented">Segmentanzeige</string>
+    <string name="editor_opt_countdown_board">Countdown-Tafel</string>
     <string name="editor_opt_h12">12 Stunden</string>
     <string name="editor_opt_h24">24 Stunden</string>
     <string name="editor_opt_start">Anfang</string>

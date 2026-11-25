@@ -104,6 +104,8 @@
     <string name="editor_opt_numeric_stacked">Stacked digits</string>
     <string name="editor_opt_words">Words</string>
     <string name="editor_opt_analog_minimal">Two hands</string>
+    <string name="editor_opt_segmented">Segment display</string>
+    <string name="editor_opt_countdown_board">Countdown board</string>
     <string name="editor_opt_h12">12-hour</string>
     <string name="editor_opt_h24">24-hour</string>
     <string name="editor_opt_start">Start</string>

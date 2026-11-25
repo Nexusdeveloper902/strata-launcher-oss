@@ -271,6 +271,12 @@ enum class ClockStyle(override val wire: String) : WireEnum {
     NUMERIC_STACKED("numericStacked"),
     WORDS("words"),
     ANALOG_MINIMAL("analogMinimal"),
+
+    /** Seven-segment digits (VISUAL_SPEC §9.4). */
+    SEGMENTED("segmented"),
+
+    /** Seven-segment digits after a "T−" label, the date as an upper-case status line (VISUAL_SPEC §9.4). */
+    COUNTDOWN_BOARD("countdownBoard"),
 }
 
 enum class HourFormat(override val wire: String) : WireEnum { SYSTEM("system"), H12("h12"), H24("h24") }
