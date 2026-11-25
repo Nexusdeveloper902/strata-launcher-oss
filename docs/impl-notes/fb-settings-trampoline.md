@@ -30,6 +30,25 @@ seen on a device yet), `Proposed` (design choice).
 - `Unknown`: other launchers key icons and home-screen shortcuts by component; the icon's component is now
   `.settings.EntryActivity`, so a shortcut to the old one may be dropped by that launcher after the update.
 
+### Stored keys of the old entry (follow-up after review)
+- `Verified` (GMD run 45516683940, `BackupDeviceTest.tBackup04`): everything Strata stores per app is keyed by the
+  flattened component. Data the owner stored against Strata's own entry (a favourite, a custom label, the hidden flag,
+  an icon override, a backup) was keyed on `<pkg>/app.strata.launcher.settings.SettingsActivity` and silently stopped
+  matching once the entry became `EntryActivity` (the catalog would have marked it missing and purged it after 30 days).
+- Fix (`Proposed`): `EntryKeyMigration` (`:core:model`) maps the old component (flattened or short form, own package
+  only) to the new one.
+  - `EntryKeyCallback` (`:core:data`) runs on every open of `strata.db` (`app_override`, `favorite`, `app_snapshot`)
+    and `launch_log.db` (`launch_event`): in one transaction, `UPDATE OR IGNORE … SET component = new WHERE component =
+    old`, then `DELETE … WHERE component = old`. An existing new-key row wins; favourites keep their positions. After the
+    first open nothing matches, so it is a one-time move in effect; it runs on the opening I/O thread. No schema change.
+  - `DefaultBackupService` maps every component of a backup document (apps, favourites, launch-log days) right after
+    decoding, so the preview does not list Strata as missing and the restore lands on the new entry.
+  - The device tests that used Strata's own entry as an installed-app key now use `EntryActivity`.
+- Tests: `core:data` `db/EntryKeyMigrationTest` (T-LIFE-16, real SQLite files: favourite in the middle of the order,
+  override with hidden + label + icon, catalog row, launch events, existing new-key row wins, another profile, second
+  open idempotent); `backup` `EntryKeyRestoreTest` (T-BACKUP-14: an old export restores onto the new entry, with a
+  control showing the old key would otherwise be restored as a missing app).
+
 ## Tests (T-HOME-17)
 - `app` `settings/EntryActivityTest` (Robolectric, `Verified`): the manifest declares the entry with `Theme.NoDisplay`
   as the only `MAIN` + `LAUNCHER` activity; driven through `resume()` it does not trip the framework's "did not call

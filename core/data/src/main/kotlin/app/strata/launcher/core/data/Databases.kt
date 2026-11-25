@@ -3,6 +3,7 @@ package app.strata.launcher.core.data
 import android.content.Context
 import androidx.room.Room
 import app.strata.launcher.core.common.log.Logger
+import app.strata.launcher.core.data.db.EntryKeyCallback
 import app.strata.launcher.core.data.db.SafeRoomOpener
 import app.strata.launcher.core.data.db.StrataDatabase
 import app.strata.launcher.core.data.launchlog.LaunchLogDatabase
@@ -28,6 +29,8 @@ object Databases {
             Room
                 .databaseBuilder(app, StrataDatabase::class.java, file.absolutePath)
                 .openHelperFactory(factory)
+                // FB-019: keys of Strata's old launcher entry move to the new one.
+                .addCallback(EntryKeyCallback(app.packageName, EntryKeyCallback.STRATA_TABLES))
                 .build()
         }.open()
     }
@@ -47,6 +50,7 @@ object Databases {
             Room
                 .databaseBuilder(app, LaunchLogDatabase::class.java, file.absolutePath)
                 .openHelperFactory(factory)
+                .addCallback(EntryKeyCallback(app.packageName, EntryKeyCallback.LAUNCH_LOG_TABLES))
                 .build()
         }.open()
     }

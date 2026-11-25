@@ -78,6 +78,11 @@ class DefaultBackupService(
     private val newId: () -> String = { UUID.randomUUID().toString() },
     /** How long [export]/[preview] wait for the first profile list. */
     private val profileTimeoutMs: Long = 5_000,
+    /**
+     * Rewrites a stored component before a backup is matched and restored (FB-019: Strata's old launcher entry maps to
+     * the new one, so a backup made before the move restores its favourite and override).
+     */
+    private val migrateComponent: (String) -> String = { it },
 ) : BackupService {
     private val mutex = Mutex()
     private val undo = MutableStateFlow(false)
@@ -323,7 +328,7 @@ class DefaultBackupService(
                 guarded {
                     val decoded =
                         when (val d = BackupCodec.decode(bytes)) {
-                            is Outcome.Ok -> d.value
+                            is Outcome.Ok -> d.value.let { it.copy(document = migrated(it.document)) }
                             is Outcome.Err -> return@guarded d
                         }
                     val kinds = profileKinds() ?: return@guarded Outcome.Err(BackupError.NotReady)
@@ -337,6 +342,14 @@ class DefaultBackupService(
                 }
             }
         }
+
+    /** [migrateComponent] applied to every per-app component of [doc] (apps, favourites, launch-log days). */
+    private fun migrated(doc: BackupDocument): BackupDocument =
+        doc.copy(
+            apps = doc.apps.map { it.copy(component = migrateComponent(it.component)) },
+            favorites = doc.favorites.map { it.copy(component = migrateComponent(it.component)) }.distinct(),
+            launchLog = doc.launchLog.map { it.copy(component = migrateComponent(it.component)) },
+        )
 
     private fun previewOf(
         token: String,

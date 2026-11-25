@@ -44,7 +44,7 @@ class BackupHarness(
     val logger = RecordingLogger()
     private var ids = 0
 
-    fun service(): DefaultBackupService =
+    fun service(migrateComponent: (String) -> String = { it }): DefaultBackupService =
         DefaultBackupService(
             documents = documents,
             apps = apps,
@@ -62,6 +62,7 @@ class BackupHarness(
             zone = { ZoneOffset.UTC },
             newId = { "00000000-0000-4000-8000-${(++ids).toString().padStart(12, '0')}" },
             profileTimeoutMs = 100,
+            migrateComponent = migrateComponent,
         )
 
     fun install(vararg components: String, serial: Long = MAIN, kind: ProfileKind = ProfileKind.MAIN) {
