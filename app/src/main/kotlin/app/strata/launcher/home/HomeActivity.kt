@@ -79,6 +79,12 @@ import kotlinx.coroutines.launch
  * action and category of incoming intents; extras are ignored (ARCHITECTURE §13, T-SEC-03).
  */
 class HomeActivity : ComponentActivity() {
+    /**
+     * FB-019: home was opened by the app icon's entry (not as the home screen) and no Home press came since. Onboarding
+     * shown then (a first run) leaves to the launcher on Back from Welcome, as when it was hosted by the entry itself.
+     */
+    private var openedFromEntry by mutableStateOf(false)
+
     /** FB-008: an arrival from another app is neither a Home press in front nor the start of a home gesture. */
     private val arrivalGuard = HomeArrivalGuard()
 
@@ -201,6 +207,7 @@ class HomeActivity : ComponentActivity() {
             appGraph.startTheme()
             appGraph.startCatalog()
             appGraph.attachWindow(window.decorView)
+            openedFromEntry = HomeIntents.isEntry(intent?.action)
             // Settings → Favourites (FR-FAV-02); a recreation keeps whatever layer the user is on.
             if (savedInstanceState == null && HomeIntents.isEditFavorites(intent?.action)) {
                 viewModel.onAction(HomeAction.EditFavorites)
@@ -280,7 +287,9 @@ class HomeActivity : ComponentActivity() {
                                 effects = onboardingViewModel.effects,
                                 onAction = onboardingViewModel::onAction,
                                 onFinished = {},
-                                onLeave = null,
+                                // Opened as an app (FB-019): Back on Welcome returns to the launcher that opened it.
+                                // As the home screen there is nowhere to leave to (INTERACTION_SPEC §3 ONBOARDING).
+                                onLeave = if (openedFromEntry) ({ moveTaskToBack(true) }) else null,
                             )
                         } else {
                             val setDefault by setDefaultViewModel.state.collectAsStateWithLifecycle()
@@ -534,6 +543,12 @@ class HomeActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        openedFromEntry =
+            when {
+                HomeIntents.isEntry(intent.action) -> true
+                HomeIntents.isHomePress(intent.action, intent.categories) -> false
+                else -> openedFromEntry
+            }
         if (HomeIntents.isHomePress(intent.action, intent.categories)) {
             val broughtToFront = intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT != 0
             val inFront = arrivalGuard.isHomePressInFront(broughtToFront)

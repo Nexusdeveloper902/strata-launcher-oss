@@ -17,7 +17,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-HOME-01 | P0 | Works as default home and as ordinary launcher icon | Inferred (capability, APK-003); Proposed (routing) | APK-003, DOC-002, DOC-004, D-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-01, T-HOME-02, T-HOME-13, T-ONBOARD-09, T-SEC-03 | M0, M6 [spec Rel: v1] |
+| FR-HOME-01 | P0 | Works as default home and as ordinary launcher icon | Inferred (capability, APK-003); Proposed (routing) | APK-003, DOC-002, DOC-004, D-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-01, T-HOME-02, T-HOME-13, T-HOME-17, T-ONBOARD-09, T-SEC-03 | M0, M6 [spec Rel: v1] |
 | FR-HOME-02 | P0 | Home layout order: header, favourites, search pill, insets | Corroborated (list home); Proposed (bottom anchoring) | PUB-008, PUB-034, APK-026 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-03, T-HOME-04, T-THEME-56, T-THEME-57 | M3 [spec Rel: v1] |
 | FR-HOME-03 | P1 | Clock tap opens alarms, date opens calendar, toast fallback | Inferred | PUB-008 | :feature:home, :app (area); not cited in ARCH | PRODUCT_SPEC §4.1 | T-HOME-05, T-HOME-06 | M3 [spec Rel: v1] |
 | FR-HOME-04 | P1 | Hide status bar, clock, date and alphabet index | Corroborated | APK-026, PUB-063 | :feature:home, :app (area); cited ARCH §4.2 | PRODUCT_SPEC §4.1 | T-HOME-07, T-HOME-08 | M3 [spec Rel: v1] |
@@ -61,7 +61,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-APPS-02 | P0 | Launch via startMainActivity; handle failure and reconcile | Proposed | DOC-010, DOC-023 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §11 | PRODUCT_SPEC §4.4 | T-APPS-02, T-APPS-03 | M1 [spec Rel: v1] |
 | FR-APPS-03 | P0 | Long-press options sheet with per-app actions | Corroborated | APK-027, PUB-008, PUB-018 | :platform:apps, :platform:icons, :core:data, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.4 | T-APPS-04, T-APPS-05 | M3 [spec Rel: v1] |
 | FR-APPS-04 | P0 | Hide and unhide apps, keyed by component and user | Corroborated | APK-027, PUB-017, SEC-003 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §4.1 | PRODUCT_SPEC §4.4 | T-APPS-06, T-APPS-07 | M3 [spec Rel: v1] |
-| FR-APPS-05 | P0 | Custom app name of 1-60 characters, resettable | Corroborated | PUB-018, APK-027 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §8 | PRODUCT_SPEC §4.4 | T-APPS-08, T-APPS-09, T-SEARCH-06, T-LIFE-06, T-HOME-14^ | M3 [spec Rel: v1] |
+| FR-APPS-05 | P0 | Custom app name of 1-60 characters, resettable | Corroborated | PUB-018, APK-027 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §8 | PRODUCT_SPEC §4.4 | T-APPS-08, T-APPS-09, T-SEARCH-06, T-LIFE-06, T-LIFE-16, T-HOME-14^ | M3 [spec Rel: v1] |
 | FR-APPS-06 | P1 | Per-app icon override from installed icon packs | Corroborated | PUB-018, APK-023, APK-011 | :platform:apps, :platform:icons, :core:data, :feature:home (area); cited ARCH §9 | PRODUCT_SPEC §4.4 | T-APPS-10 | M5 [spec Rel: v1] |
 | FR-APPS-07 | P0 | Uninstall via system flow; row removed on event | Inferred | APK-005, DOC-025 | :platform:apps, :platform:icons, :core:data, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.4 | T-APPS-11 | M3 [spec Rel: v1] |
 | FR-APPS-08 | P1 | App shortcuts in sheet; pinned shortcuts in v1.x | Inferred | APK-008, DOC-027, DOC-028 | :platform:apps, :platform:icons, :core:data, :feature:home (area); not cited in ARCH | PRODUCT_SPEC §4.4 | T-APPS-12, T-APPS-13, T-LIFE-10, T-SEC-02 | M6, v1.x [spec Rel: v1 / v1.x] |
@@ -74,7 +74,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-FAV-01 | P0 | Up to 12 favourites, added or removed from sheet | Corroborated (capability); Proposed (cap; picker in Edit favourites, owner request) | PUB-007, APK-026, APK-027 | :feature:home, :core:data (area); cited ARCH §4 | PRODUCT_SPEC §4.5 | T-FAV-01, T-FAV-07, T-FAV-08, T-ONBOARD-02 | M3 [spec Rel: v1] |
+| FR-FAV-01 | P0 | Up to 12 favourites, added or removed from sheet | Corroborated (capability); Proposed (cap; picker in Edit favourites, owner request) | PUB-007, APK-026, APK-027 | :feature:home, :core:data (area); cited ARCH §4 | PRODUCT_SPEC §4.5 | T-FAV-01, T-FAV-07, T-FAV-08, T-ONBOARD-02, T-LIFE-16 | M3 [spec Rel: v1] |
 | FR-FAV-02 | P0 | Reorder favourites by drag handles or accessibility actions | Inferred (reorder); Proposed (remove with Undo, Add apps, Settings entry; owner request) | PUB-007 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-02, T-FAV-03, T-FAV-06, T-FAV-07, T-FAV-09, T-HOME-14^ | M3 [spec Rel: v1] |
 | FR-FAV-03 | P0 | Favourites block scrolls only when content overflows | Proposed | — | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 | T-FAV-04, T-FAV-05 | M3 [spec Rel: v1] |
 | FR-FAV-04 | P2 | Favourite groups that expand to several apps | Corroborated | PUB-004, APK-032 | :feature:home, :core:data (area); not cited in ARCH | PRODUCT_SPEC §4.5 — NONE (placeholder: “defined when scheduled”) | NONE | NONE [spec Rel: later] |
@@ -129,7 +129,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
 | FR-BACKUP-01 | P1 | Manual export of own data to one JSON file | Corroborated (capability); Proposed (content) | PUB-047, APK-031 | :backup, :core:data (area); cited ARCH §12, §12.1 | PRODUCT_SPEC §4.10 | T-BACKUP-01, T-BACKUP-02, T-BACKUP-03, T-BACKUP-13 | M8 [spec Rel: v1] |
-| FR-BACKUP-02 | P1 | Restore with validation, preview, replace and undo | Corroborated (replace); Proposed (snapshot) | PUB-047, APK-031 | :backup, :core:data (area); cited ARCH §4, §12, §12.3 | PRODUCT_SPEC §4.10 | T-BACKUP-04, T-BACKUP-05, T-BACKUP-06, T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-WIDGET-10 | M8 [spec Rel: v1] |
+| FR-BACKUP-02 | P1 | Restore with validation, preview, replace and undo | Corroborated (replace); Proposed (snapshot) | PUB-047, APK-031 | :backup, :core:data (area); cited ARCH §4, §12, §12.3 | PRODUCT_SPEC §4.10 | T-BACKUP-04, T-BACKUP-05, T-BACKUP-06, T-BACKUP-07, T-BACKUP-09, T-BACKUP-10, T-BACKUP-12, T-BACKUP-13, T-BACKUP-14, T-WIDGET-10 | M8 [spec Rel: v1] |
 | FR-BACKUP-03 | P1 | Missing apps kept pending 30 days after restore | Proposed | — | :backup, :core:data (area); cited ARCH §12, §12.3 | PRODUCT_SPEC §4.10 | T-BACKUP-08 | M8, v1.x [spec Rel: v1] |
 | FR-BACKUP-04 | P1 | Auto Backup and transfer rules; reconcile after restore | Inferred | APK-016, DOC-064 | :backup, :core:data (area); cited ARCH §12, §12.3 | PRODUCT_SPEC §4.10 | T-BACKUP-11, T-WIDGET-11 | M8 [spec Rel: v1] |
 
@@ -137,7 +137,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 | Req ID | Pri | Summary | Label | Evidence | Component | Acceptance (file §) | Tests | Milestone |
 |---|---|---|---|---|---|---|---|---|
-| FR-ONBOARD-01 | P0 | First run of at most four screens, no permissions | Corroborated (sequence); Proposed (content) | SEC-002, APK-033 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-NOTIF-01, T-HOME-14^ | M6 [spec Rel: v1] |
+| FR-ONBOARD-01 | P0 | First run of at most four screens, no permissions | Corroborated (sequence); Proposed (content) | SEC-002, APK-033 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-01, T-ONBOARD-02, T-ONBOARD-09, T-HOME-13, T-HOME-17, T-NOTIF-01, T-HOME-14^ | M6 [spec Rel: v1] |
 | FR-ONBOARD-02 | P0 | Set-default flow via role API with fallbacks | Inferred | APK-033, DOC-005, DOC-006, DOC-007, DOC-008, P-2 | :feature:onboarding, :platform:system (area); cited ARCH §4.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-03, T-ONBOARD-04, T-ONBOARD-05, T-ONBOARD-06, T-HOME-02 | M6 [spec Rel: v1] |
 | FR-ONBOARD-03 | P0 | OEM failure detection with help card | Inferred | PUB-076, U-016 | :feature:onboarding, :platform:system (area); cited ARCH §14.2 | PRODUCT_SPEC §4.11 | T-ONBOARD-07, T-COMPAT-04 | M6 [spec Rel: v1] |
 | FR-ONBOARD-04 | P0 | Lost-default banner, at most once per day | Inferred | PUB-050 | :feature:onboarding, :platform:system (area); cited ARCH §4.2, §10 | PRODUCT_SPEC §4.11 | T-ONBOARD-08, T-LIFE-10 | M6 [spec Rel: v1] |
@@ -149,8 +149,8 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 |---|---|---|---|---|---|---|---|---|
 | FR-LIFE-01 | P0 | Cold start from snapshot, background reconcile | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §4, §10 | PRODUCT_SPEC §4.12 | T-LIFE-01, T-LIFE-02, T-LIFE-15, T-PERF-01 | M1 [spec Rel: v1] |
 | FR-LIFE-02 | P0 | Configuration changes keep widgets, query and sheet | Proposed | DOC-059, DOC-060 | :core:data, :platform:apps, :app (area); cited ARCH §10, §14.2 | PRODUCT_SPEC §4.12 | T-LIFE-02, T-LIFE-03, T-COMPAT-07 | M3 [spec Rel: v1] |
-| FR-LIFE-03 | P0 | Reconcile on events; purge removed-app records after 30 days | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §4, §12.3 | PRODUCT_SPEC §4.12 | T-LIFE-04, T-LIFE-05, T-APPS-03, T-BACKUP-08 | M1 [spec Rel: v1] |
-| FR-LIFE-04 | P0 | Corrupt storage rebuilt with banner, no crash loop | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §1, §4.1, §10 | PRODUCT_SPEC §4.12 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14 | M1 [spec Rel: v1] |
+| FR-LIFE-03 | P0 | Reconcile on events; purge removed-app records after 30 days | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §4, §12.3 | PRODUCT_SPEC §4.12 | T-LIFE-04, T-LIFE-05, T-APPS-03, T-BACKUP-08, T-LIFE-16 | M1 [spec Rel: v1] |
+| FR-LIFE-04 | P0 | Corrupt storage rebuilt with banner, no crash loop | Proposed | — | :core:data, :platform:apps, :app (area); cited ARCH §1, §4.1, §10 | PRODUCT_SPEC §4.12 | T-LIFE-11, T-LIFE-12, T-LIFE-13, T-LIFE-14, T-LIFE-16 | M1 [spec Rel: v1] |
 
 ## FR-A11Y (PRODUCT_SPEC §4)
 
@@ -283,7 +283,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 - Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 14, —: 47.
 - Requirements with at least one test: 147; without: 11.
 - Requirements with a roadmap milestone: 154; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 286; §22 rows: 146.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 289; §22 rows: 146.
 
 ### P0/P1 requirements lacking tests
 - None.
