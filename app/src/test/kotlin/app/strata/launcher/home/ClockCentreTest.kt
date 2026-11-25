@@ -18,6 +18,7 @@ import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ApplicationProvider
+import app.strata.launcher.a11y.BuiltInPresetFiles
 import app.strata.launcher.a11y.ContrastTest
 import app.strata.launcher.a11y.KeyboardFixture
 import app.strata.launcher.core.theme.model.Alignment
@@ -41,7 +42,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.io.File
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.abs
@@ -321,6 +321,27 @@ internal class ClockScreen(
         skip: List<Rect>,
     ): Pair<Int, Int>? = draw(view).inkColumns(band, skip)
 
+    /** Pixels inside [band] within [tolerance] (sum of channel differences) of the opaque colour [argb]. */
+    fun countColour(
+        view: View,
+        band: Rect,
+        argb: Int,
+        tolerance: Int = COLOUR_TOLERANCE,
+    ): Int {
+        val shot = draw(view)
+        var n = 0
+        for (y in band.top.toInt().coerceIn(0, shot.height - 1) until band.bottom.toInt().coerceIn(0, shot.height)) {
+            for (x in band.left.toInt().coerceIn(0, shot.width - 1) until band.right.toInt().coerceIn(0, shot.width)) {
+                val p = shot.pixels[y * shot.width + x]
+                val d =
+                    abs(Color.red(p) - Color.red(argb)) + abs(Color.green(p) - Color.green(argb)) +
+                        abs(Color.blue(p) - Color.blue(argb))
+                if (d <= tolerance) n++
+            }
+        }
+        return n
+    }
+
     fun nodes(view: View): List<SemanticsNode> {
         compose.onAllNodesWithTag(HomeTestTags.ROOT).fetchSemanticsNodes()
         val out = mutableListOf<SemanticsNode>()
@@ -399,15 +420,9 @@ internal class ClockScreen(
         const val FIXED_MILLIS = 1_794_949_901_000L
         private const val TOLERANCE_DP = 1f
         private const val INK_THRESHOLD = 96
+        private const val COLOUR_TOLERANCE = 24
 
-        /** Strata Default and every `spec/sample-themes/` preset. */
-        fun presets(): List<String> {
-            val dir = listOf(File("../spec/sample-themes"), File("spec/sample-themes")).first { it.isDirectory }
-            return listOf("strata-default") +
-                dir
-                    .listFiles { f -> f.name.endsWith(".strata-theme.json") }!!
-                    .map { it.name.removeSuffix(".strata-theme.json") }
-                    .sorted()
-        }
+        /** Strata Default and every built-in preset file (`spec/sample-themes/`, plus a private overlay's). */
+        fun presets(): List<String> = listOf("strata-default") + BuiltInPresetFiles.names()
     }
 }

@@ -39,6 +39,9 @@
     <string name="theme_wallpaper_explain">Die Hintergrund-App des Systems öffnet sich, dort bestätigst du.</string>
     <string name="theme_wallpaper_yes">Ja</string>
     <string name="theme_wallpaper_no">Nein</string>
+    <string name="theme_wallpaper_not_now">Nicht jetzt</string>
+    <string name="theme_wallpaper_pick_explain">Wähle einen der Hintergründe dieses Designs. Die Hintergrund-App des Systems öffnet sich, dort bestätigst du.</string>
+    <string name="theme_set_wallpaper">Hintergrund festlegen…</string>
     <string name="theme_no_wallpaper_app">Keine App auf diesem Gerät kann Hintergründe festlegen</string>
     <string name="theme_wallpaper_failed">Der Hintergrund konnte nicht an das System übergeben werden.</string>
     <string name="theme_import_title">Design importieren</string>

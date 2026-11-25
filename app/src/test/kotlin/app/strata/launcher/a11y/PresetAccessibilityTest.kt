@@ -40,7 +40,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.io.File
 
 /**
  * T-THEME-47 (S + C), NFR-THEME-06: T-A11Y-09 (font 2.0, largest display size), T-A11Y-10 (touch targets), T-A11Y-12
@@ -68,7 +67,7 @@ class PresetAccessibilityTest(
         } else {
             (
                 ThemeParser().parse(
-                    File(presetDir(), "$preset.strata-theme.json").readBytes(),
+                    BuiltInPresetFiles.bytes(preset),
                 ) as Outcome.Ok
             ).value.document
         }
@@ -217,19 +216,12 @@ class PresetAccessibilityTest(
         private const val DEFAULT = "strata-default"
         private const val SETTLE_MS = 2_000L
 
-        /** `spec/sample-themes/`, from the module directory Gradle runs the tests in. */
-        private fun presetDir(): File =
-            listOf(File("../spec/sample-themes"), File("spec/sample-themes")).first { it.isDirectory }
-
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
         fun presets(): List<Array<Any>> =
             (
                 listOf(DEFAULT) +
-                    presetDir()
-                        .listFiles { f -> f.name.endsWith(".strata-theme.json") }!!
-                        .map { it.name.removeSuffix(".strata-theme.json") }
-                        .sorted()
+                    BuiltInPresetFiles.names()
             ).map { arrayOf<Any>(it) }
     }
 }

@@ -10,7 +10,10 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStoreFile
 import app.strata.launcher.core.json.JsonLimits
 import app.strata.launcher.core.theme.contrast.ContrastStatus
+import app.strata.launcher.core.theme.importing.ImageCheck
 import app.strata.launcher.core.theme.store.BuiltInThemeSource
+import app.strata.launcher.core.theme.store.PresetWallpaper
+import app.strata.launcher.core.theme.store.PresetWallpaperList
 import app.strata.launcher.core.theme.store.ThemeFileStore
 import app.strata.launcher.core.theme.store.ThemeIndex
 import app.strata.launcher.core.theme.store.ThemeIndexEntry
@@ -156,9 +159,51 @@ class AssetBuiltInThemeSource(
         }
     }
 
+    /** `assets/themes/<preset>.wallpapers.txt` (THEME_SYSTEM §14.2); empty when absent. */
+    override fun wallpapers(name: String): List<PresetWallpaper> {
+        require('/' !in name) { "bad asset name" }
+        val bytes =
+            try {
+                assets.open("$dir/${PresetWallpaperList.fileFor(name)}").use { it.readCapped(MAX_LIST_BYTES) }
+            } catch (e: FileNotFoundException) {
+                return emptyList()
+            }
+        return PresetWallpaperList.parse(bytes.toString(Charsets.UTF_8))
+    }
+
+    /** `assets/themes/images/<sha256>.webp`, capped like a stored image (THEME_SYSTEM §10.3.3). */
+    override fun image(sha256: String): ByteArray? {
+        if (!SHA.matches(sha256)) return null
+        return try {
+            assets.open("$dir/$IMAGES/$sha256.webp").use { it.readCapped(ImageCheck.MAX_BYTES + 1) }
+        } catch (e: FileNotFoundException) {
+            null
+        }
+    }
+
+    override fun imageNames(): Set<String> {
+        cachedImageNames?.let { return it }
+        val names =
+            assets
+                .list("$dir/$IMAGES")
+                .orEmpty()
+                .filter { it.endsWith(".webp") }
+                .map { it.removeSuffix(".webp") }
+                .filter { SHA.matches(it) }
+                .toSet()
+        cachedImageNames = names
+        return names
+    }
+
+    /** The APK's assets never change while the process runs. */
+    @Volatile private var cachedImageNames: Set<String>? = null
+
     companion object {
         const val DIR = "themes"
         const val SUFFIX = ".strata-theme.json"
+        const val IMAGES = "images"
+        private const val MAX_LIST_BYTES = 16 * 1024
+        private val SHA = Regex("^[0-9a-f]{64}$")
     }
 }
 

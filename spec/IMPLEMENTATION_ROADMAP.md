@@ -212,6 +212,7 @@ non-critical startup work → reduce icon size/prefetch. A budget change needs a
 | Pinned shortcuts as favourites | FR-APPS-08 (pin) | T-APPS-13 |
 | Pending re-apply UI (summary "will apply when installed") | FR-BACKUP-03 | T-BACKUP-08 (already passing via the FR-LIFE-03 mechanism) |
 | Owner feedback FB-005, FB-006 (D-017): swipe a contact to call (dialer by default, `CALL_PHONE` opt-in) and the one-tap permission checklist with the Android 13+ restricted-settings guide | FR-SEARCH-09, FR-SET-08 | T-SEARCH-23…27, T-SET-11…14 |
+| Owner request (2026-11-25): preset wallpaper sets with a picker, and the `segmented` / `countdownBoard` clock styles (Proposed) | FR-THEME-36, FR-THEME-37 | T-THEME-58…61 |
 | P2 items: suggestions, return-to-position, web hand-off, recent queries, archived apps, previews, pin widgets, contextual tips | FR-HOME-06/07, FR-SEARCH-07 (web), FR-APPS-12, FR-NOTIF-04, FR-WIDGET-05, FR-ONBOARD-05, FR-GEST-04 | new T-IDs when scheduled |
 
 ## 3. Cross-cutting risks

@@ -13,6 +13,7 @@ import app.strata.launcher.core.theme.StrataDefault
 import app.strata.launcher.core.theme.store.DeleteTicket
 import app.strata.launcher.core.theme.store.ExportError
 import app.strata.launcher.core.theme.store.ExportFile
+import app.strata.launcher.core.theme.store.PresetWallpaper
 import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeManager
 import app.strata.launcher.core.theme.store.ThemeRepository
@@ -65,6 +66,13 @@ data class LibraryUiState(
     val exportChoiceFor: ThemeSummary? = null,
     /** "Also set this theme's wallpaper?" for the theme just applied (§4.3, FR-THEME-34). */
     val wallpaperPromptFor: ThemeSummary? = null,
+    /**
+     * The wallpapers [wallpaperPromptFor] offers (FR-THEME-36). With more than one the prompt is a picker whose
+     * thumbnails fill in as the images load.
+     */
+    val wallpaperChoices: List<PresetWallpaper> = emptyList(),
+    /** Image bytes of [wallpaperChoices] by SHA-256, for the picker's thumbnails. */
+    val wallpaperThumbs: Map<String, ByteArray> = emptyMap(),
     /** Unsaved editor drafts (§13), newest first: "Continue editing" or discard. */
     val drafts: List<DraftRow> = emptyList(),
 )
@@ -101,6 +109,12 @@ sealed interface LibraryAction {
     data class Share(val id: String) : LibraryAction
 
     data class Wallpaper(val accept: Boolean) : LibraryAction
+
+    /** A wallpaper picked from the prompt's picker (FR-THEME-36). */
+    data class WallpaperPick(val sha256: String) : LibraryAction
+
+    /** "Set wallpaper…" from a row's menu: the prompt without applying the theme (FR-THEME-36). */
+    data class ChooseWallpaper(val id: String) : LibraryAction
 
     data object Import : LibraryAction
 
@@ -213,6 +227,8 @@ class ThemeLibraryViewModel(
             LibraryAction.ExportUnavailable -> exportUnavailable()
             is LibraryAction.Share -> share(action.id)
             is LibraryAction.Wallpaper -> wallpaperAnswer(action.accept)
+            is LibraryAction.WallpaperPick -> wallpaperPick(action.sha256)
+            is LibraryAction.ChooseWallpaper -> summary(action.id)?.let { offerWallpaper(it) }
             LibraryAction.Import -> effectChannel.trySend(LibraryEffect.PickImport)
             is LibraryAction.Edit -> openEditor(EditorRequest.Edit(action.id))
             LibraryAction.NewTheme -> openEditor(EditorRequest.New)
@@ -253,15 +269,58 @@ class ThemeLibraryViewModel(
         }
         ThemeApplyTrace.begin(themes.state.value.applyGeneration)
         themes.apply(id)
-        launch { if (wallpaper.available(id)) local.update { it.copy(wallpaperPromptFor = t) } }
+        offerWallpaper(t)
+    }
+
+    /** Opens the wallpaper prompt for [t] when it offers any wallpaper; a set of several loads its thumbnails. */
+    private fun offerWallpaper(t: ThemeSummary) {
+        launch {
+            val choices = wallpaper.choices(t.id)
+            if (choices.isEmpty()) return@launch
+            local.update { it.copy(wallpaperPromptFor = t, wallpaperChoices = choices, wallpaperThumbs = emptyMap()) }
+            if (choices.size < 2) return@launch
+            for (c in choices) {
+                val bytes = wallpaper.image(t.id, c.sha256) ?: continue
+                local.update { s ->
+                    if (s.wallpaperPromptFor?.id != t.id) return@update s
+                    s.copy(wallpaperThumbs = s.wallpaperThumbs + (c.sha256 to bytes))
+                }
+                if (local.value.wallpaperPromptFor?.id != t.id) break
+            }
+        }
+    }
+
+    private fun closeWallpaperPrompt(): ThemeSummary? {
+        val t = local.value.wallpaperPromptFor ?: return null
+        local.update {
+            it.copy(
+                wallpaperPromptFor = null,
+                wallpaperChoices = emptyList(),
+                wallpaperThumbs = emptyMap(),
+            )
+        }
+        return t
     }
 
     private fun wallpaperAnswer(accept: Boolean) {
-        val t = local.value.wallpaperPromptFor ?: return
-        local.update { it.copy(wallpaperPromptFor = null) }
+        val choice = local.value.wallpaperChoices.singleOrNull()
+        val t = closeWallpaperPrompt() ?: return
         if (!accept) return
+        handOff(t.id, choice?.sha256)
+    }
+
+    private fun wallpaperPick(sha256: String) {
+        if (local.value.wallpaperChoices.none { it.sha256 == sha256 }) return
+        val t = closeWallpaperPrompt() ?: return
+        handOff(t.id, sha256)
+    }
+
+    private fun handOff(
+        id: String,
+        sha256: String?,
+    ) {
         launch {
-            when (wallpaper.handOff(t.id)) {
+            when (wallpaper.handOff(id, sha256)) {
                 WallpaperHandoff.CROP_AND_SET, WallpaperHandoff.ATTACH_DATA -> Unit
                 WallpaperHandoff.NO_HANDLER -> emit(LibraryMessage.NO_WALLPAPER_APP)
                 null -> emit(LibraryMessage.WALLPAPER_FAILED)
@@ -410,9 +469,26 @@ class WallpaperOffer(
 ) {
     suspend fun available(themeId: String): Boolean = manager.wallpaperImage(themeId) != null
 
-    /** Copies the image to the share cache and starts the system activity; null when the copy failed. */
-    suspend fun handOff(themeId: String): WallpaperHandoff? {
-        val image = manager.wallpaperImage(themeId) ?: return null
+    /** The wallpapers the theme offers (FR-THEME-36): a preset's set, or its own image. */
+    suspend fun choices(themeId: String): List<PresetWallpaper> = manager.wallpaperChoices(themeId)
+
+    /** The bytes of one of [choices] (picker thumbnails). */
+    suspend fun image(
+        themeId: String,
+        sha256: String,
+    ): ByteArray? = manager.wallpaperImage(themeId, sha256)?.bytes
+
+    /**
+     * Copies the theme's image, or the choice [sha256] of its set, to the share cache and starts the system activity;
+     * null when there is no such image or the copy failed.
+     */
+    suspend fun handOff(
+        themeId: String,
+        sha256: String? = null,
+    ): WallpaperHandoff? {
+        val image =
+            (if (sha256 == null) manager.wallpaperImage(themeId) else manager.wallpaperImage(themeId, sha256))
+                ?: return null
         val uri = sharedFiles.publish("wallpaper-${image.sha256.take(SHA_PREFIX)}.webp", image.bytes) ?: return null
         return systemIntents.setWallpaper(uri)
     }

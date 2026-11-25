@@ -122,6 +122,8 @@ internal object EditorLabels {
             "numericStacked" -> R.string.editor_opt_numeric_stacked
             "words" -> R.string.editor_opt_words
             "analogMinimal" -> R.string.editor_opt_analog_minimal
+            "segmented" -> R.string.editor_opt_segmented
+            "countdownBoard" -> R.string.editor_opt_countdown_board
             "h12" -> R.string.editor_opt_h12
             "h24" -> R.string.editor_opt_h24
             "start" -> R.string.editor_opt_start

@@ -285,7 +285,7 @@ glyph is a resource and index change only, not a code change. Trademark note: U-
 | Field | Type | Default | Allowed | On invalid |
 |---|---|---|---|---|
 | `visible` | boolean | `true` | — | D |
-| `style` | enum | `numeric` | `numeric` (single line), `numericStacked` (hours over minutes), `words` (spelled-out, localised; falls back to `numeric` for locales without a words formatter), `analogMinimal` (two hands, no numerals) | D |
+| `style` | enum | `numeric` | `numeric` (single line), `numericStacked` (hours over minutes), `words` (spelled-out, localised; falls back to `numeric` for locales without a words formatter), `analogMinimal` (two hands, no numerals), `segmented` (seven-segment digits), `countdownBoard` (seven-segment digits after a "T−" label, the date as a status line) | D |
 | `hourFormat` | enum | `system` | `system` (`DateFormat.is24HourFormat`), `h12`, `h24` | D |
 | `showSeconds` | boolean | `false` | — | D |
 | `sizeSp` | integer | `56` | `24..128` (scaled by `typography.scale` and the system font scale; not capped, so a large size can fill the width — owner decision R-001) | C |
@@ -294,8 +294,11 @@ glyph is a resource and index change only, not a code change. Trademark note: U-
 | `date.skeleton` | string | `EEEEdMMMM` | `^[yMLdEc]{1,16}$`, a CLDR skeleton localised with `DateFormat.getBestDateTimePattern(locale, skeleton)`, so ordering and punctuation are always locale-correct | D |
 | `date.sizeSp` | integer | `16` | `12..32` | C |
 
-Inferred (APK-026: clock styles, date toggle) as capabilities. The four style IDs are
-our own and are defined visually by T-05.
+Inferred (APK-026: clock styles, date toggle) as capabilities. The style IDs are
+our own and are defined visually by T-05 (VISUAL_SPEC §9.4). `segmented` and `countdownBoard` are
+Proposed (owner request, 2026-11-25, FR-THEME-37): enum values added to schema 1.0 before the v1
+release, so `schemaMinor` stays 0; an older build renders them as `numeric` (unknown enum → D, value
+preserved, §4.1).
 
 ### 4.8 `favorites`
 
@@ -667,6 +670,8 @@ themes/images/<sha256>.webp               content-addressed theme wallpapers
 themes/lkg.strata-theme.json              copy of the last-known-good theme
 datastore/theme_index.pb                  Proto DataStore index
 assets/themes/*.strata-theme.json         (in the APK) built-in presets, read-only
+assets/themes/*.wallpapers.txt            (in the APK) preset wallpaper sets (§14.2), read-only
+assets/themes/images/<sha256>.webp        (in the APK) preset wallpaper images (§14.2), read-only
 ```
 
 ### 11.2 Index (Proto DataStore)
@@ -797,6 +802,35 @@ palettes; their derived palettes depend on the device and are covered at runtime
 enforcement (§7.5). The checker's algorithm is fully specified in §7.2–7.3 so the
 implementation's unit tests can reproduce these numbers.
 
+### 14.2 Preset wallpaper sets (Proposed, owner request 2026-11-25, FR-THEME-36)
+A built-in preset may ship a **wallpaper set**: several images the user can hand to the system
+wallpaper activity, instead of the single `wallpaper.image` a theme file can name. No schema field
+is added; the set is packaging next to the preset file:
+
+- `assets/themes/<preset>.wallpapers.txt` next to `<preset>.strata-theme.json`: UTF-8, one
+  `<sha256> <label>` per line (64 lowercase hex, one space, a label of 1–64 characters used as the
+  picker text and TalkBack name), `#` comments and blank lines ignored. Order is the picker order.
+  When the preset names a `wallpaper.image`, that hash is the first line.
+- `assets/themes/images/<sha256>.webp`: the images, WebP, ≤ 16 MiB each, content-addressed like
+  the image store (§11.1).
+- The build checks every list and image and fails on any problem: each list has its preset, each
+  line is well formed and unique, each listed image exists, is WebP, is within the cap and hashes to
+  its name, a preset's own image comes first, and no image is unlisted (T-THEME-60).
+
+Behaviour:
+- Preset images count as present for every theme (reference check, §8.1 stage 6): the resolver and
+  the hand-off read the image store first, then the preset images, always verifying the hash. A
+  user copy of a preset (§11.3, `basedOn`) therefore keeps its wallpaper, and a bundle export of
+  it includes the image (§10.3).
+- The wallpaper offer after applying a theme (§4.3, FR-THEME-34) lists the set of the preset the
+  theme is, or is `basedOn`, when that set is not empty; otherwise the theme's own image. With
+  more than one image it is a picker (thumbnails with labels, "Not now"); picking one hands that
+  image to the system exactly as §4.3 describes. A preset with a set also gets **Set wallpaper…**
+  in its library menu, which opens the picker without applying the theme. Nothing is set silently
+  and no permission is added (D-009).
+- The public build's presets (§14) ship no wallpapers (VISUAL_SPEC §12). The feature exists for
+  presets added to a private build; their images and credits stay there.
+
 ---
 
 ## 15. Requirements
@@ -844,6 +878,8 @@ by T-06.
 | FR-THEME-32 | Migration framework with frozen fixtures and `.bak` safety copy. | A synthetic v0→v1 test migrator passes fixture tests; the `.bak` is removed only after a successful boot. | Proposed |
 | FR-THEME-33 | Theme data included in Auto Backup / device transfer per §11.4, re-validated on restore. | Restored invalid files land in quarantine; valid ones appear in the library. | Proposed |
 | FR-THEME-34 | Theme wallpaper images applied only with explicit confirmation, by handing the image to the system wallpaper activity (`getCropAndSetWallpaperIntent`, fallback `ACTION_ATTACH_DATA`); no `SET_WALLPAPER` permission (D-009). | Declining starts no wallpaper intent; accepting starts exactly one with a `content:` `image/*` URI and a read grant; the merged manifest has no `SET_WALLPAPER`. | Proposed |
+| FR-THEME-36 | Built-in presets may ship a wallpaper set (§14.2), offered after applying the preset and from its library menu, handed to the system wallpaper activity like FR-THEME-34. | The build rejects a list or image that breaks §14.2. Applying a preset with a set shows a picker with every image in list order; picking one starts exactly one wallpaper hand-off with that image's bytes; "Not now" starts none. "Set wallpaper…" opens the picker without changing the active theme. A copy of the preset offers the same set; a hash outside the set or bytes that do not match their hash are never handed out. Presets without a set show no menu item. | Proposed (owner request 2026-11-25) |
+| FR-THEME-37 | Clock styles `segmented` and `countdownBoard` (§4.7, VISUAL_SPEC §9.4). | The clock speaks the time like the other styles (the "T−" label is not spoken); digits are drawn in `textPrimary`, the board's "T−" label in `textSecondary` and its lamp in `accent` (the plain style draws no `accent`); the board's date is upper case; locale digits map to the segment display or fall back to text; with `clock.alignment: center` clock and date are centred within ±1 dp (as T-THEME-56); at `sizeSp` 128 the digits shrink to fit the width. | Proposed (owner request 2026-11-25) |
 | FR-THEME-35 | Strata glyph set and icon source precedence (override, pack, platform monochrome, glyph, desaturated). **P2**, M8. | G tint `monochrome`, app X has a bundled glyph and a monochrome layer, no override or pack icon; W X is drawn; T on API 33+ the monochrome layer is used, on API < 33 the glyph. Without a usable monochrome layer (none, or effectively empty or fully opaque) the glyph is used, else the desaturated icon. With `tint: none`, X shows its normal icon and no glyph. An override or pack mapping beats the glyph. Adding a glyph file and one index line makes it appear with no code change. | Proposed (D-014, owner request; order revised 2026-11-14, see docs/impl-notes/icon-source-order.md) |
 
 ### 15.2 Non-functional

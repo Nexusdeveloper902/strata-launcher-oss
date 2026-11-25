@@ -5,11 +5,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -46,12 +49,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.strata.launcher.core.theme.model.ClockStyle
 import app.strata.launcher.core.theme.model.HourFormat
+import app.strata.launcher.core.ui.SegmentedDigits
+import app.strata.launcher.core.ui.SevenSegment
 import app.strata.launcher.core.ui.Strata
 import app.strata.launcher.core.ui.focusRing
 import kotlinx.coroutines.delay
@@ -307,19 +313,25 @@ fun HomeHeader(
                             .getOrDefault(DEFAULT_DATE_PATTERN)
                     SimpleDateFormat(pattern, locale).format(Date(millis))
                 }
-            Text(
-                text = date,
-                style = Strata.typography.label.copy(fontSize = clock.dateSizeSp.sp, fontWeight = FontWeight.Normal),
-                color = Strata.colors.textSecondary,
-                textAlign = textAlignOf(clock.alignment),
-                modifier =
-                    Modifier
-                        .heightIn(min = 48.dp)
-                        .focusRing()
-                        .clickable(onClick = onDate)
-                        .semantics { role = Role.Button }
-                        .testTag(HomeTestTags.DATE),
-            )
+            val dateModifier =
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .focusRing()
+                    .clickable(onClick = onDate)
+                    .semantics { role = Role.Button }
+                    .testTag(HomeTestTags.DATE)
+            val dateStyle = Strata.typography.label.copy(fontSize = clock.dateSizeSp.sp, fontWeight = FontWeight.Normal)
+            if (clock.visible && clock.style == ClockStyle.COUNTDOWN_BOARD) {
+                StatusLine(text = date, style = dateStyle, locale = locale, modifier = dateModifier)
+            } else {
+                Text(
+                    text = date,
+                    style = dateStyle,
+                    color = Strata.colors.textSecondary,
+                    textAlign = textAlignOf(clock.alignment),
+                    modifier = dateModifier,
+                )
+            }
         }
     }
 }
@@ -397,6 +409,110 @@ private fun Clock(
                 modifier = modifier,
             )
         }
+
+        ClockStyle.SEGMENTED, ClockStyle.COUNTDOWN_BOARD -> {
+            val cells = SevenSegment.cells(segmentText(text))
+            if (cells == null) {
+                // Digits the display cannot draw: the plain one-line time.
+                Text(text = text.full, style = base, color = colors.textPrimary, maxLines = 1, modifier = modifier)
+            } else {
+                SegmentedClock(
+                    cells = cells,
+                    period = text.period,
+                    periodFirst = text.periodFirst,
+                    sizeSp = size,
+                    board = style == ClockStyle.COUNTDOWN_BOARD,
+                    modifier = modifier,
+                )
+            }
+        }
+    }
+}
+
+/** The display string of the segmented styles: the locale's hour, minute and second fields, colons between. */
+internal fun segmentText(text: ClockText): String =
+    listOfNotNull(text.hours, text.minutes, text.seconds).joinToString(":")
+
+/**
+ * `segmented` / `countdownBoard` (VISUAL_SPEC §9.4): seven-segment digits 0.72 × `clock.sizeSp` tall in `textPrimary`,
+ * unlit bars in `textPrimary` at 10 %; the 12 h day period beside them at 30 % size. The board adds a "T−" label in
+ * `textSecondary` before the digits. Laid out left to right in every direction (digits are never mirrored); the parent still
+ * places the whole block per `clock.alignment`.
+ */
+@Composable
+private fun SegmentedClock(
+    cells: List<Int>,
+    period: String?,
+    periodFirst: Boolean,
+    sizeSp: Int,
+    board: Boolean,
+    modifier: Modifier,
+) {
+    val colors = Strata.colors
+    val density = LocalDensity.current
+    val digitHeight = with(density) { (sizeSp * SEGMENT_HEIGHT).sp.toDp() }
+    val small = Strata.typography.label.copy(fontSize = (sizeSp * PERIOD_SCALE).sp, fontWeight = FontWeight.Medium)
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(modifier = modifier, verticalAlignment = Alignment.Bottom) {
+            if (board) {
+                Text(
+                    text = SevenSegment.BOARD_PREFIX,
+                    style = small.copy(letterSpacing = PREFIX_TRACKING.em),
+                    // Small text: a text role (4.5:1, THEME_SYSTEM §7.1), not `accent` (only 3:1).
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    modifier =
+                        Modifier
+                            .align(Alignment.Top)
+                            .padding(end = digitHeight * PREFIX_GAP),
+                )
+            }
+            val periodText: @Composable (Boolean) -> Unit = { before ->
+                if (period != null) {
+                    Text(
+                        text = period,
+                        style = small,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        modifier = if (before) Modifier.padding(end = 4.dp) else Modifier.padding(start = 4.dp),
+                    )
+                }
+            }
+            if (periodFirst) periodText(true)
+            SegmentedDigits(
+                cells = cells,
+                height = digitHeight,
+                lit = colors.textPrimary,
+                ghost = colors.textPrimary.copy(alpha = GHOST_ALPHA),
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (!periodFirst) periodText(false)
+        }
+    }
+}
+
+/**
+ * The `countdownBoard` status line: a small `accent` lamp, then the date in upper case (the locale's case mapping)
+ * with wide tracking, in `textSecondary`.
+ */
+@Composable
+private fun StatusLine(
+    text: String,
+    style: TextStyle,
+    locale: Locale,
+    modifier: Modifier,
+) {
+    val colors = Strata.colors
+    val lamp = with(LocalDensity.current) { (style.fontSize * LAMP_SCALE).toDp() }
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Canvas(modifier = Modifier.size(lamp)) { drawCircle(colors.accent) }
+        Text(
+            text = text.uppercase(locale),
+            style = style.copy(letterSpacing = STATUS_TRACKING.em, fontWeight = FontWeight.Medium),
+            color = colors.textSecondary,
+            maxLines = 1,
+            modifier = Modifier.padding(start = lamp),
+        )
     }
 }
 
@@ -683,3 +799,9 @@ private const val PERIOD_SCALE = 0.3f
 private const val DEG_PER_HOUR = 30f
 private const val DEG_PER_MINUTE = 6f
 private const val DEFAULT_DATE_PATTERN = "EEEE d MMMM"
+private const val SEGMENT_HEIGHT = 0.72f
+private const val GHOST_ALPHA = 0.1f
+private const val PREFIX_TRACKING = 0.06f
+private const val PREFIX_GAP = 0.16f
+private const val STATUS_TRACKING = 0.12f
+private const val LAMP_SCALE = 0.5f

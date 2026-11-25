@@ -1,20 +1,26 @@
 package app.strata.launcher.feature.theme
 
+import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
@@ -24,29 +30,41 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.strata.launcher.core.theme.StrataDefault
+import app.strata.launcher.core.theme.store.PresetWallpaper
 import app.strata.launcher.core.theme.store.ThemeSummary
 import app.strata.launcher.core.ui.DialogText
 import app.strata.launcher.core.ui.DropdownMenuItem
 import app.strata.launcher.core.ui.TextButton
 import app.strata.launcher.core.ui.focusRing
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import androidx.compose.foundation.lazy.grid.items as gridItems
 
 /** Test tags of the theme screens. */
 object ThemeTestTags {
@@ -61,6 +79,10 @@ object ThemeTestTags {
     const val WALLPAPER_DIALOG = "theme_wallpaper_dialog"
     const val WALLPAPER_YES = "theme_wallpaper_yes"
     const val WALLPAPER_NO = "theme_wallpaper_no"
+    const val WALLPAPER_PICKER = "theme_wallpaper_picker"
+
+    fun wallpaperChoice(sha256: String) = "theme_wallpaper_choice_" + sha256.take(12)
+
     const val IMPORT_SCREEN = "theme_import_screen"
     const val IMPORT_ADD = "theme_import_add"
     const val IMPORT_ADD_APPLY = "theme_import_add_apply"
@@ -213,7 +235,18 @@ fun ThemeLibraryScreen(
             }
         }
         state.exportChoiceFor?.let { ExportChoice(it, onAction) }
-        state.wallpaperPromptFor?.let { WallpaperPrompt { accept -> onAction(LibraryAction.Wallpaper(accept)) } }
+        if (state.wallpaperPromptFor != null) {
+            if (state.wallpaperChoices.size > 1) {
+                WallpaperPicker(
+                    choices = state.wallpaperChoices,
+                    thumbs = state.wallpaperThumbs,
+                    onPick = { onAction(LibraryAction.WallpaperPick(it)) },
+                    onDismiss = { onAction(LibraryAction.Wallpaper(false)) },
+                )
+            } else {
+                WallpaperPrompt { accept -> onAction(LibraryAction.Wallpaper(accept)) }
+            }
+        }
     }
 }
 
@@ -285,6 +318,13 @@ private fun ThemeRow(
                         )
                     }
                 if (t.applicable) item("apply", R.string.theme_apply, LibraryAction.Apply(t.id))()
+                if (t.hasWallpapers) {
+                    item(
+                        "wallpaper",
+                        R.string.theme_set_wallpaper,
+                        LibraryAction.ChooseWallpaper(t.id),
+                    )()
+                }
                 if (!t.needsAppUpdate) {
                     item("edit", R.string.theme_edit, LibraryAction.Edit(t.id))()
                     item("duplicate", R.string.theme_duplicate, LibraryAction.Duplicate(t.id))()
@@ -422,3 +462,90 @@ fun WallpaperPrompt(onAnswer: (Boolean) -> Unit) {
         },
     )
 }
+
+/**
+ * The wallpaper prompt for a theme with a wallpaper set (FR-THEME-36): thumbnails with their labels; picking one hands
+ * it to the system wallpaper activity like the single-image prompt (§4.3), "Not now" starts nothing.
+ */
+@Composable
+fun WallpaperPicker(
+    choices: List<PresetWallpaper>,
+    thumbs: Map<String, ByteArray>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag(ThemeTestTags.WALLPAPER_PICKER),
+        title = { Text(stringResource(R.string.theme_wallpaper_question)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DialogText(stringResource(R.string.theme_wallpaper_pick_explain))
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 88.dp),
+                    modifier = Modifier.heightIn(max = 440.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    gridItems(choices, key = { it.sha256 }) { c ->
+                        Column(
+                            modifier =
+                                Modifier
+                                    .focusRing()
+                                    .clickable(onClickLabel = c.label) { onPick(c.sha256) }
+                                    .semantics(mergeDescendants = true) { role = Role.Button }
+                                    .testTag(ThemeTestTags.wallpaperChoice(c.sha256)),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            WallpaperThumb(thumbs[c.sha256])
+                            Text(
+                                c.label,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag(ThemeTestTags.WALLPAPER_NO)) {
+                Text(stringResource(R.string.theme_wallpaper_not_now))
+            }
+        },
+    )
+}
+
+/** A phone-shaped thumbnail of [bytes], decoded downsampled off the main thread; a plain plate until it is ready. */
+@Composable
+private fun WallpaperThumb(bytes: ByteArray?) {
+    val image by produceState<ImageBitmap?>(null, bytes) {
+        value =
+            bytes?.let {
+                withContext(Dispatchers.Default) {
+                    val options = BitmapFactory.Options().apply { inSampleSize = THUMB_SAMPLE }
+                    runCatching { BitmapFactory.decodeByteArray(it, 0, it.size, options)?.asImageBitmap() }.getOrNull()
+                }
+            }
+    }
+    val shape = RoundedCornerShape(8.dp)
+    val frame =
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(THUMB_ASPECT)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant, shape)
+    val bitmap = image
+    if (bitmap == null) {
+        Box(modifier = frame)
+    } else {
+        Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = frame)
+    }
+}
+
+/** A portrait phone screen (the reference device is 1080 × 2340). */
+private const val THUMB_ASPECT = 1080f / 2340f
+private const val THUMB_SAMPLE = 8

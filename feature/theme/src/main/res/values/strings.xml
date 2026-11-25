@@ -42,6 +42,9 @@
     <string name="theme_wallpaper_explain">The system wallpaper app opens, and you confirm there.</string>
     <string name="theme_wallpaper_yes">Yes</string>
     <string name="theme_wallpaper_no">No</string>
+    <string name="theme_wallpaper_not_now">Not now</string>
+    <string name="theme_wallpaper_pick_explain">Pick one of this theme\'s wallpapers. The system wallpaper app opens, and you confirm there.</string>
+    <string name="theme_set_wallpaper">Set wallpaper…</string>
     <string name="theme_no_wallpaper_app">No app on this device can set wallpapers</string>
     <string name="theme_wallpaper_failed">The wallpaper couldn\'t be handed to the system.</string>
 

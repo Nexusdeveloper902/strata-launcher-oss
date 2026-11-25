@@ -60,12 +60,22 @@ dependencies {
 
 // Built-in presets (THEME_SYSTEM §14): spec/sample-themes/ is the single source, copied into the generated
 // assets as `assets/themes/` and merged into the APK. Nothing is committed twice. Task type: build-logic.
+// Private overlay (CONTRIBUTING "Public mirror and CI"): when `themes-private/` exists, its `presets/` (preset files and
+// wallpaper lists) and `images/` (preset wallpapers, §14.2) are added. The mirror strips the directory from every
+// commit; without it the assets are the public samples alone.
+val themesPrivate = rootProject.layout.projectDirectory.dir("themes-private")
 val syncThemeAssets by tasks.registering(SyncThemeAssets::class) {
     themes.from(
         rootProject.layout.projectDirectory.dir("spec/sample-themes").asFileTree.matching {
-            include("*.strata-theme.json")
+            include("*.strata-theme.json", "*.wallpapers.txt")
         },
     )
+    if (themesPrivate.asFile.isDirectory) {
+        themes.from(
+            themesPrivate.dir("presets").asFileTree.matching { include("*.strata-theme.json", "*.wallpapers.txt") },
+        )
+        images.from(themesPrivate.dir("images").asFileTree.matching { include("*.webp") })
+    }
     output.set(layout.buildDirectory.dir("generated/themeAssets"))
 }
 

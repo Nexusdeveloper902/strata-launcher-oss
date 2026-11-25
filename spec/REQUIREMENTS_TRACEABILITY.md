@@ -176,7 +176,7 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-THEME-09 | — | Option to render small text in system font | Inferred (APK-022) | APK-022 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-10 | M4 |
 | FR-THEME-10 | — | Icon visibility, size, shape, legacy plate and packs | Inferred (APK-023) | APK-023 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9 | THEME_SYSTEM §15.1 | T-THEME-11, T-APPS-10 | M4, M5 |
 | FR-THEME-11 | — | Monochrome or accent icon tinting | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9 | THEME_SYSTEM §15.1 | T-THEME-12, T-THEME-54 | M4, M5 |
-| FR-THEME-12 | — | Clock and date presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-13, T-HOME-04, T-I18N-05, T-THEME-56 | M4 |
+| FR-THEME-12 | — | Clock and date presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-13, T-HOME-04, T-I18N-05, T-THEME-56, T-THEME-59 | M4 |
 | FR-THEME-13 | — | Favourites presentation options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-14, T-HOME-04, T-THEME-57 | M4 |
 | FR-THEME-14 | — | Search-bar presentation options | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-15, T-HOME-04 | M4 |
 | FR-THEME-15 | — | Alphabet-index appearance options | Inferred (APK-026) | APK-026 | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-16, T-A11Y-02, T-HOME-08 | M4 |
@@ -198,7 +198,9 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 | FR-THEME-31 | — | Global versus per-theme settings split | Inferred (APK-024) | APK-024 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §4.2 | THEME_SYSTEM §15.1 | T-THEME-39, T-THEME-14, T-APPS-10 | M4 |
 | FR-THEME-32 | — | Migration framework with fixtures and backup copy | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-40 | M4 |
 | FR-THEME-33 | — | Theme data in Auto Backup, revalidated on restore | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-41, T-BACKUP-09, T-BACKUP-11 | M8 |
-| FR-THEME-34 | — | Wallpaper image applied only after user confirmation | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §13 | THEME_SYSTEM §15.1 | T-THEME-42, T-CI-01 | M5 |
+| FR-THEME-34 | — | Wallpaper image applied only after user confirmation | Proposed | — | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §13 | THEME_SYSTEM §15.1 | T-THEME-42, T-CI-01, T-THEME-61 | M5 |
+| FR-THEME-36 | — | Preset wallpaper sets offered through a picker | Proposed (owner request 2026-11-25) | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-60, T-THEME-61 | v1.x |
+| FR-THEME-37 | — | Segmented and countdown-board clock styles | Proposed (owner request 2026-11-25) | — | :core:theme, :core:json, :core:data, :feature:theme (area); not cited in ARCH | THEME_SYSTEM §15.1 | T-THEME-58, T-THEME-59 | v1.x |
 | FR-THEME-35 | — | Strata glyph set and icon source precedence | Proposed (D-014, owner request; order revised 2026-11-14, see docs/impl-notes/icon-source-order.md) | D-014 | :core:theme, :core:json, :core:data, :feature:theme (area); cited ARCH §9.1 | THEME_SYSTEM §15.1 | T-SET-10^, T-THEME-54^, T-THEME-55^ | M8 |
 
 ## NFR-PERF (PRODUCT_SPEC §5)
@@ -279,11 +281,11 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 ## Validation report
 
 ### Counts
-- Requirements: **158** (118 FR, 40 NFR). PRODUCT_SPEC: 111 (83 FR, 28 NFR). THEME_SYSTEM: 47 (35 FR, 12 NFR).
-- Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 14, —: 47.
-- Requirements with at least one test: 147; without: 11.
-- Requirements with a roadmap milestone: 154; without: 4.
-- Distinct evidence IDs cited (after range expansion): 100; test cases found: 293; §22 rows: 146.
+- Requirements: **160** (120 FR, 40 NFR). PRODUCT_SPEC: 111 (83 FR, 28 NFR). THEME_SYSTEM: 49 (37 FR, 12 NFR).
+- Priority as written: P0: 68, P0 (marker P1): 1, P1: 27, P1 (web P2): 1, P2: 14, —: 49.
+- Requirements with at least one test: 149; without: 11.
+- Requirements with a roadmap milestone: 156; without: 4.
+- Distinct evidence IDs cited (after range expansion): 100; test cases found: 297; §22 rows: 148.
 
 ### P0/P1 requirements lacking tests
 - None.
@@ -315,6 +317,6 @@ Sources: `spec/PRODUCT_SPEC.md` §4–§5, `spec/THEME_SYSTEM.md` §15, `spec/AR
 
 ### Other observations
 - IDs cited in ARCHITECTURE.md that do not exist as requirements: None.
-- Requirements never cited in ARCHITECTURE.md (component is area-derived only): 88 of 158.
-- THEME_SYSTEM §15 has no priority and no release column: all 47 THEME rows show `—` for Pri. PRODUCT_SPEC §4.9 declares the theme area P0 / v1 as a block; this is not repeated per row.
+- Requirements never cited in ARCHITECTURE.md (component is area-derived only): 90 of 160.
+- THEME_SYSTEM §15 has no priority and no release column: all 49 THEME rows show `—` for Pri. PRODUCT_SPEC §4.9 declares the theme area P0 / v1 as a block; this is not repeated per row.
 - PRODUCT_SPEC §5 NFR rows have no per-row evidence or label; they inherit “Proposed” from the §5 intro. Several NFRs cite platform constraints informally (for example DOC-052, SEC-006).

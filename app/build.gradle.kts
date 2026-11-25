@@ -24,6 +24,10 @@ fun releaseSigning(key: String): String? =
     providers.environmentVariable("STRATA_RELEASE_" + key.replace(Regex("([a-z])([A-Z])"), "$1_$2").uppercase()).orNull
         ?: localProperties.getProperty("strata.release.$key")
 
+// Private overlay (CONTRIBUTING "Public mirror and CI"): `themes-private/preview/` holds an optional preview renderer for
+// the overlay's presets, run only when asked (it is skipped unless STRATA_PREVIEW_OUT is set). Absent on the mirror.
+val themesPrivatePreview = rootProject.layout.projectDirectory.dir("themes-private/preview")
+
 android {
     defaultConfig {
         applicationId = "app.strata.launcher"
@@ -125,4 +129,8 @@ dependencies {
     androidTestImplementation(projects.testing.fakes)
     androidTestImplementation(projects.testing.fixtures)
     androidTestImplementation(libs.androidx.room.runtime)
+}
+
+if (themesPrivatePreview.asFile.isDirectory) {
+    android.sourceSets.named("test") { kotlin.directories.add(themesPrivatePreview.asFile.path) }
 }

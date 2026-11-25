@@ -57,6 +57,13 @@ where Actions minutes are free.
     `python3 platform/icons/glyphs-private/tools/make_glyphs.py --check`, then review the sheet
     from `python3 tools/glyphs/contact_sheet.py OUT.png platform/icons/glyphs-private/res/drawable-nodpi`
     (needs `pip install cairosvg pillow`; review tooling only).
+- The private theme overlay `themes-private/` is removed from every commit too. It holds private built-in presets:
+  `presets/` (preset files and their wallpaper lists, THEME_SYSTEM §14.2), `images/` (the preset wallpapers,
+  `<sha256>.webp`), credits, `canaries.txt`, tools and an optional `preview/` renderer. When the directory exists,
+  `:core:data` adds its presets and images to `assets/themes/` (checked by `SyncThemeAssets`, T-THEME-60), the test
+  fixtures list its presets (`ThemeFixtures.OVERLAY_NAMES`) so the asset, contrast and per-preset tests cover them, and
+  `:app` compiles `preview/` into the unit tests. Without it (the mirror) the assets are the public samples alone.
+  The sync also refuses any image blob that was ever in an overlay, wherever it appears in the filtered history.
 - `tools/mirror/sync-public.sh <branch>...` (needs `pip install git-filter-repo`) filters and
   pushes branches, and always brings the mirror's `main` up to date too (a mirror PR's CI tests the
   branch merged into the *mirror's* `main`). The filter is deterministic, so syncs are

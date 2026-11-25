@@ -531,6 +531,63 @@ class ThemeLibrary(
         return storedImage(parsed)
     }
 
+    /**
+     * The wallpapers the theme offers for the hand-off (FR-THEME-36): the wallpaper set of the built-in preset it is
+     * or is based on (§14.2), when that set is not empty; else its own `wallpaper.image` when an image is available,
+     * labelled with the theme's name; else none.
+     */
+    fun wallpaperChoices(id: String): List<PresetWallpaper> {
+        val parsed = (loadTheme(id) as? Outcome.Ok)?.value ?: return emptyList()
+        val preset = builtInName(id) ?: parsed.document.basedOn?.let(::builtInName)
+        val set = preset?.let { safeWallpapers(it) }.orEmpty()
+        if (set.isNotEmpty()) return set
+        val own = storedImage(parsed) ?: return emptyList()
+        return listOf(PresetWallpaper(own.sha256, parsed.document.name))
+    }
+
+    /** One of [wallpaperChoices] by hash, verified against it; null for any other hash or an unreadable image. */
+    fun wallpaperImage(
+        id: String,
+        sha256: String,
+    ): ThemeImage? {
+        if (wallpaperChoices(id).none { it.sha256 == sha256 }) return null
+        return imageBytes(sha256)?.let { ThemeImage(sha256, ImageMediaType.WEBP, it) }
+    }
+
+    /** SHA-256 names of the built-in preset images (they count as present for every theme, like the image store). */
+    fun builtInImageNames(): Set<String> =
+        try {
+            builtIns.imageNames()
+        } catch (e: Exception) {
+            emptySet()
+        }
+
+    /** Whether the built-in preset file [preset] ships a wallpaper set; read once per process (assets are fixed). */
+    private fun presetHasWallpapers(preset: String): Boolean =
+        presetWallpaperFlags.getOrPut(preset) { safeWallpapers(preset).isNotEmpty() }
+
+    private val presetWallpaperFlags = HashMap<String, Boolean>()
+
+    private fun safeWallpapers(preset: String): List<PresetWallpaper> =
+        try {
+            builtIns.wallpapers(preset)
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+    /** The image [sha] from the image store, else from the built-in preset images; checked against its hash. */
+    private fun imageBytes(sha: String): ByteArray? {
+        val stored = safeReadMedia("$IMAGES_DIR/$sha.$IMAGE_EXT", ImageCheck.MAX_BYTES)
+        val bytes =
+            stored?.takeIf { BundleCodec.sha256(it) == sha }
+                ?: try {
+                    builtIns.image(sha)
+                } catch (e: Exception) {
+                    null
+                } ?: return null
+        return bytes.takeIf { it.size <= ImageCheck.MAX_BYTES && BundleCodec.sha256(it) == sha }
+    }
+
     private fun storedFonts(parsed: ParsedTheme): List<ThemeFont> {
         val present = safeList(FONTS_DIR)
         return ThemeImporter.userFonts(parsed).mapNotNull { sha ->
@@ -541,12 +598,12 @@ class ThemeLibrary(
         }
     }
 
+    /** The theme's `wallpaper.image` from the image store or, for a preset image, from the built-in images (§14.2). */
     private fun storedImage(parsed: ParsedTheme): ThemeImage? {
         val sha =
             parsed.document.wallpaper.image
                 ?.sha256 ?: return null
-        val bytes = safeReadMedia("$IMAGES_DIR/$sha.$IMAGE_EXT", ImageCheck.MAX_BYTES) ?: return null
-        if (BundleCodec.sha256(bytes) != sha) return null
+        val bytes = imageBytes(sha) ?: return null
         return ThemeImage(sha, ImageMediaType.WEBP, bytes)
     }
 
@@ -867,6 +924,7 @@ class ThemeLibrary(
                         applicable = true,
                         hidden = index.entry(id)?.hidden == true,
                         contrast = ContrastStatus.AA_ANY_WALLPAPER,
+                        hasWallpapers = presetHasWallpapers(v.first),
                     )
                 }
         val stored =

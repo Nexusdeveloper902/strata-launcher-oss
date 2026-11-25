@@ -20,6 +20,7 @@ import app.strata.launcher.core.theme.store.ImageSeedError
 import app.strata.launcher.core.theme.store.ImageSeedResult
 import app.strata.launcher.core.theme.store.ImportCommit
 import app.strata.launcher.core.theme.store.ImportPreview
+import app.strata.launcher.core.theme.store.PresetWallpaper
 import app.strata.launcher.core.theme.store.PreviewEnvironment
 import app.strata.launcher.core.theme.store.ThemeEditorStore
 import app.strata.launcher.core.theme.store.ThemeFileStore
@@ -114,10 +115,22 @@ class InMemoryThemeIndexStore : ThemeIndexStore {
     }
 }
 
-class MapBuiltInThemeSource(private val files: Map<String, ByteArray>) : BuiltInThemeSource {
+class MapBuiltInThemeSource(
+    private val files: Map<String, ByteArray>,
+    /** Preset wallpaper sets by preset file name (THEME_SYSTEM §14.2). */
+    private val wallpaperSets: Map<String, List<PresetWallpaper>> = emptyMap(),
+    /** Preset wallpaper images by SHA-256. */
+    private val images: Map<String, ByteArray> = emptyMap(),
+) : BuiltInThemeSource {
     override fun names(): List<String> = files.keys.sorted()
 
     override fun read(name: String): ByteArray? = files[name]
+
+    override fun wallpapers(name: String): List<PresetWallpaper> = wallpaperSets[name].orEmpty()
+
+    override fun image(sha256: String): ByteArray? = images[sha256]
+
+    override fun imageNames(): Set<String> = images.keys
 }
 
 /**
@@ -231,6 +244,13 @@ class FakeThemeManager : ThemeManager {
     override suspend fun exportBundle(id: String): Outcome<ExportFile, ExportError> = Outcome.Err(ExportError.NOT_FOUND)
 
     override suspend fun wallpaperImage(id: String): ThemeImage? = null
+
+    override suspend fun wallpaperChoices(id: String): List<PresetWallpaper> = emptyList()
+
+    override suspend fun wallpaperImage(
+        id: String,
+        sha256: String,
+    ): ThemeImage? = null
 }
 
 /**
